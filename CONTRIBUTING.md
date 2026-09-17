@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Install Rust (stable, via `rustup`), Node 20 or newer, and the
+1. Install Rust (stable, via `rustup`), Node 22.22 or newer, and the
    [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your
    platform.
 2. Install Subversion 1.10+ (needed by the SVN integration tests).

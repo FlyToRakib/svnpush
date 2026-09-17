@@ -12,7 +12,7 @@ order. This report covers:
 - what a reviewer should try first
 
 Toolchain used: Rust 1.98.1 (the workspace requires 1.89 or newer), Node
-22.22 (CI uses 20), Subversion 1.14.5 and git 2.54, on Windows 11.
+22.22, Subversion 1.14.5 and git 2.54, on Windows 11.
 
 ## What was built, per milestone
 
@@ -29,7 +29,7 @@ Toolchain used: Rust 1.98.1 (the workspace requires 1.89 or newer), Node
 
 ## Commands
 
-Prerequisites: Rust stable, Node 20+, the
+Prerequisites: Rust stable, Node 22.22+, the
 [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/),
 Subversion 1.10+ (with `svnadmin` for the integration suites), and git.
 
@@ -89,7 +89,7 @@ prints one informational "unmatched license allowance" note.
 **Toolchain and repository.**
 - Rust edition 2024 with `rust-version` 1.89, needed for `File::try_lock`,
   which backs the per-project lock. TypeScript 6.0, because
-  `typescript-eslint` does not support 7 yet. Node 22 locally, Node 20 in CI.
+  `typescript-eslint` does not support 7 yet. Node 22 locally and in CI.
 - A documented Clippy pedantic allow-list. `rustfmt` uses
   `use_small_heuristics = "Max"`.
 - `cargo deny` checks `unmaintained` for direct dependencies only.
