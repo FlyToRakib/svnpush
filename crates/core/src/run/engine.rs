@@ -21,12 +21,14 @@ pub struct Run {
     pub(super) inputs: RunInputs,
     pub(super) observer: Arc<dyn RunObserver>,
     pub(super) cancel: CancellationToken,
-    decisions: mpsc::Receiver<Decision>,
+    pub(super) decisions: mpsc::Receiver<Decision>,
     pub(super) state: RunState,
     pub(super) journal: RunJournal,
     pub(super) snapshot: Option<Snapshot>,
     pub(super) package: Option<Package>,
     pub(super) previewed: bool,
+    /// The provider chosen with the Change link; it applies to the rest of the run.
+    pub(super) ai_override: Option<String>,
     _lock: ProjectLock,
 }
 
@@ -53,6 +55,7 @@ impl Run {
             snapshot: None,
             package: None,
             previewed: false,
+            ai_override: None,
             _lock: lock,
         })
     }

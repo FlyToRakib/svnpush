@@ -16,4 +16,18 @@ describe("ThemeToggle", () => {
     render(<ThemeToggle />);
     expect(screen.getByRole("radio", { name: "Dark" }).getAttribute("aria-checked")).toBe("true");
   });
+
+  it("keeps two toggles in step", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <ThemeToggle />
+        <ThemeToggle />
+      </>,
+    );
+    await user.click(screen.getAllByRole("radio", { name: "Light" })[0] as HTMLElement);
+    for (const radio of screen.getAllByRole("radio", { name: "Light" })) {
+      expect(radio.getAttribute("aria-checked")).toBe("true");
+    }
+  });
 });

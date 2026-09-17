@@ -93,10 +93,11 @@ export const S = {
     phase: {
       Idle: "Starting",
       Detecting: "Detecting",
-      Drafting: "Reading changes",
+      Drafting: "Drafting the release notes",
       AwaitingApproval: "Waiting for your draft",
       Writing: "Writing",
       Verifying: "Verifying",
+      AwaitingFixes: "Waiting for fixes",
       Building: "Building",
       Previewing: "Preparing the SVN preview",
       AwaitingPublish: "Waiting for your confirmation",
@@ -165,6 +166,68 @@ export const S = {
     approve: "Approve",
     approved: (version: string) => `Version ${version} approved.`,
     manual: "Written by hand",
+    reason: (reason: string) => `Why this version: ${reason}`,
+    summary: "Release summary",
+    summaryHint:
+      "One paragraph about the release, for your announcement. It is not written to any file.",
+  },
+  ai: {
+    draftTitle: "AI draft",
+    explainTitle: "Why the checks failed",
+    off: "AI is off for this project. Write the release notes below.",
+    working: (label: string) => `Asking ${label}…`,
+    queued: (position: number | null) =>
+      position === null
+        ? "Waiting in the Revoye queue."
+        : `Waiting in the Revoye queue, position ${String(position)}.`,
+    jobStatus: (status: string) => `Revoye job ${status}.`,
+    fleet: (online: number, total: number, idle: number, waiting: number) =>
+      `${String(online)} of ${String(total)} device(s) online · ${String(idle)} agent(s) free · ${String(waiting)} job(s) waiting`,
+    startDesk:
+      "No device is online. Start Revoye Desk on your machine; the job stays queued until then.",
+    summaries: (done: number, total: number) =>
+      `Summarising changed files first: ${String(done)} of ${String(total)}.`,
+    fromSummaries: "The diff was too large, so this draft was written from per-file summaries.",
+    drafted: (label: string) => `Drafted by ${label}. Edit anything before you approve.`,
+    explained: (label: string) => `Explained by ${label}.`,
+    fellBack: (from: string) =>
+      `${from} failed, so the next provider in your fallback order answered.`,
+    manual: "You are writing this by hand.",
+    stopped: "The AI was stopped.",
+    consentWaiting: "Waiting for you to accept the data notice.",
+    stop: "Stop and write it myself",
+    stopExplaining: "Stop",
+    writeMyself: "Write it myself",
+    askAi: "Draft with AI",
+    explainAgain: "Explain with AI",
+    regenerate: "Regenerate",
+    retry: "Retry",
+    change: "Change",
+    changeLabel: "AI provider for this run",
+    use: "Use",
+    openProviders: "Open Providers",
+    rawText: "The AI's answer, which could not be used:",
+    privacyTitle: "Before the AI sees your plugin",
+    privacyIntro: (label: string) =>
+      `SVNpush is about to send project data to ${label}. This notice appears once for each provider.`,
+    privacySends: [
+      "Diffs of changed files, except files your exclude patterns match and files that look like secrets (.env, *.pem, *.key, wp-config.php)",
+      "Commit subjects since the previous release",
+      "Recent changelog entries and, when checks fail, readme.txt",
+      "The start of the main plugin file and the failed check messages, when checks fail",
+      "The plugin name, slug and versions",
+    ],
+    privacyNever:
+      "Passwords, API keys and SVN credentials are never sent. The AI never runs commands or writes files: you approve everything it suggests.",
+    privacyRevoye:
+      "With Revoye, answers come from AI accounts you are already signed into, through Revoye Desk on your own machine.",
+    privacyAccept: "Send and continue",
+    fixesTitle: "Suggested readme fixes",
+    fixFor: (checkId: string) => `Fixes ${checkId}`,
+    applyFixes: "Apply selected fixes and check again",
+    stopRelease: "Stop the release",
+    noFixes: "No readme edit applies. Fix the failed checks yourself, then release again.",
+    cannotApply: "Cannot be applied:",
   },
   write: {
     none: "No files needed changes.",
@@ -257,6 +320,15 @@ export const S = {
     openPage: "After publishing, open the plugin page",
     svnAccount: "SVN account",
     svnAccountHint: "The Vault username to commit as. Leave empty to use the only account.",
+    aiProvider: "AI provider",
+    aiProviderHint:
+      "Which AI writes the draft and explains failed checks. You can change it for one run from the Draft step.",
+    aiDefault: "The default provider",
+    aiPinned: (label: string) => `Always ${label}`,
+    aiOff: "Off: write release notes by hand",
+    aiExclude: "AI exclude patterns",
+    aiExcludeHint:
+      "One .gitignore-style pattern per line. Matching files never reach the AI. Files that look like secrets are always kept out.",
     saved: "Settings saved.",
     removeProject: "Remove project",
     removeTitle: "Remove this project",

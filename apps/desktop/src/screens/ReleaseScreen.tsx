@@ -18,8 +18,12 @@ import { S } from "../strings";
 
 const NO_LOGS: never[] = [];
 
+interface ReleaseScreenProps {
+  onOpenProviders: () => void;
+}
+
 /** The project page: header, Release and Dry run, the checklist, the log and past releases. */
-export function ReleaseScreen() {
+export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
   const { projects, selectedPath, load: loadProjects, update, remove, select } = useProjectStore();
   const summary = projects.find((p) => p.project.path === selectedPath);
   const path = summary?.project.path ?? "";
@@ -29,6 +33,7 @@ export function ReleaseScreen() {
     start: useRunStore((s) => s.start),
     approve: useRunStore((s) => s.approve),
     publish: useRunStore((s) => s.publish),
+    decide: useRunStore((s) => s.decide),
     cancel: useRunStore((s) => s.cancel),
     resume: useRunStore((s) => s.resume),
     discard: useRunStore((s) => s.discard),
@@ -201,6 +206,10 @@ export function ReleaseScreen() {
           onPublish={(trunk, tag) => {
             void runs.publish(path, trunk, tag);
           }}
+          onDecide={(decision) => {
+            void runs.decide(path, decision);
+          }}
+          onOpenProviders={onOpenProviders}
         />
       )}
 

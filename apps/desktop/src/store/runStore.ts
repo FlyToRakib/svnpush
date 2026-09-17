@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Decision } from "../ipc/bindings/Decision";
 import type { ErrorView } from "../ipc/bindings/ErrorView";
 import type { LogLine } from "../ipc/bindings/LogLine";
 import type { ReleaseDraft } from "../ipc/bindings/ReleaseDraft";
@@ -29,6 +30,7 @@ interface RunStore {
   start: (path: string, dryRun: boolean) => Promise<void>;
   approve: (path: string, draft: ReleaseDraft) => Promise<boolean>;
   publish: (path: string, trunkMessage: string, tagMessage: string) => Promise<boolean>;
+  decide: (path: string, decision: Decision) => Promise<boolean>;
   cancel: (path: string) => Promise<void>;
   resume: (path: string, runId: string) => Promise<void>;
   discard: (path: string, runId: string) => Promise<void>;
@@ -108,6 +110,8 @@ export const useRunStore = create<RunStore>((set, get) => {
 
     publish: (path, trunkMessage, tagMessage) =>
       attempt(path, () => commands.confirmPublish(path, trunkMessage, tagMessage)),
+
+    decide: (path, decision) => attempt(path, () => commands.aiDecision(path, decision)),
 
     cancel: async (path) => {
       await attempt(path, () => commands.cancelRun(path));

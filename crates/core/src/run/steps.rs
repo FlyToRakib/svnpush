@@ -14,11 +14,14 @@ use crate::vault;
 use crate::verify::{self, CheckResult, CheckStatus, FileRef, VerifyInput, WorkingCopyState};
 use crate::version::{self, Version};
 
+use crate::project::AiChoice;
+
 use super::RunFailure;
-use super::changes;
+use super::changes::{self, ChangeSet, ChangeSource};
 use super::draft::{prefill, suggested_version};
 use super::engine::Run;
-use super::model::{Decision, DraftContext, ErrorView, FileDiff, Phase, Step};
+use super::material::{self, Filter, Material};
+use super::model::{DraftContext, ErrorView, FileDiff, Phase, Step};
 use super::snapshot::Snapshot;
 
 /// Unified diff of one file, three lines of context.
@@ -35,7 +38,7 @@ impl Run {
         PathBuf::from(&self.inputs.project.path)
     }
 
-    fn detect_facts(&self) -> Result<PluginFacts, RunFailure> {
+    pub(super) fn detect_facts(&self) -> Result<PluginFacts, RunFailure> {
         let settings = &self.inputs.project.settings;
         Ok(detect::detect(
             &self.project_root(),
@@ -145,22 +148,22 @@ impl Run {
             ));
         }
 
+        let material = if self.inputs.project.settings.ai_provider == AiChoice::Off {
+            Material::default()
+        } else {
+            self.material(&change_set).await?
+        };
         let version = suggested_version(&facts, previous.as_deref());
         let context = DraftContext {
             previous,
             prefill: prefill(&facts, &version, &change_set),
-            suggested_version: version,
+            suggested_version: version.clone(),
             changes: change_set,
         };
         let files = context.changes.files.len();
         self.state.draft_context = Some(context);
 
-        let draft = self
-            .wait_for(Step::Draft, Phase::AwaitingApproval, |d| match d {
-                Decision::Approve { draft } => Some(draft),
-                Decision::Publish { .. } => None,
-            })
-            .await?;
+        let draft = self.decide_draft(&facts, &material, &version).await?;
         self.journal.version = Some(draft.version.clone());
         let summary = format!("Version {} approved · {files} changed file(s)", draft.version);
         self.state.draft = Some(draft);
@@ -240,7 +243,42 @@ impl Run {
         )
     }
 
+    /// What the AI sees of the changes.
+    async fn material(&self, changes: &ChangeSet) -> Result<Material, RunFailure> {
+        let filter = Filter::new(&self.inputs.project.settings.ai_exclude_patterns);
+        if changes.source == ChangeSource::Git
+            && let Some(git_bin) = self.inputs.git.clone()
+        {
+            let root = self.project_root();
+            let git = Git::new(&git_bin, &root, self.observer.as_ref(), &self.cancel);
+            return material::from_git(&git, &root, changes, &filter)
+                .await
+                .map_err(|e| RunFailure::new("GIT_FAILED", e.to_string(), None));
+        }
+        let trunk = self.inputs.paths.working_copy(&self.inputs.project.slug).join("trunk");
+        Ok(material::from_trunk(&self.inputs.project.package_root(), &trunk, changes, &filter))
+    }
+
+    /// Step 4: the checks, then (when a blocking check fails) the AI's
+    /// explanation and suggested readme fixes, verifying again after fixes.
     pub(super) async fn verify(&mut self) -> Result<(), RunFailure> {
+        loop {
+            self.state.explanation = None;
+            if self.check_once().await? {
+                return Ok(());
+            }
+            if !self.review_failures().await? {
+                return Err(RunFailure::new(
+                    "CHECKS_FAILED",
+                    "Blocking checks failed.",
+                    Some("Fix each failed check, then release again.".to_owned()),
+                ));
+            }
+        }
+    }
+
+    /// Runs every check once; `true` when nothing blocks.
+    async fn check_once(&mut self) -> Result<bool, RunFailure> {
         self.begin(Step::Verify, Phase::Verifying)?;
         let facts = self.facts()?.clone();
         let draft = self
@@ -310,14 +348,10 @@ impl Run {
         let failed = results.iter().filter(|r| r.status == CheckStatus::Fail).count();
         self.state.checks = results;
         if blocked {
-            return Err(RunFailure::new(
-                "CHECKS_FAILED",
-                "Blocking checks failed.",
-                Some("Fix each failed check, then release again.".to_owned()),
-            ));
+            return Ok(false);
         }
         self.done(Step::Verify, format!("All blocking checks passed · {failed} warning(s)"));
-        Ok(())
+        Ok(true)
     }
 }
 

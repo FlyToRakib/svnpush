@@ -22,6 +22,7 @@
     "allow-start-run",
     "allow-current-run",
     "allow-approve-draft",
+    "allow-ai-decision",
     "allow-confirm-publish",
     "allow-cancel-run",
     "allow-resume-run",

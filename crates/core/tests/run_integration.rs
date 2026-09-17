@@ -10,15 +10,21 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+use svnpush_core::ai::records::{self, ProviderRecord, ProvidersFile};
 use svnpush_core::project::{AppPaths, Project, ProjectSettings};
 use svnpush_core::report::{LogLine, Reporter};
-use svnpush_core::run::{self, Decision, Outcome, Phase, Run, RunInputs, RunObserver, RunState};
+use svnpush_core::run::{
+    self, AiStatus, Decision, Outcome, Phase, Run, RunInputs, RunObserver, RunState,
+};
 use svnpush_core::secret::Secret;
+use svnpush_core::settings;
 use svnpush_core::svn::Svn;
 use svnpush_core::vault::{CredentialStore, SvnAccount, VaultError};
 use svnpush_core::{report::NullReporter, tools};
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
+use wiremock::matchers::{body_string_contains, method, path};
+use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[derive(Default)]
 struct MemoryVault(Mutex<HashMap<String, String>>);
@@ -115,6 +121,7 @@ async fn inputs(env: &Env, dry_run: bool) -> RunInputs {
         vault: env.vault.clone(),
         accounts: vec![SvnAccount { host: "file".into(), username: "tester".into() }],
         current_wordpress: None,
+        ai: svnpush_core::ai::client::AiClient::new().unwrap(),
     }
 }
 
@@ -309,4 +316,114 @@ impl Reporter for NullObserver {
 
 impl RunObserver for NullObserver {
     fn state(&self, _state: &RunState) {}
+}
+
+impl Driver {
+    async fn until_state(&mut self, wanted: impl Fn(&RunState) -> bool) -> RunState {
+        loop {
+            if let Some(state) = self.rx.borrow_and_update().clone() {
+                if wanted(&state) {
+                    return state;
+                }
+                assert!(
+                    !state.phase.is_terminal(),
+                    "ended in {:?}: {:?}",
+                    state.phase,
+                    state.error
+                );
+            }
+            self.rx.changed().await.unwrap();
+        }
+    }
+}
+
+fn chat(content: &serde_json::Value) -> ResponseTemplate {
+    ResponseTemplate::new(200).set_body_json(serde_json::json!({
+        "choices": [{ "index": 0, "message": { "role": "assistant", "content": content.to_string() }, "finish_reason": "stop" }]
+    }))
+}
+
+#[tokio::test]
+async fn ai_draft_and_an_applied_readme_fix_complete_a_dry_run() {
+    let env = env();
+    let long = format!("A fixture plugin {}.", "with a very long short description".repeat(6));
+    let readme = read(&env.project.path, "readme.txt")
+        .replace("A fixture plugin used by the SVNpush test suite.", &long);
+    std::fs::write(Path::new(&env.project.path).join("readme.txt"), &readme).unwrap();
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_string_contains("release notes"))
+        .respond_with(chat(&serde_json::json!({
+            "version": "1.0.0", "reason": "First release.", "changelog_markdown": "* Initial release.",
+            "upgrade_notice": "", "summary": "The first release."
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_string_contains("release checks failed"))
+        .respond_with(chat(&serde_json::json!({
+            "explanation": "The short description is too long.",
+            "fixes": [{ "check_id": "V07", "path": "readme.txt", "original": long, "replacement": "A fixture plugin." }]
+        })))
+        .mount(&server)
+        .await;
+    let record = ProviderRecord {
+        id: "prov_local".into(),
+        kind: "local".into(),
+        label: "Local".into(),
+        model: "gemma3".into(),
+        base_url: Some(format!("{}/v1", server.uri())),
+        has_key: false,
+        is_default: true,
+        needs_attention: None,
+        created_at: String::new(),
+        requests_this_month: 0,
+        usage_month: String::new(),
+    };
+    records::save(
+        &env.paths,
+        &ProvidersFile { schema: 1, providers: vec![record], fallback: vec![] },
+    )
+    .unwrap();
+
+    let mut driver = start(&env, true).await;
+    let consent = driver
+        .until_state(|s| {
+            s.draft_ai.as_ref().is_some_and(|a| a.task.status == AiStatus::NeedsConsent)
+        })
+        .await;
+    assert_eq!(consent.draft_ai.unwrap().task.privacy.unwrap().provider.id, "prov_local");
+    driver
+        .decisions
+        .send(Decision::AcceptPrivacy { provider_id: "prov_local".into() })
+        .await
+        .unwrap();
+    let drafted = driver
+        .until_state(|s| {
+            s.phase == Phase::AwaitingApproval
+                && s.draft_ai.as_ref().is_some_and(|a| a.generation == 1)
+        })
+        .await;
+    let panel = drafted.draft_ai.unwrap();
+    let draft = panel.draft.clone().unwrap();
+    assert_eq!(draft.summary, "The first release.");
+    assert_eq!(draft.provider.as_ref().unwrap().id, "prov_local");
+    assert!(
+        settings::load(&env.paths).unwrap().privacy_notice_seen.contains(&"prov_local".to_owned())
+    );
+    driver.decisions.send(Decision::Approve { draft }).await.unwrap();
+
+    let failing = driver.until(Phase::AwaitingFixes).await;
+    let explanation = failing.explanation.unwrap();
+    assert_eq!(explanation.task.status, AiStatus::Done);
+    assert_eq!(explanation.fixes[0].problem, None, "{:?}", explanation.fixes[0]);
+    driver.decisions.send(Decision::ApplyFixes { fixes: vec![0] }).await.unwrap();
+    let (state, _) = driver.task.await.unwrap();
+
+    assert_eq!(state.phase, Phase::DryRunComplete, "{:?}", state.error);
+    assert!(state.diffs.iter().any(|d| d.diff.contains("+A fixture plugin.")));
+    assert_eq!(read(&env.project.path, "readme.txt"), readme, "the dry run restores the readme");
 }

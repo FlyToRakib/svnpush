@@ -39,6 +39,16 @@ impl Snapshot {
         Ok(Self { root: root.to_path_buf(), dir: dir.to_path_buf(), files })
     }
 
+    /// Captures edited files not captured yet; files already captured keep
+    /// their original bytes.
+    pub fn include(&mut self, edits: &[FileEdit]) -> Result<(), RunFailure> {
+        let fresh: Vec<FileEdit> =
+            edits.iter().filter(|e| !self.files.contains(&e.path)).cloned().collect();
+        let added = Self::take(&self.root, &self.dir, &fresh)?;
+        self.files.extend(added.files);
+        Ok(())
+    }
+
     /// Writes the captured bytes back over the edited files.
     pub fn restore(&self) -> Result<(), RunFailure> {
         for rel in &self.files {

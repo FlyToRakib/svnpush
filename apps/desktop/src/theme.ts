@@ -4,6 +4,15 @@ export type ThemeChoice = "system" | "light" | "dark";
 export const THEME_CHOICES: readonly ThemeChoice[] = ["system", "light", "dark"];
 
 const STORAGE_KEY = "svnpush.theme";
+const CHANGE_EVENT = "svnpush-theme-change";
+
+/** Calls `listener` whenever any toggle saves a new choice; returns the unsubscribe. */
+export function subscribeTheme(listener: () => void): () => void {
+  window.addEventListener(CHANGE_EVENT, listener);
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, listener);
+  };
+}
 
 function isThemeChoice(value: unknown): value is ThemeChoice {
   return value === "system" || value === "light" || value === "dark";
@@ -19,6 +28,7 @@ export function loadTheme(storage: Storage = window.localStorage): ThemeChoice {
 export function saveTheme(choice: ThemeChoice, storage: Storage = window.localStorage): void {
   storage.setItem(STORAGE_KEY, choice);
   applyTheme(choice);
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 /**

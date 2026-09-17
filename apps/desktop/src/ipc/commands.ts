@@ -1,5 +1,6 @@
 import type { AdapterInfo } from "./bindings/AdapterInfo";
 import type { AppSettings } from "./bindings/AppSettings";
+import type { Decision } from "./bindings/Decision";
 import type { DoctorReport } from "./bindings/DoctorReport";
 import type { Fleet } from "./bindings/Fleet";
 import type { FolderInspection } from "./bindings/FolderInspection";
@@ -29,6 +30,7 @@ export const commands = {
   startRun: (path: string, dryRun: boolean) => call<RunState>("start_run", { path, dryRun }),
   currentRun: (path: string) => call<RunState | null>("current_run", { path }),
   approveDraft: (path: string, draft: ReleaseDraft) => call<null>("approve_draft", { path, draft }),
+  aiDecision: (path: string, decision: Decision) => call<null>("ai_decision", { path, decision }),
   confirmPublish: (path: string, trunkMessage: string, tagMessage: string) =>
     call<null>("confirm_publish", { path, trunkMessage, tagMessage }),
   cancelRun: (path: string) => call<null>("cancel_run", { path }),

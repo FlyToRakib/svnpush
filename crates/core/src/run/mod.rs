@@ -1,12 +1,16 @@
 //! The release run: the seven-step state machine, its journal, rollback,
 //! lock, cancel and resume (plan §5, §12, §13).
 
+mod ai_view;
+mod assist;
 pub mod changes;
 mod draft;
 mod engine;
+mod explain;
 mod hook;
 pub mod journal;
 mod lock;
+pub mod material;
 pub mod model;
 mod publish;
 mod snapshot;
@@ -16,12 +20,16 @@ mod svn_steps;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::ai::client::AiClient;
 use crate::error::Coded;
 use crate::project::{AppPaths, Project};
 use crate::report::Reporter;
 use crate::tools::ToolReport;
 use crate::vault::{CredentialStore, SvnAccount};
 
+pub use ai_view::{
+    AiStatus, AiTask, DraftAi, Explanation, FixView, PrivacyNotice, SummaryProgress,
+};
 pub use draft::{prefill, suggested_version, validate_draft};
 pub use engine::Run;
 pub use journal::{Outcome, RunJournal};
@@ -54,6 +62,9 @@ pub struct RunInputs {
     pub accounts: Vec<SvnAccount>,
     /// The current WordPress version, when the lookup is on and succeeded.
     pub current_wordpress: Option<String>,
+    /// The AI client. Provider records and the privacy notices seen are read
+    /// from disk when needed, so changes made during the run apply.
+    pub ai: AiClient,
 }
 
 /// Why a run stopped early.

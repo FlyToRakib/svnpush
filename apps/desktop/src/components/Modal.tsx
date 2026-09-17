@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -11,6 +11,7 @@ interface ModalProps {
 /** A native modal dialog: focus is trapped and Escape closes it. */
 export function Modal({ open, title, onClose, children, actions }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -25,8 +26,8 @@ export function Modal({ open, title, onClose, children, actions }: ModalProps) {
   }, [open]);
 
   return (
-    <dialog ref={ref} className="modal" aria-labelledby="modal-title" onClose={onClose}>
-      <h2 id="modal-title" className="modal__title">
+    <dialog ref={ref} className="modal" aria-labelledby={titleId} onClose={onClose}>
+      <h2 id={titleId} className="modal__title">
         {title}
       </h2>
       <div className="modal__body">{children}</div>

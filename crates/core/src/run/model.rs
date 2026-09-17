@@ -9,6 +9,7 @@ use crate::package::Package;
 use crate::svn::{Delta, TagVerification};
 use crate::verify::CheckResult;
 
+use super::ai_view::{DraftAi, Explanation};
 use super::changes::ChangeSet;
 
 /// The seven protocol steps, in order (plan §5).
@@ -103,6 +104,8 @@ pub enum Phase {
     Writing,
     /// Step 4.
     Verifying,
+    /// Step 4 failed; waiting for suggested fixes to be applied or the run stopped.
+    AwaitingFixes,
     /// Step 5.
     Building,
     /// Step 6.
@@ -279,6 +282,25 @@ pub enum Decision {
         /// The approved draft.
         draft: ReleaseDraft,
     },
+    /// Step 2 or 4: ask the AI, optionally with another provider (the Change link).
+    Generate {
+        /// The provider record; `None` resolves it as usual.
+        provider_id: Option<String>,
+    },
+    /// Step 2 or 4: the data-sharing notice for this provider was accepted.
+    AcceptPrivacy {
+        /// The provider record.
+        provider_id: String,
+    },
+    /// Step 2: stop the AI and write the draft by hand.
+    Manual,
+    /// Step 4: apply these suggested readme fixes (indexes into the explanation) and verify again.
+    ApplyFixes {
+        /// Indexes into `Explanation::fixes`.
+        fixes: Vec<u32>,
+    },
+    /// Step 4: stop with the failed checks.
+    Stop,
     /// Step 7: commit and tag with these messages.
     Publish {
         /// Trunk commit message.
@@ -316,6 +338,10 @@ pub struct RunState {
     pub draft: Option<ReleaseDraft>,
     /// Step 3 diffs.
     pub diffs: Vec<FileDiff>,
+    /// Step 2's AI panel.
+    pub draft_ai: Option<DraftAi>,
+    /// Step 4's explanation of failed checks.
+    pub explanation: Option<Explanation>,
     /// Step 4 (and Build's V10–V13) results.
     pub checks: Vec<CheckResult>,
     /// Step 5 result.
@@ -349,6 +375,8 @@ impl RunState {
             draft_context: None,
             draft: None,
             diffs: Vec::new(),
+            draft_ai: None,
+            explanation: None,
             checks: Vec::new(),
             package: None,
             preview: None,

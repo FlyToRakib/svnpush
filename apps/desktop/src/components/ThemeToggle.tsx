@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { S } from "../strings";
-import { loadTheme, saveTheme, THEME_CHOICES, type ThemeChoice } from "../theme";
+import { loadTheme, saveTheme, subscribeTheme, THEME_CHOICES, type ThemeChoice } from "../theme";
 
 const LABELS: Record<ThemeChoice, string> = {
   system: S.theme.system,
@@ -8,13 +8,14 @@ const LABELS: Record<ThemeChoice, string> = {
   dark: S.theme.dark,
 };
 
-/** Three-way segmented control: System, Light, Dark. The choice persists. */
+const currentTheme = () => loadTheme();
+
+/** Three-way segmented control: System, Light, Dark. The choice persists, and every toggle shows it. */
 export function ThemeToggle() {
-  const [choice, setChoice] = useState<ThemeChoice>(loadTheme);
+  const choice = useSyncExternalStore(subscribeTheme, currentTheme);
 
   const choose = (next: ThemeChoice) => {
     saveTheme(next);
-    setChoice(next);
   };
 
   return (

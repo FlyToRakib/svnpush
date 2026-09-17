@@ -34,6 +34,7 @@ macro_rules! handlers {
             commands::start_run,
             commands::current_run,
             commands::approve_draft,
+            commands::ai_decision,
             commands::confirm_publish,
             commands::cancel_run,
             commands::resume_run,

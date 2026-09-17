@@ -4,6 +4,7 @@ import type { Project } from "../ipc/bindings/Project";
 import type { ProjectSettings } from "../ipc/bindings/ProjectSettings";
 import { toErrorView } from "../ipc/tauri";
 import { S } from "../strings";
+import { AiSettingsFields } from "./AiSettingsFields";
 import { ErrorNotice } from "./ErrorNotice";
 
 interface ProjectSettingsFormProps {
@@ -31,6 +32,7 @@ export function ProjectSettingsForm({
   const [svnUrl, setSvnUrl] = useState(project.svn_url);
   const [settings, setSettings] = useState<ProjectSettings>(project.settings);
   const [required, setRequired] = useState(project.settings.required_paths.join("\n"));
+  const [exclude, setExclude] = useState(project.settings.ai_exclude_patterns.join("\n"));
   const [error, setError] = useState<ErrorView | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -42,7 +44,11 @@ export function ProjectSettingsForm({
   const submit = async (event: SyntheticEvent) => {
     event.preventDefault();
     try {
-      await onSave(svnUrl, { ...settings, required_paths: lines(required) });
+      await onSave(svnUrl, {
+        ...settings,
+        required_paths: lines(required),
+        ai_exclude_patterns: lines(exclude),
+      });
       setError(null);
       setSaved(true);
     } catch (e) {
@@ -262,6 +268,18 @@ export function ProjectSettingsForm({
           />
           {S.projectSettings.openPage}
         </label>
+
+        <AiSettingsFields
+          choice={settings.ai_provider}
+          patterns={exclude}
+          onChoice={(choice) => {
+            change({ ai_provider: choice });
+          }}
+          onPatterns={(text) => {
+            setExclude(text);
+            setSaved(false);
+          }}
+        />
 
         {error && <ErrorNotice error={error} />}
         {saved && <p className="notice notice--ok">{S.projectSettings.saved}</p>}

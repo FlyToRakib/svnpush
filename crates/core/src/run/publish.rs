@@ -55,7 +55,12 @@ impl Run {
                 Decision::Publish { trunk_message, tag_message } => {
                     Some((trunk_message, tag_message))
                 }
-                Decision::Approve { .. } => None,
+                Decision::Approve { .. }
+                | Decision::Generate { .. }
+                | Decision::AcceptPrivacy { .. }
+                | Decision::Manual
+                | Decision::ApplyFixes { .. }
+                | Decision::Stop => None,
             })
             .await?;
         self.begin(Step::Publish, Phase::Publishing)?;

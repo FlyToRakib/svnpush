@@ -31,7 +31,13 @@ export function App() {
       case "projects":
         return <ProjectsScreen onOpen={openProject} />;
       case "release":
-        return <ReleaseScreen />;
+        return (
+          <ReleaseScreen
+            onOpenProviders={() => {
+              setScreen("providers");
+            }}
+          />
+        );
       case "providers":
         return <ProvidersScreen />;
       case "vault":

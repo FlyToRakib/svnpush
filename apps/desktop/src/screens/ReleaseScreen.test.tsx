@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectStore } from "../store/projectStore";
 import { useRunStore } from "../store/runStore";
 import { DRAFT_CONTEXT, PREVIEW, PROJECT_PATH, runState, summary } from "../test/fixtures";
@@ -13,7 +13,9 @@ function open(state = runState("AwaitingApproval", "Draft", { draft_context: DRA
   tauriMock.handle("current_run", () => state);
   tauriMock.handle("project_history", () => []);
   tauriMock.handle("list_projects", () => [summary()]);
-  return render(<ReleaseScreen />);
+  tauriMock.handle("provider_adapters", () => []);
+  tauriMock.handle("list_providers", () => ({ schema: 1, providers: [], fallback: [] }));
+  return render(<ReleaseScreen onOpenProviders={vi.fn()} />);
 }
 
 describe("ReleaseScreen", () => {
@@ -23,7 +25,7 @@ describe("ReleaseScreen", () => {
 
   it("shows what to do when no project is open", () => {
     useProjectStore.setState({ projects: [], selectedPath: null });
-    render(<ReleaseScreen />);
+    render(<ReleaseScreen onOpenProviders={vi.fn()} />);
     expect(screen.getByText("No project open")).toBeTruthy();
   });
 
@@ -100,7 +102,7 @@ describe("ReleaseScreen", () => {
     act(() => {
       useRunStore.getState().receiveState(PROJECT_PATH, { ...published, notices: ["again"] });
     });
-    view.rerender(<ReleaseScreen />);
+    view.rerender(<ReleaseScreen onOpenProviders={vi.fn()} />);
     expect(tauriMock.opened).toEqual(["https://wordpress.org/plugins/demo/"]);
   });
 

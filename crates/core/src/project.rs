@@ -101,6 +101,36 @@ pub struct ProjectSettings {
     pub post_publish_open_page: bool,
     /// The vault SVN account's username; `None` uses the only account.
     pub svn_account: Option<String>,
+    /// Which AI writes the draft and explains failed checks.
+    pub ai_provider: AiChoice,
+    /// Gitignore-style patterns kept out of AI prompts, besides the
+    /// secret-looking files that are always kept out.
+    pub ai_exclude_patterns: Vec<String>,
+}
+
+/// The project's AI provider setting (plan §6.2).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "mode")]
+#[ts(export)]
+pub enum AiChoice {
+    /// The default provider record.
+    #[default]
+    Default,
+    /// One record, always.
+    Pinned {
+        /// The provider record id.
+        provider_id: String,
+    },
+    /// No AI: Step 2 is a manual form.
+    Off,
+}
+
+/// The default AI exclude patterns: vendored, minified, generated and lock files.
+pub fn default_ai_exclude_patterns() -> Vec<String> {
+    ["vendor/", "node_modules/", "*.min.js", "*.min.css", "*.map", "*.lock", "package-lock.json"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
 }
 
 impl Default for ProjectSettings {
@@ -116,6 +146,8 @@ impl Default for ProjectSettings {
             post_publish_git_tag: false,
             post_publish_open_page: true,
             svn_account: None,
+            ai_provider: AiChoice::Default,
+            ai_exclude_patterns: default_ai_exclude_patterns(),
         }
     }
 }
@@ -268,7 +300,8 @@ pub fn save_projects(paths: &AppPaths, projects: &[Project]) -> Result<(), Confi
 }
 
 /// Settings that belong to one machine and are ignored in `.svnpush.json`.
-const MACHINE_SPECIFIC: [&str; 1] = ["svn_account"];
+/// Provider record ids exist on one machine, so the AI choice is local too.
+const MACHINE_SPECIFIC: [&str; 2] = ["svn_account", "ai_provider"];
 
 /// The project with `.svnpush.json` overlaid: team values override app values,
 /// key by key. The file's `svn_url` overrides too; machine-specific keys are ignored.

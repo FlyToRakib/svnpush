@@ -11,6 +11,7 @@ fn main() {
         "start_run",
         "current_run",
         "approve_draft",
+        "ai_decision",
         "confirm_publish",
         "cancel_run",
         "resume_run",

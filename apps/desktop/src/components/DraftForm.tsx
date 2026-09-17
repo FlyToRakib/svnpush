@@ -5,13 +5,15 @@ import { S } from "../strings";
 
 interface DraftFormProps {
   context: DraftContext;
+  /** The AI's draft when one arrived, otherwise the pre-filled one. */
+  initial: ReleaseDraft;
   onApprove: (draft: ReleaseDraft) => void;
   disabled: boolean;
 }
 
 /** Step 2: the version, changelog entry and upgrade notice to approve. */
-export function DraftForm({ context, onApprove, disabled }: DraftFormProps) {
-  const [draft, setDraft] = useState<ReleaseDraft>(context.prefill);
+export function DraftForm({ context, initial, onApprove, disabled }: DraftFormProps) {
+  const [draft, setDraft] = useState<ReleaseDraft>(initial);
 
   const submit = (event: SyntheticEvent) => {
     event.preventDefault();
@@ -35,6 +37,7 @@ export function DraftForm({ context, onApprove, disabled }: DraftFormProps) {
           required
         />
         <p className="field__hint">{S.draft.versionHint(context.previous)}</p>
+        {draft.reason && <p className="field__hint">{S.draft.reason(draft.reason)}</p>}
       </div>
       <div className="field">
         <label className="field__label" htmlFor="draft-changelog">
@@ -67,6 +70,23 @@ export function DraftForm({ context, onApprove, disabled }: DraftFormProps) {
         />
         <p className="field__hint">{S.draft.upgradeNoticeHint}</p>
       </div>
+      {(draft.summary || draft.provider) && (
+        <div className="field">
+          <label className="field__label" htmlFor="draft-summary">
+            {S.draft.summary}
+          </label>
+          <textarea
+            id="draft-summary"
+            className="textarea textarea--short"
+            value={draft.summary}
+            onChange={(e) => {
+              setDraft({ ...draft, summary: e.target.value });
+            }}
+            rows={3}
+          />
+          <p className="field__hint">{S.draft.summaryHint}</p>
+        </div>
+      )}
       <div>
         <button type="submit" className="btn btn--primary" disabled={disabled}>
           {S.draft.approve}

@@ -33,6 +33,7 @@ async fn inputs(app: &AppState, path: &str, dry_run: bool) -> Result<RunInputs, 
         vault: app.vault.clone(),
         accounts,
         current_wordpress,
+        ai: app.ai.clone(),
     })
 }
 
@@ -79,7 +80,7 @@ pub async fn start(
 
     let owned_path = path.to_owned();
     tauri::async_runtime::spawn(async move {
-        let (last, journal) = run.execute().await;
+        let (last, journal) = Box::pin(run.execute()).await;
         finish(&app, &sink, &owned_path, last, &journal).await;
     });
     Ok(first)
@@ -112,7 +113,11 @@ pub fn current(app: &AppState, path: &str) -> Option<RunState> {
 pub async fn approve(app: &AppState, path: &str, draft: ReleaseDraft) -> Result<(), ErrorView> {
     run::validate_draft(&draft)?;
     let control = control(app, path)?;
-    let waiting = app.runs().get(path).is_some_and(|s| s.state.phase == Phase::AwaitingApproval);
+    // Approving while the AI is still drafting stops the AI and uses this draft.
+    let waiting = app.runs().get(path).is_some_and(|s| {
+        s.state.phase == Phase::AwaitingApproval
+            || (s.state.phase == Phase::Drafting && s.state.draft_context.is_some())
+    });
     if !waiting {
         return Err(ErrorView::new(
             "RUN_NOT_WAITING",
@@ -121,6 +126,33 @@ pub async fn approve(app: &AppState, path: &str, draft: ReleaseDraft) -> Result<
         ));
     }
     control.decisions.send(Decision::Approve { draft }).await.map_err(|_| no_run(path))
+}
+
+/// Step 2 and Step 4 AI actions: generate (or Change provider), accept the
+/// privacy notice, write by hand, apply suggested fixes, stop.
+pub async fn ai_decision(app: &AppState, path: &str, decision: Decision) -> Result<(), ErrorView> {
+    if matches!(decision, Decision::Approve { .. } | Decision::Publish { .. }) {
+        return Err(ErrorView::new(
+            "RUN_WRONG_DECISION",
+            "Approve and Publish have their own confirmations.",
+            None,
+        ));
+    }
+    let control = control(app, path)?;
+    let waiting = app.runs().get(path).is_some_and(|s| {
+        matches!(
+            s.state.phase,
+            Phase::Drafting | Phase::AwaitingApproval | Phase::Verifying | Phase::AwaitingFixes
+        )
+    });
+    if !waiting {
+        return Err(ErrorView::new(
+            "RUN_NOT_WAITING",
+            "The release is not at a step that uses AI.",
+            None,
+        ));
+    }
+    control.decisions.send(decision).await.map_err(|_| no_run(path))
 }
 
 /// Step 7: the explicit Publish confirmation.

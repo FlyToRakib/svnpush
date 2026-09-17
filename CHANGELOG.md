@@ -4,6 +4,13 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- AI drafts in the release flow: the change set goes to your chosen provider, which suggests the version, changelog entry, upgrade notice and summary for you to edit and approve.
+- Change the AI provider for one release from the Draft step; see Revoye's queue position and fleet while you wait, and stop the request at any time.
+- A one-time notice before a provider first receives your project data.
+- When a blocking check fails, the AI explains it and suggests readme fixes you can review as a diff and apply with one click before checking again.
+- Project settings: choose the AI provider (default, a specific one, or off) and patterns for files the AI never sees. Files that look like secrets are always kept out.
+- Every modal dialog now has its own title for screen readers.
+- The theme toggles in the title bar and in Settings always agree.
 - Providers screen: add Revoye (recommended), Gemini, Claude, OpenAI, OpenRouter, DeepSeek, Qwen, Perplexity, any OpenAI-compatible endpoint or a local model; test a provider, load your account's models, see Revoye's fleet, set the default, and opt into an ordered fallback.
 - Vault screen: SVN accounts with passwords kept in your operating system keychain.
 - Settings screen: theme, svn and git paths with Doctor, the WordPress version lookup toggle, Copy diagnostics, and update check.

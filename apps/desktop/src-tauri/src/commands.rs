@@ -7,7 +7,7 @@ use serde::Serialize;
 use svnpush_core::ai::provider::{Fleet, ModelList};
 use svnpush_core::ai::records::ProvidersFile;
 use svnpush_core::project::ProjectSettings;
-use svnpush_core::run::{ErrorView, ReleaseDraft, RunJournal, RunState};
+use svnpush_core::run::{Decision, ErrorView, ReleaseDraft, RunJournal, RunState};
 use svnpush_core::settings::AppSettings;
 use tauri::{AppHandle, State};
 use tauri_plugin_updater::UpdaterExt;
@@ -253,6 +253,15 @@ pub async fn approve_draft(
     draft: ReleaseDraft,
 ) -> Result<(), ErrorView> {
     runs::approve(&state, &path, draft).await
+}
+
+#[tauri::command]
+pub async fn ai_decision(
+    state: Shared<'_>,
+    path: String,
+    decision: Decision,
+) -> Result<(), ErrorView> {
+    runs::ai_decision(&state, &path, decision).await
 }
 
 #[tauri::command]
