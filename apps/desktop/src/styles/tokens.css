@@ -1,0 +1,137 @@
+/* Design tokens. Light on :root, dark under [data-theme="dark"] and, when the
+   theme is System, under prefers-color-scheme: dark. The dark block is
+   repeated because CSS cannot share one declaration list between a selector
+   and a media query. */
+
+:root {
+  color-scheme: light;
+
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
+
+  --duration: 120ms;
+
+  --color-bg: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef0f3;
+  --color-border: #c9ced6;
+  --color-border-light: #e3e6ea;
+  --color-text: #1b1f24;
+  --color-text-muted: #545c66;
+  --color-text-inverse: #ffffff;
+
+  --color-accent: #1f5fd6;
+  --color-accent-hover: #194fb3;
+  --color-accent-muted: #e3ecfb;
+  --color-accent-ink: #163f8c;
+  --color-focus: #1f5fd6;
+
+  --color-success: #1e7a3c;
+  --color-success-bg: #e3f4e8;
+  --color-success-ink: #17592b;
+  --color-warning: #9a5d00;
+  --color-warning-bg: #fdf1d8;
+  --color-warning-ink: #6e4200;
+  --color-danger: #c42b2b;
+  --color-danger-bg: #fbe4e4;
+  --color-danger-ink: #8f1d1d;
+
+  --color-diff-add-bg: #e6f6ea;
+  --color-diff-del-bg: #fbe9e9;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 5%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #111418;
+  --color-surface: #1a1e24;
+  --color-surface-muted: #242a32;
+  --color-border: #3a414b;
+  --color-border-light: #2b3038;
+  --color-text: #e8ebef;
+  --color-text-muted: #a8b0ba;
+  --color-text-inverse: #0d1014;
+
+  --color-accent: #6d9eff;
+  --color-accent-hover: #8cb2ff;
+  --color-accent-muted: #1f2d47;
+  --color-accent-ink: #b8cfff;
+  --color-focus: #8cb2ff;
+
+  --color-success: #6cc98a;
+  --color-success-bg: #16301f;
+  --color-success-ink: #8fd6a4;
+  --color-warning: #e6b04d;
+  --color-warning-bg: #3a2c10;
+  --color-warning-ink: #f2c46b;
+  --color-danger: #ff7b7b;
+  --color-danger-bg: #3d1a1a;
+  --color-danger-ink: #ffb0b0;
+
+  --color-diff-add-bg: #15301e;
+  --color-diff-del-bg: #3a1c1c;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px rgb(0 0 0 / 30%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --color-bg: #111418;
+    --color-surface: #1a1e24;
+    --color-surface-muted: #242a32;
+    --color-border: #3a414b;
+    --color-border-light: #2b3038;
+    --color-text: #e8ebef;
+    --color-text-muted: #a8b0ba;
+    --color-text-inverse: #0d1014;
+
+    --color-accent: #6d9eff;
+    --color-accent-hover: #8cb2ff;
+    --color-accent-muted: #1f2d47;
+    --color-accent-ink: #b8cfff;
+    --color-focus: #8cb2ff;
+
+    --color-success: #6cc98a;
+    --color-success-bg: #16301f;
+    --color-success-ink: #8fd6a4;
+    --color-warning: #e6b04d;
+    --color-warning-bg: #3a2c10;
+    --color-warning-ink: #f2c46b;
+    --color-danger: #ff7b7b;
+    --color-danger-bg: #3d1a1a;
+    --color-danger-ink: #ffb0b0;
+
+    --color-diff-add-bg: #15301e;
+    --color-diff-del-bg: #3a1c1c;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px rgb(0 0 0 / 30%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0ms;
+  }
+}

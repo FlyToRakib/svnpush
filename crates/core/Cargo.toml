@@ -1,0 +1,14 @@
+[package]
+name = "svnpush-core"
+description = "The SVNpush release engine: detection, versions, packaging, verification, SVN and AI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

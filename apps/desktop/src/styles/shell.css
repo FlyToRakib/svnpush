@@ -1,0 +1,66 @@
+.titlebar {
+  align-items: center;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  gap: var(--space-5);
+  min-height: 48px;
+  padding: 0 var(--space-4);
+}
+
+.titlebar__brand {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.titlebar__nav {
+  display: flex;
+  flex: 1;
+  gap: var(--space-1);
+}
+
+.titlebar__link {
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: var(--space-1) var(--space-3);
+}
+
+.titlebar__link:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.titlebar__link--active {
+  background: var(--color-accent-muted);
+  color: var(--color-accent-ink);
+  font-weight: 600;
+}
+
+.segmented {
+  background: var(--color-surface-muted);
+  border-radius: var(--radius);
+  display: inline-flex;
+  padding: 2px;
+}
+
+.segmented__option {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 2px var(--space-3);
+}
+
+.segmented__option--active {
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+  color: var(--color-text);
+  font-weight: 600;
+}

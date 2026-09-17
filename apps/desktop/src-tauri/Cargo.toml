@@ -1,0 +1,23 @@
+[package]
+name = "svnpush-desktop"
+description = "The SVNpush desktop shell."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "svnpush_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6", features = [] }
+
+[dependencies]
+svnpush-core = { path = "../../../crates/core" }
+tauri = { version = "2.11", features = [] }
+
+[lints]
+workspace = true
