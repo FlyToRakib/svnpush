@@ -1,0 +1,4 @@
+.git
+composer.json
+composer.lock
+tests

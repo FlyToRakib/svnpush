@@ -14,3 +14,15 @@ each, dated.
 - 2026-09-17 — `cargo deny` checks `unmaintained` for direct dependencies only; the flagged crates (`unic-*`, `proc-macro-error`) are deep in the Tauri and GTK tree.
 - 2026-09-17 — App identifier `com.degird.svnpush`.
 - 2026-09-17 — "Installers build on all three platforms" (M0) is verified locally for Windows (NSIS and MSI); macOS and Linux are built by the `build` workflow, which cannot run from this machine.
+- 2026-09-17 — Crates added for M1: `thiserror` (typed errors with stable codes, plan §4), `serde`/`serde_json` (DTOs and config files), `regex` (header scanning and user-configured version locations), `semver` (version ordering with normalisation), `ts-rs` (DTO types for the UI, plan §14.2); dev-only `proptest` (round-trip properties, plan §15) and `tempfile` (filesystem tests).
+- 2026-09-17 — Errors that reach the UI implement one `Coded` trait (`code()` plus optional `fix()`); the shell turns any of them into a single `{ code, message, fix }` DTO.
+- 2026-09-17 — File changes are composed in an in-memory `EditSet` before anything is written, because two sources can edit the same file (a version constant inside the main plugin file) and the diff, snapshot and journal all need the before/after pair.
+- 2026-09-17 — `Readme.headers` is an ordered list with line numbers rather than a map, so fixes can name the line; lookups are case-insensitive.
+- 2026-09-17 — `PluginFacts.readme` is optional: a plugin without `readme.txt` still detects, and V05/V10 report the missing file.
+- 2026-09-17 — The readme parser reads the WordPress.org `=`-heading syntax only (`=== Name ===`, `== Section ==`, `= Entry =`); Markdown-style `##` readmes are not parsed in 1.0.
+- 2026-09-17 — Writing a changelog entry for a version that already has one replaces that entry's body and keeps its title (for example a date), instead of adding a duplicate. A missing `== Changelog ==` section is appended at the end; a missing `== Upgrade Notice ==` is created directly after the changelog when the draft has a notice.
+- 2026-09-17 — Version sources with no value are reported as empty rather than skipped, so V01 names them; a missing readme contributes no readme sources. A custom location that matches more than once yields one source per match.
+- 2026-09-17 — Slugs are lowercase letters, digits and hyphens (the WordPress.org rule); the slug is the SVN URL's last segment, ignoring a trailing `/trunk`.
+- 2026-09-17 — Git facts and the previous released version are added to `PluginFacts` by the run (M4), because they need the `tools` and `svn` modules (M3); `detect` itself stays a pure local-disk read.
+- 2026-09-17 — The real-world fixture copies AuthDock's `readme.txt` and lines 1–28 of `authdock.php` (the header block and its `ABSPATH` guard, so V09 has a real example).
+- 2026-09-17 — `fixtures/**` is marked `-text` in `.gitattributes` so byte-exact inputs (line endings, BOM) are never normalised by git.

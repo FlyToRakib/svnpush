@@ -1,0 +1,6 @@
+{
+  "apiVersion": 3,
+  "name": "svnpush/block-with-build",
+  "title": "Block With Build",
+  "editorScript": "file:./index.js"
+}

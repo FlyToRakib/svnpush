@@ -3,3 +3,12 @@
 //! It holds every piece of release logic and has no UI dependency: the
 //! desktop shell is a thin layer over this crate. See `docs/PLAN.md`
 //! section 4 for the module map.
+
+pub mod detect;
+pub mod edit;
+pub mod error;
+pub mod readme;
+pub mod text;
+pub mod version;
+
+pub use error::Coded;
