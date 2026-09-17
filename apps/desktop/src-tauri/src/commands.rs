@@ -3,19 +3,184 @@
 
 use std::sync::Arc;
 
+use serde::Serialize;
+use svnpush_core::ai::provider::{Fleet, ModelList};
+use svnpush_core::ai::records::ProvidersFile;
 use svnpush_core::project::ProjectSettings;
 use svnpush_core::run::{ErrorView, ReleaseDraft, RunJournal, RunState};
+use svnpush_core::settings::AppSettings;
 use tauri::{AppHandle, State};
+use tauri_plugin_updater::UpdaterExt;
+use ts_rs::TS;
 
 use crate::events::{EventSink, TauriSink};
 use crate::service::projects::{self, FolderInspection, ProjectSummary};
+use crate::service::providers::{self, AdapterInfo, ProviderInput, ProviderTarget};
 use crate::service::runs;
+use crate::service::settings::{self, DoctorReport};
+use crate::service::vault::{self, VaultView};
 use crate::state::AppState;
 
 type Shared<'a> = State<'a, Arc<AppState>>;
 
 fn sink(app: AppHandle) -> Arc<dyn EventSink> {
     Arc::new(TauriSink(app))
+}
+
+/// The app version and whether a newer signed release exists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct UpdateInfo {
+    /// The running version.
+    pub current: String,
+    /// The newer version, when one is published.
+    pub available: Option<String>,
+}
+
+fn update_error(e: impl std::fmt::Display) -> ErrorView {
+    ErrorView::new(
+        "UPDATE_CHECK_FAILED",
+        format!("Could not check for updates: {e}"),
+        Some("Check your connection and try again.".to_owned()),
+    )
+}
+
+#[tauri::command]
+pub async fn vault_view(state: Shared<'_>) -> Result<VaultView, ErrorView> {
+    vault::view(&state)
+}
+
+#[tauri::command]
+pub async fn save_account(
+    state: Shared<'_>,
+    host: String,
+    username: String,
+    password: String,
+) -> Result<VaultView, ErrorView> {
+    vault::save(&state, &host, &username, &password)
+}
+
+#[tauri::command]
+pub async fn remove_account(
+    state: Shared<'_>,
+    host: String,
+    username: String,
+) -> Result<VaultView, ErrorView> {
+    vault::remove(&state, &host, &username)
+}
+
+#[tauri::command]
+pub async fn test_account(
+    state: Shared<'_>,
+    host: String,
+    username: String,
+) -> Result<String, ErrorView> {
+    vault::test(&state, &host, &username).await
+}
+
+#[tauri::command]
+pub async fn provider_adapters() -> Result<Vec<AdapterInfo>, ErrorView> {
+    Ok(providers::adapters())
+}
+
+#[tauri::command]
+pub async fn list_providers(state: Shared<'_>) -> Result<ProvidersFile, ErrorView> {
+    providers::list(&state)
+}
+
+#[tauri::command]
+pub async fn save_provider(
+    state: Shared<'_>,
+    input: ProviderInput,
+) -> Result<ProvidersFile, ErrorView> {
+    providers::save(&state, input)
+}
+
+#[tauri::command]
+pub async fn remove_provider(state: Shared<'_>, id: String) -> Result<ProvidersFile, ErrorView> {
+    providers::remove(&state, &id)
+}
+
+#[tauri::command]
+pub async fn set_default_provider(
+    state: Shared<'_>,
+    id: String,
+) -> Result<ProvidersFile, ErrorView> {
+    providers::set_default(&state, &id)
+}
+
+#[tauri::command]
+pub async fn clear_provider_attention(
+    state: Shared<'_>,
+    id: String,
+) -> Result<ProvidersFile, ErrorView> {
+    providers::clear_attention(&state, &id)
+}
+
+#[tauri::command]
+pub async fn save_provider_fallback(
+    state: Shared<'_>,
+    order: Vec<String>,
+) -> Result<ProvidersFile, ErrorView> {
+    providers::save_fallback(&state, order)
+}
+
+#[tauri::command]
+pub async fn test_provider(state: Shared<'_>, id: String) -> Result<String, ErrorView> {
+    providers::test(&state, &id).await
+}
+
+#[tauri::command]
+pub async fn list_provider_models(
+    state: Shared<'_>,
+    target: ProviderTarget,
+) -> Result<ModelList, ErrorView> {
+    providers::list_models(&state, target).await
+}
+
+#[tauri::command]
+pub async fn provider_fleet(state: Shared<'_>, target: ProviderTarget) -> Result<Fleet, ErrorView> {
+    providers::fleet(&state, target).await
+}
+
+#[tauri::command]
+pub async fn get_settings(state: Shared<'_>) -> Result<AppSettings, ErrorView> {
+    settings::get(&state)
+}
+
+#[tauri::command]
+pub async fn save_settings(
+    state: Shared<'_>,
+    settings: AppSettings,
+) -> Result<AppSettings, ErrorView> {
+    settings::save(&state, settings)
+}
+
+#[tauri::command]
+pub async fn run_doctor(state: Shared<'_>) -> Result<DoctorReport, ErrorView> {
+    settings::doctor(&state).await
+}
+
+#[tauri::command]
+pub async fn diagnostics(app: AppHandle, state: Shared<'_>) -> Result<String, ErrorView> {
+    settings::diagnostics(&state, &app.package_info().version.to_string()).await
+}
+
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, ErrorView> {
+    let current = app.package_info().version.to_string();
+    let update = app.updater().map_err(update_error)?.check().await.map_err(update_error)?;
+    Ok(UpdateInfo { current, available: update.map(|u| u.version) })
+}
+
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), ErrorView> {
+    let Some(update) = app.updater().map_err(update_error)?.check().await.map_err(update_error)?
+    else {
+        return Ok(());
+    };
+    update.download_and_install(|_, _| {}, || {}).await.map_err(update_error)?;
+    app.restart();
 }
 
 #[tauri::command]

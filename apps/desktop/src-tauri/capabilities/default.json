@@ -6,6 +6,7 @@
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:app:allow-version",
     "dialog:allow-open",
     {
       "identifier": "opener:allow-open-url",
@@ -25,6 +26,26 @@
     "allow-cancel-run",
     "allow-resume-run",
     "allow-discard-run",
-    "allow-reset-working-copy"
+    "allow-reset-working-copy",
+    "allow-vault-view",
+    "allow-save-account",
+    "allow-remove-account",
+    "allow-test-account",
+    "allow-provider-adapters",
+    "allow-list-providers",
+    "allow-save-provider",
+    "allow-remove-provider",
+    "allow-set-default-provider",
+    "allow-clear-provider-attention",
+    "allow-save-provider-fallback",
+    "allow-test-provider",
+    "allow-list-provider-models",
+    "allow-provider-fleet",
+    "allow-get-settings",
+    "allow-save-settings",
+    "allow-run-doctor",
+    "allow-diagnostics",
+    "allow-check-update",
+    "allow-install-update"
   ]
 }

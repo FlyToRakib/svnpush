@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use svnpush_core::ai::client::AiClient;
 use svnpush_core::project::AppPaths;
 use svnpush_core::run::{Decision, RunState};
 use svnpush_core::vault::CredentialStore;
@@ -33,17 +34,20 @@ pub struct AppState {
     pub paths: AppPaths,
     /// The keychain.
     pub vault: Arc<dyn CredentialStore>,
+    /// The only AI HTTP client.
+    pub ai: AiClient,
     /// Serialises reads and writes of `projects.json`.
     pub projects_lock: tokio::sync::Mutex<()>,
     runs: Mutex<HashMap<String, RunSlot>>,
 }
 
 impl AppState {
-    /// State over `paths` and `vault`.
-    pub fn new(paths: AppPaths, vault: Arc<dyn CredentialStore>) -> Self {
+    /// State over `paths`, `vault` and the AI client.
+    pub fn new(paths: AppPaths, vault: Arc<dyn CredentialStore>, ai: AiClient) -> Self {
         Self {
             paths,
             vault,
+            ai,
             projects_lock: tokio::sync::Mutex::new(()),
             runs: Mutex::new(HashMap::new()),
         }

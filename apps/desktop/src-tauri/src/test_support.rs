@@ -1,10 +1,20 @@
 //! Test doubles for the shell's unit tests.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
+use svnpush_core::ai::client::AiClient;
+use svnpush_core::project::AppPaths;
 use svnpush_core::secret::Secret;
 use svnpush_core::vault::{CredentialStore, VaultError};
+
+use crate::state::AppState;
+
+/// App state over a temporary folder and an in-memory vault.
+pub fn app(dir: &Path) -> AppState {
+    AppState::new(AppPaths::new(dir), Arc::new(MemoryVault::default()), AiClient::new().unwrap())
+}
 
 /// An in-memory credential store.
 #[derive(Default)]

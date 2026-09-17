@@ -174,7 +174,11 @@ pub fn list(paths: &AppPaths, slug: &str) -> Result<Vec<RunJournal>, ConfigError
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(source) => {
-            return Err(ConfigError::Io { action: "read", path: dir.display().to_string(), source });
+            return Err(ConfigError::Io {
+                action: "read",
+                path: dir.display().to_string(),
+                source,
+            });
         }
     };
     let mut journals = Vec::new();

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "PAYLOAD_TOO_LARGE",
+    "message": "Human text that must never be parsed.",
+    "request_id": "req_01JAY7Q2K8",
+    "details": { "limit": 100000 }
+  }
+}

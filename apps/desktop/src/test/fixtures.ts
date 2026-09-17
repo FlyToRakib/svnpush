@@ -34,6 +34,7 @@ export function summary(overrides: Partial<ProjectSummary> = {}): ProjectSummary
     problem: null,
     unfinished: null,
     locked: false,
+    account: "someone",
     ...overrides,
   };
 }

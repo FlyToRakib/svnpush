@@ -8,6 +8,7 @@ import "./styles/shell.css";
 import "./styles/components.css";
 import "./styles/projects.css";
 import "./styles/release.css";
+import "./styles/providers.css";
 
 applyTheme(loadTheme());
 

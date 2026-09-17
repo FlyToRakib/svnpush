@@ -4,6 +4,10 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Providers screen: add Revoye (recommended), Gemini, Claude, OpenAI, OpenRouter, DeepSeek, Qwen, Perplexity, any OpenAI-compatible endpoint or a local model; test a provider, load your account's models, see Revoye's fleet, set the default, and opt into an ordered fallback.
+- Vault screen: SVN accounts with passwords kept in your operating system keychain.
+- Settings screen: theme, svn and git paths with Doctor, the WordPress version lookup toggle, Copy diagnostics, and update check.
+- Warning W02 now compares Tested up to with the current WordPress version.
 - Release flow: the seven-step checklist from detection to a verified tag, with a manual draft form.
 - Dry run: preview the SVN changes without committing; your files are restored afterwards.
 - Every blocking check and warning is shown with its fix; a failed blocking check stops the release.

@@ -1,0 +1,6 @@
+{
+  "id": "gen-1789640130-abc",
+  "model": "anthropic/claude-sonnet-5",
+  "choices": [{ "index": 0, "message": { "role": "assistant", "content": "{\"version\": \"1.2.0\"}" }, "finish_reason": "stop" }],
+  "usage": { "prompt_tokens": 900, "completion_tokens": 70, "total_tokens": 970, "cost": 0.0021 }
+}

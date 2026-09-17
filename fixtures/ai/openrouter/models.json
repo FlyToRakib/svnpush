@@ -1,0 +1,7 @@
+{
+  "data": [
+    { "id": "openai/gpt-6-astra", "architecture": { "output_modalities": ["text"] } },
+    { "id": "anthropic/claude-sonnet-5", "architecture": { "output_modalities": ["text"] } },
+    { "id": "google/imagen-9", "architecture": { "output_modalities": ["image"] } }
+  ]
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-provider-fallback"
+description = "Enables the save_provider_fallback command without any pre-configured scope."
+commands.allow = ["save_provider_fallback"]
+
+[[permission]]
+identifier = "deny-save-provider-fallback"
+description = "Denies the save_provider_fallback command without any pre-configured scope."
+commands.deny = ["save_provider_fallback"]

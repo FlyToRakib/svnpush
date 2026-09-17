@@ -1,0 +1,4 @@
+{
+  "candidates": [{ "content": { "role": "model", "parts": [{ "text": "{\"version\": \"1." }] }, "finishReason": "MAX_TOKENS" }],
+  "usageMetadata": { "promptTokenCount": 812, "candidatesTokenCount": 8192 }
+}

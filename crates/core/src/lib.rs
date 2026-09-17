@@ -4,6 +4,7 @@
 //! desktop shell is a thin layer over this crate. See `docs/PLAN.md`
 //! section 4 for the module map.
 
+pub mod ai;
 pub mod clock;
 pub mod detect;
 pub mod edit;
@@ -14,6 +15,7 @@ pub mod readme;
 pub mod report;
 pub mod run;
 pub mod secret;
+pub mod settings;
 pub mod svn;
 pub mod text;
 pub mod tools;

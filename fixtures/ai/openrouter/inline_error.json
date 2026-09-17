@@ -1,0 +1,5 @@
+{
+  "id": "gen-1789640131-def",
+  "error": { "code": 502, "message": "Upstream provider returned an invalid response.", "metadata": { "provider_name": "Anthropic" } },
+  "choices": [{ "index": 0, "message": { "role": "assistant", "content": "" }, "finish_reason": "error" }]
+}

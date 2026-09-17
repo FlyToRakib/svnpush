@@ -1,4 +1,14 @@
+import type { AdapterInfo } from "./bindings/AdapterInfo";
+import type { AppSettings } from "./bindings/AppSettings";
+import type { DoctorReport } from "./bindings/DoctorReport";
+import type { Fleet } from "./bindings/Fleet";
 import type { FolderInspection } from "./bindings/FolderInspection";
+import type { ModelList } from "./bindings/ModelList";
+import type { ProviderInput } from "./bindings/ProviderInput";
+import type { ProvidersFile } from "./bindings/ProvidersFile";
+import type { ProviderTarget } from "./bindings/ProviderTarget";
+import type { UpdateInfo } from "./bindings/UpdateInfo";
+import type { VaultView } from "./bindings/VaultView";
 import type { ProjectSettings } from "./bindings/ProjectSettings";
 import type { ProjectSummary } from "./bindings/ProjectSummary";
 import type { ReleaseDraft } from "./bindings/ReleaseDraft";
@@ -25,4 +35,31 @@ export const commands = {
   resumeRun: (path: string, runId: string) => call<RunState>("resume_run", { path, runId }),
   discardRun: (path: string, runId: string) => call<null>("discard_run", { path, runId }),
   resetWorkingCopy: (path: string) => call<null>("reset_working_copy", { path }),
+
+  vaultView: () => call<VaultView>("vault_view"),
+  saveAccount: (host: string, username: string, password: string) =>
+    call<VaultView>("save_account", { host, username, password }),
+  removeAccount: (host: string, username: string) =>
+    call<VaultView>("remove_account", { host, username }),
+  testAccount: (host: string, username: string) => call<string>("test_account", { host, username }),
+
+  providerAdapters: () => call<AdapterInfo[]>("provider_adapters"),
+  listProviders: () => call<ProvidersFile>("list_providers"),
+  saveProvider: (input: ProviderInput) => call<ProvidersFile>("save_provider", { input }),
+  removeProvider: (id: string) => call<ProvidersFile>("remove_provider", { id }),
+  setDefaultProvider: (id: string) => call<ProvidersFile>("set_default_provider", { id }),
+  clearProviderAttention: (id: string) => call<ProvidersFile>("clear_provider_attention", { id }),
+  saveProviderFallback: (order: string[]) =>
+    call<ProvidersFile>("save_provider_fallback", { order }),
+  testProvider: (id: string) => call<string>("test_provider", { id }),
+  listProviderModels: (target: ProviderTarget) =>
+    call<ModelList>("list_provider_models", { target }),
+  providerFleet: (target: ProviderTarget) => call<Fleet>("provider_fleet", { target }),
+
+  getSettings: () => call<AppSettings>("get_settings"),
+  saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
+  runDoctor: () => call<DoctorReport>("run_doctor"),
+  diagnostics: () => call<string>("diagnostics"),
+  checkUpdate: () => call<UpdateInfo>("check_update"),
+  installUpdate: () => call<null>("install_update"),
 };

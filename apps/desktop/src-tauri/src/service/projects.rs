@@ -25,6 +25,8 @@ pub struct ProjectSummary {
     pub unfinished: Option<RunJournal>,
     /// Whether another window is releasing this plugin.
     pub locked: bool,
+    /// The Vault account that will commit, when one resolves.
+    pub account: Option<String>,
 }
 
 /// What a folder looks like before it is added.
@@ -106,7 +108,15 @@ fn summarise(app: &AppState, project: Project) -> ProjectSummary {
         .ok()
         .and_then(|all| all.into_iter().next())
         .filter(|j| !j.discarded && (j.is_interrupted() || j.needs_tag()));
+    let accounts = svnpush_core::vault::load_accounts(&app.paths).unwrap_or_default();
+    let account = svnpush_core::vault::resolve_account(
+        &accounts,
+        &svnpush_core::vault::svn_host(&project.svn_url),
+        project.settings.svn_account.as_deref(),
+    )
+    .map(|a| a.username.clone());
     ProjectSummary {
+        account,
         locked: ProjectLock::is_held(&app.paths.runs(&project.slug)),
         version: detected.as_ref().ok().and_then(|f| f.header.version.clone()),
         problem: detected.err(),
@@ -231,12 +241,9 @@ pub async fn record_outcome(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use serde_json::Value;
 
     use super::*;
-    use crate::test_support::MemoryVault;
 
     fn fixture_copy(dir: &Path) -> String {
         let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/plugins/minimal");
@@ -249,7 +256,7 @@ mod tests {
     }
 
     fn app(dir: &Path) -> AppState {
-        AppState::new(project::AppPaths::new(&dir.join("data")), Arc::new(MemoryVault::default()))
+        crate::test_support::app(&dir.join("data"))
     }
 
     #[tokio::test]

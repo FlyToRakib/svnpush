@@ -9,7 +9,7 @@ use svnpush_core::run::{
     RunState, journal,
 };
 use svnpush_core::svn::Svn;
-use svnpush_core::{tools, vault};
+use svnpush_core::{settings, tools, vault};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -19,9 +19,11 @@ use crate::state::{AppState, RunControl, RunSlot};
 
 async fn inputs(app: &AppState, path: &str, dry_run: bool) -> Result<RunInputs, ErrorView> {
     let project = projects::load(app, path).await?;
-    let svn = tools::discover_svn(None).await;
-    let git = tools::discover_git(None).await;
+    let config = settings::load(&app.paths).map_err(|e| ErrorView::from_coded(&e))?;
+    let svn = tools::discover_svn(config.svn_path.as_deref().map(std::path::Path::new)).await;
+    let git = tools::discover_git(config.git_path.as_deref().map(std::path::Path::new)).await;
     let accounts = vault::load_accounts(&app.paths).map_err(|e| ErrorView::from_coded(&e))?;
+    let current_wordpress = settings::current_wordpress_version(&app.paths, &config).await;
     Ok(RunInputs {
         paths: app.paths.clone(),
         project,
@@ -30,7 +32,7 @@ async fn inputs(app: &AppState, path: &str, dry_run: bool) -> Result<RunInputs, 
         svn,
         vault: app.vault.clone(),
         accounts,
-        current_wordpress: None,
+        current_wordpress,
     })
 }
 
@@ -210,16 +212,17 @@ pub async fn discard(
     run::discard(&inputs, watcher.as_ref(), found).await.map(|_| ())
 }
 
-fn svn_client() -> Svn<'static> {
-    let bin = tools::find_on_path("svn").unwrap_or_else(|| PathBuf::from("svn"));
-    Svn::new(bin, &NullReporter, CancellationToken::new())
-}
-
 /// Deletes and re-checks-out the sparse working copy (the V15 fix).
 pub async fn reset_working_copy(app: &AppState, path: &str) -> Result<(), ErrorView> {
-    let project = projects::load(app, path).await?;
-    let wc = app.paths.working_copy(&project.slug);
-    svn_client().reset(&project.svn_url, &wc, None).await.map_err(|e| ErrorView::from_coded(&e))
+    let inputs = inputs(app, path, true).await?;
+    let Some(bin) = inputs.svn.path.clone().filter(|_| inputs.svn.ok) else {
+        return Err(ErrorView::new("TOOLS_SVN_UNAVAILABLE", inputs.svn.message, inputs.svn.fix));
+    };
+    let wc = app.paths.working_copy(&inputs.project.slug);
+    Svn::new(PathBuf::from(bin), &NullReporter, CancellationToken::new())
+        .reset(&inputs.project.svn_url, &wc, None)
+        .await
+        .map_err(|e| ErrorView::from_coded(&e))
 }
 
 /// Deletes snapshots of successful publishes older than seven days, for every project.

@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "CONFLICT",
+    "message": "Human text that must never be parsed.",
+    "request_id": "req_01JAY7Q2K8",
+    "details": { "idempotency_key": "svnpush:demo:1.2.0:draft_release:0123456789abcdef" }
+  }
+}

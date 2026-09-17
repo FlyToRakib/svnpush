@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Human text that must never be parsed.",
+    "request_id": "req_01JAY7Q2K8",
+    "details": { "required_scope": "completions:write" }
+  }
+}

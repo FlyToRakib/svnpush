@@ -1,0 +1,8 @@
+{
+  "id": "chatcmpl-abc123",
+  "object": "chat.completion",
+  "created": 1789640130,
+  "model": "gpt-6-astra",
+  "choices": [{ "index": 0, "message": { "role": "assistant", "content": "{\"version\": \"1.2.0\"}" }, "finish_reason": "stop" }],
+  "usage": { "prompt_tokens": 850, "completion_tokens": 60, "total_tokens": 910 }
+}

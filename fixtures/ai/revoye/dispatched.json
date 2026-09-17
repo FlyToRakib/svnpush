@@ -1,0 +1,16 @@
+{
+  "id": "job_01JAY7Q2K8XYZ",
+  "status": "dispatched",
+  "response": null,
+  "provider": "chatgpt",
+  "agent_id": "agt_01JAY7",
+  "agent_name": null,
+  "conversation_ref": null,
+  "attempts": 1,
+  "queue_ms": null,
+  "run_ms": null,
+  "created_at": "2026-08-18T09:14:02Z",
+  "finished_at": null,
+  "content_pruned_at": null,
+  "metadata": { "source": "svnpush", "task": "draft_release" }
+}

@@ -1,0 +1,9 @@
+{
+  "object": "list",
+  "data": [
+    { "id": "revoye/auto", "object": "model", "created": 1755500000, "owned_by": "revoye" },
+    { "id": "chatgpt", "object": "model", "created": 1755500000, "owned_by": "revoye" },
+    { "id": "deepseek", "object": "model", "created": 1755500100, "owned_by": "revoye" }
+  ],
+  "_revoye": { "user_id": "usr_01JAY7" }
+}

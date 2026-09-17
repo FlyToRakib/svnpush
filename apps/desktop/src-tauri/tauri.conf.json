@@ -47,6 +47,13 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "Publish WordPress.org plugin releases in one click.",
-    "license": "MIT"
+    "license": "MIT",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk2NTAwMkU4M0IzMTNGQ0YKUldUUFB6RTc2QUpRbGlxQnpsVU1GdnRqNFVPMVYwYVRvODhncUhWWGpmcUtvYmx1L0ZuSlhEb3cK",
+      "endpoints": ["https://github.com/FlyToRakib/svnpush/releases/latest/download/latest.json"]
+    }
   }
 }

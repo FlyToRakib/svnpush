@@ -147,7 +147,7 @@ export function ReleaseScreen() {
         <dt>{S.release.svnUrl}</dt>
         <dd className="mono break">{project.svn_url}</dd>
         <dt>{S.release.account}</dt>
-        <dd className="mono">{state?.preview?.account ?? project.settings.svn_account ?? "—"}</dd>
+        <dd className="mono">{summary.account ?? S.release.noAccount}</dd>
       </dl>
 
       {summary.problem && <ErrorNotice error={summary.problem} />}

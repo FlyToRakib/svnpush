@@ -1,0 +1,11 @@
+{
+  "candidates": [
+    {
+      "content": { "role": "model", "parts": [{ "text": "{\"version\":" }, { "text": " \"1.2.0\"}" }] },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": { "promptTokenCount": 812, "candidatesTokenCount": 64, "totalTokenCount": 876 },
+  "modelVersion": "gemini-3.8-flash"
+}

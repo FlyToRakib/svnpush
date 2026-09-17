@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "JOB_CANCELLED",
+    "message": "Human text that must never be parsed.",
+    "request_id": "req_01JAY7Q2K8",
+    "details": { "job_id": "job_01JAY7Q2K8XYZ", "status": "cancelled", "attempts": 0 }
+  }
+}

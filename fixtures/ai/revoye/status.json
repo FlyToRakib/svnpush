@@ -1,0 +1,9 @@
+{
+  "devices": { "total": 2, "online": 1 },
+  "agents": { "total": 7, "idle": 3, "busy": 2, "error": 0, "offline": 2 },
+  "providers": [
+    { "kind": "chatgpt", "enabled": true, "agents_idle": 2, "rate_limit_per_hour": 60, "used_this_hour": 14 },
+    { "kind": "deepseek", "enabled": true, "agents_idle": 1, "rate_limit_per_hour": null, "used_this_hour": 3 }
+  ],
+  "queue": { "depth": 4, "oldest_queued_at": "2026-08-18T09:12:00Z" }
+}
