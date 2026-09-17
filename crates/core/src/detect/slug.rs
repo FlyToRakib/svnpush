@@ -6,18 +6,14 @@ pub const WORDPRESS_SVN_BASE: &str = "https://plugins.svn.wordpress.org";
 fn is_valid_slug(slug: &str) -> bool {
     !slug.is_empty()
         && !slug.starts_with('-')
-        && slug
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && slug.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 /// The slug a repository URL names: its last path segment, ignoring a
 /// trailing `/trunk`. `None` when that segment is not a valid slug.
 pub fn slug_from_svn_url(url: &str) -> Option<String> {
     let without_query = url.split(['?', '#']).next().unwrap_or(url);
-    let path = without_query
-        .split_once("://")
-        .map_or(without_query, |(_, rest)| rest);
+    let path = without_query.split_once("://").map_or(without_query, |(_, rest)| rest);
     let mut segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     if segments.last() == Some(&"trunk") {
         segments.pop();
@@ -31,10 +27,7 @@ pub fn slug_from_svn_url(url: &str) -> Option<String> {
 
 /// The WordPress.org SVN URL offered for a folder name, when it is a valid slug.
 pub fn suggested_svn_url(folder_name: &str) -> Option<String> {
-    let slug = folder_name
-        .trim()
-        .to_ascii_lowercase()
-        .replace([' ', '_'], "-");
+    let slug = folder_name.trim().to_ascii_lowercase().replace([' ', '_'], "-");
     is_valid_slug(&slug).then(|| format!("{WORDPRESS_SVN_BASE}/{slug}"))
 }
 

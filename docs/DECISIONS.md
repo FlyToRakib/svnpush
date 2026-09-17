@@ -26,3 +26,15 @@ each, dated.
 - 2026-09-17 — Git facts and the previous released version are added to `PluginFacts` by the run (M4), because they need the `tools` and `svn` modules (M3); `detect` itself stays a pure local-disk read.
 - 2026-09-17 — The real-world fixture copies AuthDock's `readme.txt` and lines 1–28 of `authdock.php` (the header block and its `ABSPATH` guard, so V09 has a real example).
 - 2026-09-17 — `fixtures/**` is marked `-text` in `.gitattributes` so byte-exact inputs (line endings, BOM) are never normalised by git.
+- 2026-09-17 — Crates added for M2: `ignore` (gitignore semantics for `.distignore`, plan §7.1), `walkdir` (follows symlinks and reports loops, already a dependency of `ignore`), `blake3` (content hashes, plan §7.4), `zip` with only the `deflate-flate2-zlib-rs` feature (the package zip), `sha2` (the `.zip.sha256` checksum).
+- 2026-09-17 — rustfmt uses `use_small_heuristics = "Max"` so short expressions stay on one line.
+- 2026-09-17 — Integration test files allow `unwrap`/`expect`/`panic` at file level; clippy's `allow-*-in-tests` covers only `#[test]` functions, not their helpers.
+- 2026-09-17 — The hard-excluded list matches case-insensitively (`Thumbs.db`, `*.ZIP`); `.distignore` keeps git's case-sensitive semantics.
+- 2026-09-17 — The zip holds explicit directory entries (`<slug>/`, `<slug>/includes/`) alongside files, all sorted, with the zip epoch timestamp and fixed permissions, so the same tree always produces the same SHA-256.
+- 2026-09-17 — The `.zip.sha256` file uses the `sha256sum` format (`<hex>  <name>`) so `sha256sum -c` verifies it.
+- 2026-09-17 — V12 treats `.zip .tar .gz .tgz .rar .7z` as archives and `.exe .dll .msi` as executables; `.phar` is blocked unless the project allows it.
+- 2026-09-17 — V09 accepts a `defined( 'ABSPATH' )` or `defined( 'WPINC' )` check anywhere in the main file (whitespace-insensitive).
+- 2026-09-17 — Checks that cannot run yet report Skip with the reason: V13 before Build creates the zip, V15 before Preview creates the working copy. Skip never blocks; Build and Preview re-run them.
+- 2026-09-17 — W02 compares major.minor only, the precision WordPress.org uses for "Tested up to".
+- 2026-09-17 — Source paths longer than 260 characters are listed on the package (`long_paths`) and shown in Build as a notice, not as an eleventh warning.
+- 2026-09-17 — Builds are pruned to the three most recently modified version folders per plugin.

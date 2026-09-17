@@ -56,11 +56,7 @@ fn scan_window(text: &str) -> &str {
 }
 
 fn header_regex(name: &str) -> Option<Regex> {
-    Regex::new(&format!(
-        r"(?i)^(?:[ \t]*<\?php)?[ \t/*#@]*{}:(.*)$",
-        regex::escape(name)
-    ))
-    .ok()
+    Regex::new(&format!(r"(?i)^(?:[ \t]*<\?php)?[ \t/*#@]*{}:(.*)$", regex::escape(name))).ok()
 }
 
 fn value_end_regex() -> Option<Regex> {
@@ -78,9 +74,7 @@ pub fn find(text: &str, name: &str) -> Option<HeaderMatch> {
         };
         let raw = caps.get(1)?;
         let raw_text = raw.as_str();
-        let kept = cut
-            .find(raw_text)
-            .map_or(raw_text, |m| &raw_text[..m.start()]);
+        let kept = cut.find(raw_text).map_or(raw_text, |m| &raw_text[..m.start()]);
         let trimmed = kept.trim();
         if trimmed.is_empty() {
             return Some(HeaderMatch {

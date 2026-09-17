@@ -7,8 +7,10 @@
 pub mod detect;
 pub mod edit;
 pub mod error;
+pub mod package;
 pub mod readme;
 pub mod text;
+pub mod verify;
 pub mod version;
 
 pub use error::Coded;

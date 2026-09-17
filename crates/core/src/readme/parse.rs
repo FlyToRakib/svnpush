@@ -100,11 +100,7 @@ impl<'a> Layout<'a> {
             let Some((header_name, value)) = header_line(&lines[i]) else {
                 break;
             };
-            headers.push(HeaderSpan {
-                name: header_name,
-                value,
-                line: i,
-            });
+            headers.push(HeaderSpan { name: header_name, value, line: i });
             i += 1;
         }
 
@@ -120,28 +116,16 @@ impl<'a> Layout<'a> {
                 if let Some(previous) = sections.last_mut() {
                     previous.end_line = i;
                 }
-                sections.push(SectionSpan {
-                    title,
-                    title_line: i,
-                    end_line: count,
-                });
+                sections.push(SectionSpan { title, title_line: i, end_line: count });
             }
             i += 1;
         }
 
-        Self {
-            lines,
-            name,
-            headers,
-            description_lines,
-            sections,
-        }
+        Self { lines, name, headers, description_lines, sections }
     }
 
     pub fn section(&self, title: &str) -> Option<&SectionSpan<'a>> {
-        self.sections
-            .iter()
-            .find(|s| s.title.eq_ignore_ascii_case(title))
+        self.sections.iter().find(|s| s.title.eq_ignore_ascii_case(title))
     }
 
     pub fn entries(&self, section: &SectionSpan<'a>) -> Vec<EntrySpan<'a>> {
@@ -171,10 +155,7 @@ impl<'a> Layout<'a> {
     /// Index just past the last non-blank line in `range`, or `range.start`.
     pub fn content_end(&self, range: Range<usize>) -> usize {
         let start = range.start;
-        range
-            .rev()
-            .find(|&i| !self.lines[i].content.trim().is_empty())
-            .map_or(start, |i| i + 1)
+        range.rev().find(|&i| !self.lines[i].content.trim().is_empty()).map_or(start, |i| i + 1)
     }
 }
 

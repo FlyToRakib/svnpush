@@ -26,21 +26,12 @@ pub fn lines(text: &str) -> Vec<Line<'_>> {
         let (content_end, end) = match newline {
             Some(offset) => {
                 let nl = start + offset;
-                let content_end = if nl > start && bytes[nl - 1] == b'\r' {
-                    nl - 1
-                } else {
-                    nl
-                };
+                let content_end = if nl > start && bytes[nl - 1] == b'\r' { nl - 1 } else { nl };
                 (content_end, nl + 1)
             }
             None => (text.len(), text.len()),
         };
-        out.push(Line {
-            start,
-            content_end,
-            end,
-            content: &text[start..content_end],
-        });
+        out.push(Line { start, content_end, end, content: &text[start..content_end] });
         start = end;
     }
     out
@@ -79,11 +70,7 @@ impl EolReport {
 /// Counts line endings and detects a byte order mark.
 pub fn eol_report(text: &str) -> EolReport {
     let crlf = text.matches("\r\n").count();
-    EolReport {
-        crlf,
-        lf: text.matches('\n').count() - crlf,
-        has_bom: text.starts_with(BOM),
-    }
+    EolReport { crlf, lf: text.matches('\n').count() - crlf, has_bom: text.starts_with(BOM) }
 }
 
 /// Converts a 0-based line index into the 1-based number shown to people.

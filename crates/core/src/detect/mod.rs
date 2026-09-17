@@ -79,10 +79,7 @@ pub enum DetectError {
     InvalidSvnUrl { url: String },
     /// Listing the package root failed.
     #[error("could not read {path}: {source}")]
-    Io {
-        path: String,
-        source: std::io::Error,
-    },
+    Io { path: String, source: std::io::Error },
     /// A file could not be read.
     #[error(transparent)]
     Edit(#[from] EditError),
@@ -127,17 +124,12 @@ impl Coded for DetectError {
 
 /// Every PHP file in the package root (not subfolders) with a `Plugin Name:` header, sorted.
 pub fn main_file_candidates(root: &Path) -> Result<Vec<String>, DetectError> {
-    let io = |source| DetectError::Io {
-        path: root.display().to_string(),
-        source,
-    };
+    let io = |source| DetectError::Io { path: root.display().to_string(), source };
     let mut candidates = Vec::new();
     for entry in std::fs::read_dir(root).map_err(io)? {
         let entry = entry.map_err(io)?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        let is_php = Path::new(&name)
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("php"));
+        let is_php = Path::new(&name).extension().is_some_and(|e| e.eq_ignore_ascii_case("php"));
         if !is_php || !entry.path().is_file() {
             continue;
         }
@@ -159,9 +151,7 @@ fn resolve_main_file(root: &Path, chosen: Option<&str>) -> Result<String, Detect
         return if ok {
             Ok(path.to_owned())
         } else {
-            Err(DetectError::NotAMainFile {
-                path: path.to_owned(),
-            })
+            Err(DetectError::NotAMainFile { path: path.to_owned() })
         };
     }
     let mut candidates = main_file_candidates(root)?;
@@ -175,13 +165,10 @@ fn resolve_main_file(root: &Path, chosen: Option<&str>) -> Result<String, Detect
 /// Runs Step 1 against the package root.
 pub fn detect(root: &Path, options: DetectOptions<'_>) -> Result<PluginFacts, DetectError> {
     if !root.is_dir() {
-        return Err(DetectError::NotAFolder {
-            path: root.display().to_string(),
-        });
+        return Err(DetectError::NotAFolder { path: root.display().to_string() });
     }
-    let slug = slug_from_svn_url(options.svn_url).ok_or_else(|| DetectError::InvalidSvnUrl {
-        url: options.svn_url.to_owned(),
-    })?;
+    let slug = slug_from_svn_url(options.svn_url)
+        .ok_or_else(|| DetectError::InvalidSvnUrl { url: options.svn_url.to_owned() })?;
     let main_file = resolve_main_file(root, options.main_file)?;
     let header = header::parse(&edit::read_text(root, &main_file)?);
 
@@ -199,9 +186,7 @@ pub fn detect(root: &Path, options: DetectOptions<'_>) -> Result<PluginFacts, De
         .or_else(|| readme.as_ref().and_then(|r| r.name.clone()))
         .unwrap_or_else(|| slug.clone());
 
-    let folder_matches_slug = root
-        .file_name()
-        .is_some_and(|n| n.to_string_lossy() == slug);
+    let folder_matches_slug = root.file_name().is_some_and(|n| n.to_string_lossy() == slug);
 
     Ok(PluginFacts {
         name,

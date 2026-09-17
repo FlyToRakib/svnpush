@@ -85,16 +85,12 @@ pub struct Readme {
 impl Readme {
     /// The value of header `name`, matched case-insensitively.
     pub fn header(&self, name: &str) -> Option<&ReadmeHeader> {
-        self.headers
-            .iter()
-            .find(|h| h.name.eq_ignore_ascii_case(name))
+        self.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name))
     }
 
     /// Whether a section titled `title` exists (case-insensitive).
     pub fn has_section(&self, title: &str) -> bool {
-        self.sections
-            .iter()
-            .any(|s| s.title.eq_ignore_ascii_case(title))
+        self.sections.iter().any(|s| s.title.eq_ignore_ascii_case(title))
     }
 }
 

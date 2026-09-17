@@ -1,4 +1,5 @@
 //! Every fixture plugin parses; detection reports what each one is built to show.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 
@@ -7,27 +8,18 @@ use svnpush_core::detect::{self, DetectError, DetectOptions};
 use svnpush_core::version::{VersionLocation, VersionSourceKind};
 
 fn fixture(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/plugins")
-        .join(name)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/plugins").join(name)
 }
 
 fn options(slug: &str) -> (String, Vec<VersionLocation>) {
-    (
-        format!("https://plugins.svn.wordpress.org/{slug}"),
-        Vec::new(),
-    )
+    (format!("https://plugins.svn.wordpress.org/{slug}"), Vec::new())
 }
 
 fn detect_fixture(name: &str) -> Result<detect::PluginFacts, DetectError> {
     let (url, locations) = options(name);
     detect::detect(
         &fixture(name),
-        DetectOptions {
-            svn_url: &url,
-            main_file: None,
-            version_locations: &locations,
-        },
+        DetectOptions { svn_url: &url, main_file: None, version_locations: &locations },
     )
 }
 
@@ -55,19 +47,12 @@ fn composer_based_with_a_custom_version_constant() {
     }];
     let facts = detect::detect(
         &fixture("composer-based"),
-        DetectOptions {
-            svn_url: url,
-            main_file: None,
-            version_locations: &locations,
-        },
+        DetectOptions { svn_url: url, main_file: None, version_locations: &locations },
     )
     .unwrap();
     assert!(facts.has_distignore);
-    let custom: Vec<_> = facts
-        .versions
-        .iter()
-        .filter(|v| v.kind == VersionSourceKind::Custom)
-        .collect();
+    let custom: Vec<_> =
+        facts.versions.iter().filter(|v| v.kind == VersionSourceKind::Custom).collect();
     assert_eq!(custom.len(), 1);
     assert_eq!(custom[0].value, "1.4.2");
 }
@@ -97,10 +82,7 @@ fn two_main_files_needs_a_choice() {
         }
         other => panic!("unexpected {other}"),
     }
-    assert_eq!(
-        err.fix().as_deref(),
-        Some("Choose the main file in project settings.")
-    );
+    assert_eq!(err.fix().as_deref(), Some("Choose the main file in project settings."));
 
     let (url, locations) = options("two-main-files");
     let facts = detect::detect(
@@ -133,11 +115,7 @@ fn a_chosen_file_without_a_header_is_rejected() {
 #[test]
 fn stable_tag_trunk() {
     let facts = detect_fixture("stable-tag-trunk").unwrap();
-    let stable = facts
-        .versions
-        .iter()
-        .find(|v| v.kind == VersionSourceKind::StableTag)
-        .unwrap();
+    let stable = facts.versions.iter().find(|v| v.kind == VersionSourceKind::StableTag).unwrap();
     assert_eq!(stable.value, "trunk");
 }
 
@@ -154,11 +132,7 @@ fn real_world_authdock() {
     let url = "https://plugins.svn.wordpress.org/authdock";
     let facts = detect::detect(
         &fixture("real-world"),
-        DetectOptions {
-            svn_url: url,
-            main_file: None,
-            version_locations: &[],
-        },
+        DetectOptions { svn_url: url, main_file: None, version_locations: &[] },
     )
     .unwrap();
     assert_eq!(facts.slug, "authdock");
@@ -185,11 +159,7 @@ fn real_world_authdock() {
 fn invalid_svn_url_is_reported() {
     let err = detect::detect(
         &fixture("minimal"),
-        DetectOptions {
-            svn_url: "https://example.com/",
-            main_file: None,
-            version_locations: &[],
-        },
+        DetectOptions { svn_url: "https://example.com/", main_file: None, version_locations: &[] },
     )
     .unwrap_err();
     assert_eq!(err.code(), "DETECT_INVALID_SVN_URL");

@@ -25,9 +25,7 @@ pub struct Version {
 impl Version {
     /// Parses a version in the format check V02 accepts.
     pub fn parse(raw: &str) -> Result<Self, VersionError> {
-        let invalid = || VersionError::Invalid {
-            value: raw.to_owned(),
-        };
+        let invalid = || VersionError::Invalid { value: raw.to_owned() };
         let (core, pre) = match raw.split_once('-') {
             Some((core, pre)) => (core, Some(pre)),
             None => (raw, None),
@@ -85,15 +83,9 @@ impl Version {
         let (patch, raw) = if self.is_prerelease() {
             (v.patch, format!("{}.{}.{}", v.major, v.minor, v.patch))
         } else {
-            (
-                v.patch + 1,
-                format!("{}.{}.{}", v.major, v.minor, v.patch + 1),
-            )
+            (v.patch + 1, format!("{}.{}.{}", v.major, v.minor, v.patch + 1))
         };
-        Self {
-            raw,
-            semver: semver::Version::new(v.major, v.minor, patch),
-        }
+        Self { raw, semver: semver::Version::new(v.major, v.minor, patch) }
     }
 }
 
@@ -125,35 +117,24 @@ impl fmt::Display for Version {
 
 /// The newest valid version in `candidates`, for example tag folder names.
 pub fn newest<'a>(candidates: impl IntoIterator<Item = &'a str>) -> Option<Version> {
-    candidates
-        .into_iter()
-        .filter_map(|c| Version::parse(c.trim_end_matches('/')).ok())
-        .max()
+    candidates.into_iter().filter_map(|c| Version::parse(c.trim_end_matches('/')).ok()).max()
 }
 
 /// The version a changelog title starts with, such as `1.2.3` in `v1.2.3 - 2026-09-01`.
 pub fn extract_leading(title: &str) -> Option<String> {
-    let rest = title
-        .trim()
-        .strip_prefix(['v', 'V'])
-        .unwrap_or_else(|| title.trim());
-    let core_len = rest
-        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
-        .unwrap_or(rest.len());
+    let rest = title.trim().strip_prefix(['v', 'V']).unwrap_or_else(|| title.trim());
+    let core_len = rest.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(rest.len());
     let mut end = core_len;
     if rest[core_len..].starts_with('-') {
         let suffix = &rest[core_len + 1..];
-        let suffix_len = suffix
-            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
-            .unwrap_or(suffix.len());
+        let suffix_len =
+            suffix.find(|c: char| !(c.is_ascii_alphanumeric() || c == '.')).unwrap_or(suffix.len());
         if suffix_len > 0 {
             end = core_len + 1 + suffix_len;
         }
     }
     let candidate = rest[..end].trim_end_matches('.');
-    Version::parse(candidate)
-        .ok()
-        .map(|v| v.as_str().to_owned())
+    Version::parse(candidate).ok().map(|v| v.as_str().to_owned())
 }
 
 /// A version problem.
@@ -214,17 +195,7 @@ mod tests {
         for ok in ["1.0", "1.2.3", "10.20.30", "1.2.0-beta1", "2.0-rc.1"] {
             assert!(Version::parse(ok).is_ok(), "{ok}");
         }
-        for bad in [
-            "1",
-            "1.2.3.4",
-            "v1.2",
-            "1.a",
-            "1.2.",
-            "",
-            "1.2-",
-            "1.2-be_ta",
-            "trunk",
-        ] {
+        for bad in ["1", "1.2.3.4", "v1.2", "1.a", "1.2.", "", "1.2-", "1.2-be_ta", "trunk"] {
             assert!(Version::parse(bad).is_err(), "{bad}");
         }
     }
@@ -256,10 +227,7 @@ mod tests {
     fn extracts_versions_from_titles() {
         assert_eq!(extract_leading("1.2.3").as_deref(), Some("1.2.3"));
         assert_eq!(extract_leading("v2.0 - 2026-01-01").as_deref(), Some("2.0"));
-        assert_eq!(
-            extract_leading("1.3.0-beta1 (preview)").as_deref(),
-            Some("1.3.0-beta1")
-        );
+        assert_eq!(extract_leading("1.3.0-beta1 (preview)").as_deref(), Some("1.3.0-beta1"));
         assert_eq!(extract_leading("Version 1.0"), None);
         assert_eq!(extract_leading("1.0."), Some("1.0".to_owned()));
     }

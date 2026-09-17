@@ -56,10 +56,7 @@ pub struct VersionLocation {
 
 /// Compiles a location's pattern, requiring exactly one capture group.
 pub fn validate_location(location: &VersionLocation) -> Result<Regex, VersionError> {
-    let bad = |reason: String| VersionError::BadPattern {
-        path: location.path.clone(),
-        reason,
-    };
+    let bad = |reason: String| VersionError::BadPattern { path: location.path.clone(), reason };
     let regex = Regex::new(&location.pattern).map_err(|e| bad(e.to_string()))?;
     let groups = regex.captures_len() - 1;
     if groups != 1 {
@@ -114,10 +111,7 @@ pub fn read_sources(
     for location in locations {
         let regex = validate_location(location)?;
         let content = edit::read_text(root, &location.path)?;
-        let matches: Vec<_> = regex
-            .captures_iter(&content)
-            .filter_map(|c| c.get(1))
-            .collect();
+        let matches: Vec<_> = regex.captures_iter(&content).filter_map(|c| c.get(1)).collect();
         if matches.is_empty() {
             sources.push(VersionSource {
                 label: location.path.clone(),
@@ -157,9 +151,8 @@ pub fn write_version(
     version: &str,
 ) -> Result<(), VersionError> {
     edits.modify(main_file, |text| {
-        header::set(text, "Version", version).ok_or_else(|| VersionError::NotFound {
-            path: main_file.to_owned(),
-        })
+        header::set(text, "Version", version)
+            .ok_or_else(|| VersionError::NotFound { path: main_file.to_owned() })
     })?;
 
     for location in locations {
@@ -177,9 +170,7 @@ pub fn write_version(
                 }
             }
             if !replaced {
-                return Err(VersionError::NotFound {
-                    path: location.path.clone(),
-                });
+                return Err(VersionError::NotFound { path: location.path.clone() });
             }
             out.push_str(&text[last..]);
             Ok(out)
@@ -225,10 +216,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         plugin(dir.path());
         let sources = read_sources(dir.path(), "p.php", &locations()).unwrap();
-        let values: Vec<(&str, VersionSourceKind, Option<u32>)> = sources
-            .iter()
-            .map(|s| (s.value.as_str(), s.kind, s.line))
-            .collect();
+        let values: Vec<(&str, VersionSourceKind, Option<u32>)> =
+            sources.iter().map(|s| (s.value.as_str(), s.kind, s.line)).collect();
         assert_eq!(
             values,
             [
@@ -256,18 +245,9 @@ mod tests {
 
     #[test]
     fn rejects_patterns_without_exactly_one_group() {
-        let loc = VersionLocation {
-            path: "x".into(),
-            pattern: "(a)(b)".into(),
-        };
-        assert_eq!(
-            validate_location(&loc).unwrap_err().code(),
-            "VERSION_BAD_PATTERN"
-        );
-        let loc = VersionLocation {
-            path: "x".into(),
-            pattern: "([".into(),
-        };
+        let loc = VersionLocation { path: "x".into(), pattern: "(a)(b)".into() };
+        assert_eq!(validate_location(&loc).unwrap_err().code(), "VERSION_BAD_PATTERN");
+        let loc = VersionLocation { path: "x".into(), pattern: "([".into() };
         assert!(validate_location(&loc).is_err());
     }
 

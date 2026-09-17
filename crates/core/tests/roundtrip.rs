@@ -1,5 +1,6 @@
 //! Property tests: version write-then-read round trips, and readme edits
 //! that keep every byte outside the edited region.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use proptest::prelude::*;
 use svnpush_core::detect::header;
@@ -32,15 +33,7 @@ fn eol_strategy() -> impl Strategy<Value = &'static str> {
 
 fn plugin_file(version: &str, eol: &str) -> String {
     let version_line = format!(" * Version:     {version}");
-    [
-        "<?php",
-        "/**",
-        " * Plugin Name: Prop",
-        &version_line,
-        " */",
-        "",
-    ]
-    .join(eol)
+    ["<?php", "/**", " * Plugin Name: Prop", &version_line, " */", ""].join(eol)
 }
 
 fn readme_file(version: &str, eol: &str, intro: &str) -> String {

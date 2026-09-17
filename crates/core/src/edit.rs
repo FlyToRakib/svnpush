@@ -30,19 +30,13 @@ pub struct FileEdit {
 pub enum EditError {
     /// The file could not be read.
     #[error("could not read {path}: {source}")]
-    Read {
-        path: String,
-        source: std::io::Error,
-    },
+    Read { path: String, source: std::io::Error },
     /// The file is not valid UTF-8, so it cannot be edited as text.
     #[error("{path} is not valid UTF-8 text")]
     NotUtf8 { path: String },
     /// The file could not be written.
     #[error("could not write {path}: {source}")]
-    Write {
-        path: String,
-        source: std::io::Error,
-    },
+    Write { path: String, source: std::io::Error },
 }
 
 impl Coded for EditError {
@@ -72,10 +66,7 @@ pub struct EditSet {
 impl EditSet {
     /// An empty set of edits under `root`.
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self {
-            root: root.into(),
-            files: BTreeMap::new(),
-        }
+        Self { root: root.into(), files: BTreeMap::new() }
     }
 
     /// The package root the relative paths resolve against.
@@ -89,11 +80,7 @@ impl EditSet {
             let content = read_text(&self.root, rel)?;
             self.files.insert(
                 rel.to_owned(),
-                FileEdit {
-                    path: rel.to_owned(),
-                    before: content.clone(),
-                    after: content,
-                },
+                FileEdit { path: rel.to_owned(), before: content.clone(), after: content },
             );
         }
         Ok(self.files.get(rel).map_or("", |f| f.after.as_str()))
@@ -117,11 +104,7 @@ impl EditSet {
 
     /// Every file whose content actually changes, sorted by path.
     pub fn changed(&self) -> Vec<FileEdit> {
-        self.files
-            .values()
-            .filter(|f| f.before != f.after)
-            .cloned()
-            .collect()
+        self.files.values().filter(|f| f.before != f.after).cloned().collect()
     }
 
     /// Writes every changed file to disk.
@@ -129,10 +112,8 @@ impl EditSet {
         let changed = self.changed();
         for file in &changed {
             let path = self.root.join(&file.path);
-            std::fs::write(&path, file.after.as_bytes()).map_err(|source| EditError::Write {
-                path: file.path.clone(),
-                source,
-            })?;
+            std::fs::write(&path, file.after.as_bytes())
+                .map_err(|source| EditError::Write { path: file.path.clone(), source })?;
         }
         Ok(changed)
     }
@@ -140,13 +121,9 @@ impl EditSet {
 
 /// Reads `rel` under `root` as UTF-8 text.
 pub fn read_text(root: &Path, rel: &str) -> Result<String, EditError> {
-    let bytes = std::fs::read(root.join(rel)).map_err(|source| EditError::Read {
-        path: rel.to_owned(),
-        source,
-    })?;
-    String::from_utf8(bytes).map_err(|_| EditError::NotUtf8 {
-        path: rel.to_owned(),
-    })
+    let bytes = std::fs::read(root.join(rel))
+        .map_err(|source| EditError::Read { path: rel.to_owned(), source })?;
+    String::from_utf8(bytes).map_err(|_| EditError::NotUtf8 { path: rel.to_owned() })
 }
 
 #[cfg(test)]
@@ -158,19 +135,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "one two").unwrap();
         let mut set = EditSet::new(dir.path());
-        set.modify::<EditError>("a.txt", |t| Ok(t.replace("one", "1")))
-            .unwrap();
-        set.modify::<EditError>("a.txt", |t| Ok(t.replace("two", "2")))
-            .unwrap();
+        set.modify::<EditError>("a.txt", |t| Ok(t.replace("one", "1"))).unwrap();
+        set.modify::<EditError>("a.txt", |t| Ok(t.replace("two", "2"))).unwrap();
         let changed = set.changed();
         assert_eq!(changed.len(), 1);
         assert_eq!(changed[0].before, "one two");
         assert_eq!(changed[0].after, "1 2");
         set.write().unwrap();
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
-            "1 2"
-        );
+        assert_eq!(std::fs::read_to_string(dir.path().join("a.txt")).unwrap(), "1 2");
     }
 
     #[test]
@@ -178,8 +150,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "same").unwrap();
         let mut set = EditSet::new(dir.path());
-        set.modify::<EditError>("a.txt", |t| Ok(t.to_owned()))
-            .unwrap();
+        set.modify::<EditError>("a.txt", |t| Ok(t.to_owned())).unwrap();
         assert!(set.changed().is_empty());
     }
 

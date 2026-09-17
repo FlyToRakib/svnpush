@@ -16,9 +16,7 @@ pub fn set_header(content: &str, name: &str, value: &str) -> Result<String, Read
         .iter()
         .find(|h| h.name.eq_ignore_ascii_case(name))
         .map(|h| h.value.clone())
-        .ok_or_else(|| ReadmeError::HeaderMissing {
-            name: name.to_owned(),
-        })?;
+        .ok_or_else(|| ReadmeError::HeaderMissing { name: name.to_owned() })?;
     let mut out = String::with_capacity(content.len() + value.len());
     out.push_str(&content[..span.start]);
     if span.is_empty() && !content[..span.start].ends_with(' ') {
@@ -46,13 +44,7 @@ pub fn upsert_upgrade_notice(content: &str, version: &str, notice: &str) -> Stri
     if notice.trim().is_empty() {
         return content.to_owned();
     }
-    upsert_entry(
-        content,
-        "Upgrade Notice",
-        version,
-        notice,
-        Some("Changelog"),
-    )
+    upsert_entry(content, "Upgrade Notice", version, notice, Some("Changelog"))
 }
 
 fn upsert_entry(
@@ -81,10 +73,7 @@ fn upsert_entry(
 
     let entries = layout.entries(section);
 
-    if let Some(existing) = entries
-        .iter()
-        .find(|e| e.version.as_deref() == Some(version))
-    {
+    if let Some(existing) = entries.iter().find(|e| e.version.as_deref() == Some(version)) {
         let title = &layout.lines[existing.title_line];
         let body_start = existing.title_line + 1;
         let body_end = layout.content_end(body_start..existing.end_line);
@@ -166,10 +155,7 @@ Old notice.
     #[test]
     fn sets_a_header_value() {
         let out = set_header(SAMPLE, "stable tag", "1.2.0").unwrap();
-        assert_eq!(
-            out,
-            SAMPLE.replace("Stable tag: 1.1.0", "Stable tag: 1.2.0")
-        );
+        assert_eq!(out, SAMPLE.replace("Stable tag: 1.1.0", "Stable tag: 1.2.0"));
     }
 
     #[test]
@@ -181,10 +167,8 @@ Old notice.
     #[test]
     fn inserts_new_entry_before_the_first_and_after_the_intro() {
         let out = upsert_changelog_entry(SAMPLE, "1.2.0", "* New.\n");
-        let expected = SAMPLE.replace(
-            "= 1.1.0 =\n* Old.",
-            "= 1.2.0 =\n* New.\n\n= 1.1.0 =\n* Old.",
-        );
+        let expected =
+            SAMPLE.replace("= 1.1.0 =\n* Old.", "= 1.2.0 =\n* New.\n\n= 1.1.0 =\n* Old.");
         assert_eq!(out, expected);
         let readme = parse(&out);
         assert_eq!(readme.changelog[0].version.as_deref(), Some("1.2.0"));
@@ -209,20 +193,14 @@ Old notice.
     fn creates_a_missing_changelog_at_the_end() {
         let text = "=== P ===\nStable tag: 1.0\n\nShort.\n";
         let out = upsert_changelog_entry(text, "1.0", "* First.");
-        assert_eq!(
-            out,
-            format!("{text}\n== Changelog ==\n\n= 1.0 =\n* First.\n")
-        );
+        assert_eq!(out, format!("{text}\n== Changelog ==\n\n= 1.0 =\n* First.\n"));
     }
 
     #[test]
     fn fills_an_empty_changelog_section() {
         let text = "=== P ===\n\n== Changelog ==\n\n== FAQ ==\nQ\n";
         let out = upsert_changelog_entry(text, "1.0", "* First.");
-        assert_eq!(
-            out,
-            "=== P ===\n\n== Changelog ==\n\n= 1.0 =\n* First.\n\n== FAQ ==\nQ\n"
-        );
+        assert_eq!(out, "=== P ===\n\n== Changelog ==\n\n= 1.0 =\n* First.\n\n== FAQ ==\nQ\n");
         assert_eq!(parse(&out).changelog[0].body, "* First.");
     }
 
