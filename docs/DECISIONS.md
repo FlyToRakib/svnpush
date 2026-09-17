@@ -100,3 +100,4 @@ each, dated.
 - 2026-09-17 — README screenshots were taken from the running app with a demo plugin and a local `file://` repository under the git-ignored `target/demo/`, so no personal paths appear. The AI draft in them came from the local OpenAI-compatible stub used for M6 verification, configured as a "Local model" record.
 - 2026-09-17 — The `svn-integration` CI workflow now runs the engine suite (`run_integration`) as well as the SVN suite; it had been running only the latter.
 - 2026-09-17 — M7's "two external developers release a plugin with no help beyond the README" and the three-platform installer builds need people and CI runners this build does not have; they are listed in docs/BUILD-REPORT.md for the owner.
+- 2026-09-17 — The git change set and diff use `git diff --relative`, so a plugin folder inside a larger repository gets paths relative to the plugin (as untracked files already were); found while writing the build report.

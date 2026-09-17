@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Plugins that live in a subfolder of a larger git repository now list their changes correctly.
 - Update assets: sync and commit only your banners, icons and screenshots, with the same preview and confirmation and no version change.
 - The AI data notice now appears inline in the step instead of a dialog, and takes keyboard focus.
 - Input borders are easier to see, and screen readers announce each change of release phase.

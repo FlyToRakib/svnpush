@@ -166,8 +166,10 @@ pub async fn from_git(
     filter: &Filter,
 ) -> Result<Material, ProcessError> {
     let base = changes.base.clone().unwrap_or_default();
-    let output =
-        git.output(&["diff", "-M", "--no-color", &base, "--", "."]).await?.unwrap_or_default();
+    let output = git
+        .output(&["diff", "--relative", "-M", "--no-color", &base, "--", "."])
+        .await?
+        .unwrap_or_default();
     let mut diffs = split_git_diff(&output);
     for file in changes.files.iter().filter(|f| f.kind == ChangeKind::Added) {
         if !diffs.contains_key(&file.path)

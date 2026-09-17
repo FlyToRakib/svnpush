@@ -97,7 +97,10 @@ pub fn parse_name_status(output: &str) -> Vec<ChangedFile> {
 /// The change set from git, or `None` when there is no tag to compare with.
 pub async fn from_git(git: &Git<'_>, facts: &GitFacts) -> Result<Option<ChangeSet>, ProcessError> {
     let Some(tag) = &facts.last_tag else { return Ok(None) };
-    let Some(output) = git.output(&["diff", "--name-status", "-M", tag, "--", "."]).await? else {
+    // `--relative` keeps paths relative to the plugin folder when it sits inside a larger repository.
+    let Some(output) =
+        git.output(&["diff", "--relative", "--name-status", "-M", tag, "--", "."]).await?
+    else {
         return Ok(None);
     };
     let mut files = parse_name_status(&output);
@@ -201,6 +204,46 @@ mod tests {
                 ("gone.php", ChangeKind::Deleted)
             ]
         );
+    }
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.email=test@example.org", "-c", "user.name=Test"])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        assert!(status.status.success(), "git {args:?}");
+    }
+
+    #[tokio::test]
+    async fn a_plugin_inside_a_larger_repository_gets_folder_relative_paths() {
+        let repo = tempfile::tempdir().unwrap();
+        let plugin = repo.path().join("plugins/demo");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(plugin.join("demo.php"), "<?php\n").unwrap();
+        git(repo.path(), &["init", "-q"]);
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-q", "-m", "First"]);
+        git(repo.path(), &["tag", "v1.0.0"]);
+        std::fs::write(plugin.join("demo.php"), "<?php\n// changed\n").unwrap();
+        std::fs::write(plugin.join("new.php"), "<?php\n").unwrap();
+
+        let bin =
+            crate::tools::discover_git(None).await.path.map(std::path::PathBuf::from).unwrap();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let runner = Git::new(&bin, &plugin, &crate::report::NullReporter, &cancel);
+        let facts = runner.facts().await.unwrap().unwrap();
+        let set = from_git(&runner, &facts).await.unwrap().unwrap();
+        let paths: Vec<(&str, ChangeKind)> =
+            set.files.iter().map(|f| (f.path.as_str(), f.kind)).collect();
+        assert_eq!(paths, [("demo.php", ChangeKind::Modified), ("new.php", ChangeKind::Added)]);
+
+        let filter = crate::run::material::Filter::new(&[]);
+        let material =
+            crate::run::material::from_git(&runner, &plugin, &set, &filter).await.unwrap();
+        let diffed: Vec<&str> = material.diffs.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(diffed, ["demo.php", "new.php"]);
     }
 
     #[test]
