@@ -68,10 +68,12 @@ export function SvnPreviewView({ preview }: SvnPreviewViewProps) {
     <div className="stack">
       {area("trunk", S.preview.trunk, preview.trunk)}
       {area("assets", S.preview.assets, preview.assets)}
-      <dl className="facts">
-        <dt>{S.preview.tagUrl}</dt>
-        <dd className="mono break">{preview.tag_url}</dd>
-      </dl>
+      {preview.tag_url && (
+        <dl className="facts">
+          <dt>{S.preview.tagUrl}</dt>
+          <dd className="mono break">{preview.tag_url}</dd>
+        </dl>
+      )}
     </div>
   );
 }

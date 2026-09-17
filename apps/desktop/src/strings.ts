@@ -75,6 +75,10 @@ export const S = {
     release: "Release",
     dryRun: "Dry run",
     dryRunHint: "Stops after the SVN preview. Nothing is committed and your files are restored.",
+    assets: "Update assets",
+    assetsHint:
+      "Sync and commit only your assets folder: banners, icons and screenshots. No version change and no tag.",
+    assetsPublished: "Assets published",
     cancel: "Cancel",
     running: "Release in progress",
     svnUrl: "SVN URL",
@@ -165,7 +169,6 @@ export const S = {
       "Optional. Shown on the WordPress.org plugin page and in the updates screen.",
     approve: "Approve",
     approved: (version: string) => `Version ${version} approved.`,
-    manual: "Written by hand",
     reason: (reason: string) => `Why this version: ${reason}`,
     summary: "Release summary",
     summaryHint:
@@ -193,8 +196,6 @@ export const S = {
     fellBack: (from: string) =>
       `${from} failed, so the next provider in your fallback order answered.`,
     manual: "You are writing this by hand.",
-    stopped: "The AI was stopped.",
-    consentWaiting: "Waiting for you to accept the data notice.",
     stop: "Stop and write it myself",
     stopExplaining: "Stop",
     writeMyself: "Write it myself",
@@ -277,6 +278,10 @@ export const S = {
     verified: "The tag is on the server and its readme names this version.",
     unverified: (reason: string) => `The tag could not be verified yet: ${reason}`,
     openPage: "Open plugin page",
+    assetsMessage: "Assets commit message",
+    assetsTitle: "Publish these assets",
+    assetsBody: "This commits assets/ on WordPress.org. Trunk and tags are not touched.",
+    assetsRevision: "Assets revision",
   },
   log: {
     title: "Log",
@@ -287,6 +292,7 @@ export const S = {
   },
   history: {
     title: "Past releases",
+    assets: "Assets",
     empty: "No releases yet.",
     date: "Started",
     version: "Version",

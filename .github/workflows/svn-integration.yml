@@ -29,4 +29,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Release protocol against file:// repositories
-        run: cargo test -p svnpush-core --features svn-integration --test svn_integration
+        run: cargo test -p svnpush-core --features svn-integration --test svn_integration --test run_integration

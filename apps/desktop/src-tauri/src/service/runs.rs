@@ -34,6 +34,7 @@ async fn inputs(app: &AppState, path: &str, dry_run: bool) -> Result<RunInputs, 
         accounts,
         current_wordpress,
         ai: app.ai.clone(),
+        assets_only: false,
     })
 }
 
@@ -53,12 +54,13 @@ fn observer(app: &Arc<AppState>, sink: &Arc<dyn EventSink>, path: &str) -> Arc<P
     })
 }
 
-/// Starts a release or dry run and returns its first state.
+/// Starts a release, an assets-only release, or a dry run of either, and returns its first state.
 pub async fn start(
     app: Arc<AppState>,
     sink: Arc<dyn EventSink>,
     path: &str,
     dry_run: bool,
+    assets_only: bool,
 ) -> Result<RunState, ErrorView> {
     if app.runs().get(path).is_some_and(|slot| slot.control.is_some()) {
         return Err(ErrorView::new(
@@ -67,7 +69,8 @@ pub async fn start(
             Some("Finish or cancel it first.".to_owned()),
         ));
     }
-    let inputs = inputs(&app, path, dry_run).await?;
+    let mut inputs = inputs(&app, path, dry_run).await?;
+    inputs.assets_only = assets_only;
     let (decisions, receiver) = mpsc::channel(4);
     let cancel = CancellationToken::new();
     let watcher = observer(&app, &sink, path);
@@ -162,7 +165,8 @@ pub async fn publish(
     trunk_message: String,
     tag_message: String,
 ) -> Result<(), ErrorView> {
-    if trunk_message.trim().is_empty() || tag_message.trim().is_empty() {
+    let assets_only = app.runs().get(path).is_some_and(|s| s.state.assets_only);
+    if trunk_message.trim().is_empty() || (!assets_only && tag_message.trim().is_empty()) {
         return Err(ErrorView::new(
             "PUBLISH_EMPTY_MESSAGE",
             "Commit messages cannot be empty.",
@@ -228,7 +232,7 @@ pub async fn resume(
         return Ok(first);
     }
     discard(&app, &sink, path, id).await?;
-    start(app, sink, path, false).await
+    start(app, sink, path, found.dry_run, found.assets_only).await
 }
 
 /// Discards an unfinished run, restoring files and the working copy.

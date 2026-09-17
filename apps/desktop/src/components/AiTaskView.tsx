@@ -2,7 +2,7 @@ import type { AiTask } from "../ipc/bindings/AiTask";
 import type { Decision } from "../ipc/bindings/Decision";
 import { S } from "../strings";
 import { ErrorNotice } from "./ErrorNotice";
-import { PrivacyModal } from "./PrivacyModal";
+import { PrivacyNoticePanel } from "./PrivacyNoticePanel";
 import { ProviderChange } from "./ProviderChange";
 
 interface AiTaskViewProps {
@@ -64,9 +64,8 @@ export function AiTaskView({
     case "NeedsConsent":
       return (
         <div className="stack">
-          <p className="muted">{S.ai.consentWaiting}</p>
           {task.privacy && !disabled && (
-            <PrivacyModal
+            <PrivacyNoticePanel
               notice={task.privacy}
               onAccept={() => {
                 if (task.privacy) {

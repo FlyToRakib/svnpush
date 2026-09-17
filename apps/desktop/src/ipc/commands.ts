@@ -27,7 +27,8 @@ export const commands = {
     call<ProjectSummary>("update_project", { path, svnUrl, settings }),
   removeProject: (path: string) => call<null>("remove_project", { path }),
   projectHistory: (path: string) => call<RunJournal[]>("project_history", { path }),
-  startRun: (path: string, dryRun: boolean) => call<RunState>("start_run", { path, dryRun }),
+  startRun: (path: string, dryRun: boolean, assetsOnly: boolean) =>
+    call<RunState>("start_run", { path, dryRun, assetsOnly }),
   currentRun: (path: string) => call<RunState | null>("current_run", { path }),
   approveDraft: (path: string, draft: ReleaseDraft) => call<null>("approve_draft", { path, draft }),
   aiDecision: (path: string, decision: Decision) => call<null>("ai_decision", { path, decision }),

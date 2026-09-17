@@ -226,7 +226,10 @@ pub async fn record_outcome(
     path: &str,
     finished: &RunJournal,
 ) -> Result<(), ErrorView> {
-    let Some(outcome) = &finished.outcome else { return Ok(()) };
+    // The Projects list shows version releases; assets-only updates stay in the history.
+    let Some(outcome) = finished.outcome.as_ref().filter(|_| !finished.assets_only) else {
+        return Ok(());
+    };
     let _guard = app.projects_lock.lock().await;
     let mut projects = project::load_projects(&app.paths).map_err(|e| ErrorView::from_coded(&e))?;
     if let Some(project) = projects.iter_mut().find(|p| p.path == path) {

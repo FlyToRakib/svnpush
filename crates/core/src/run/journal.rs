@@ -69,6 +69,10 @@ pub struct Revisions {
     /// The tag copy.
     #[ts(type = "number | null")]
     pub tag: Option<u64>,
+    /// The assets commit of an assets-only release.
+    #[serde(default)]
+    #[ts(type = "number | null")]
+    pub assets: Option<u64>,
 }
 
 /// A run's journal (plan §13 `RunJournal`).
@@ -108,6 +112,9 @@ pub struct RunJournal {
     /// Whether the developer discarded this run after it stopped.
     #[serde(default)]
     pub discarded: bool,
+    /// Whether the run synced and committed only `assets/`.
+    #[serde(default)]
+    pub assets_only: bool,
 }
 
 impl RunJournal {
@@ -130,6 +137,7 @@ impl RunJournal {
             verification: None,
             snapshot: None,
             discarded: false,
+            assets_only: false,
         }
     }
 

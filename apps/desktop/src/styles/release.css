@@ -260,3 +260,8 @@
   border-top: 1px solid var(--color-border-light);
   padding-top: var(--space-3);
 }
+
+.privacy__title {
+  font-size: var(--text-md);
+  margin: 0;
+}

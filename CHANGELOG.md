@@ -4,6 +4,10 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Update assets: sync and commit only your banners, icons and screenshots, with the same preview and confirmation and no version change.
+- The AI data notice now appears inline in the step instead of a dialog, and takes keyboard focus.
+- Input borders are easier to see, and screen readers announce each change of release phase.
+- Side-by-side fields in Settings and Project settings line up.
 - AI drafts in the release flow: the change set goes to your chosen provider, which suggests the version, changelog entry, upgrade notice and summary for you to edit and approve.
 - Change the AI provider for one release from the Draft step; see Revoye's queue position and fleet while you wait, and stop the request at any time.
 - A one-time notice before a provider first receives your project data.

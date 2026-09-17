@@ -2,6 +2,7 @@
 //! lock, cancel and resume (plan §5, §12, §13).
 
 mod ai_view;
+mod assets;
 mod assist;
 pub mod changes;
 mod draft;
@@ -52,6 +53,8 @@ pub struct RunInputs {
     pub project: Project,
     /// Whether to stop after the SVN preview.
     pub dry_run: bool,
+    /// Whether to sync and commit only `assets/` (plan §8.7).
+    pub assets_only: bool,
     /// The Subversion discovery result.
     pub svn: ToolReport,
     /// Git, when found.

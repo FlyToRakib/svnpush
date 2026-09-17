@@ -91,6 +91,7 @@ describe("ReleaseScreen", () => {
       publish: {
         trunk_revision: 12,
         tag_revision: 13,
+        assets_revision: null,
         verification: { state: "Verified" },
         plugin_url: "https://wordpress.org/plugins/demo/",
         open_plugin_page: true,
@@ -115,6 +116,47 @@ describe("ReleaseScreen", () => {
     expect(tauriMock.calls.find((c) => c.command === "start_run")?.args).toEqual({
       path: PROJECT_PATH,
       dryRun: true,
+      assetsOnly: false,
+    });
+  });
+  it("updates assets alone and confirms without a tag", async () => {
+    const user = userEvent.setup();
+    open(runState("DryRunComplete", null));
+    tauriMock.handle("start_run", () => runState("Idle", "Detect", { assets_only: true }));
+    await user.click(screen.getByRole("button", { name: "Update assets" }));
+    expect(tauriMock.calls.find((c) => c.command === "start_run")?.args).toEqual({
+      path: PROJECT_PATH,
+      dryRun: false,
+      assetsOnly: true,
+    });
+  });
+
+  it("asks for one assets commit message and no tag message", async () => {
+    const user = userEvent.setup();
+    open(
+      runState("AwaitingPublish", "Publish", {
+        assets_only: true,
+        preview: {
+          ...PREVIEW,
+          trunk: { added: [], modified: [], deleted: [] },
+          assets: { added: ["banner-772x250.png"], modified: [], deleted: [] },
+          trunk_message: "Update assets",
+          tag_message: "",
+          tag_url: "",
+          diffs: [],
+        },
+      }),
+    );
+    expect(await screen.findByLabelText("Assets commit message")).toBeTruthy();
+    expect(screen.queryByLabelText("Tag commit message")).toBeNull();
+    expect(screen.queryByText("Tag to create")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+    const dialog = screen.getByRole("dialog", { name: "Publish these assets" });
+    await user.click(within(dialog).getByRole("button", { name: "Publish" }));
+    expect(tauriMock.calls.find((c) => c.command === "confirm_publish")?.args).toEqual({
+      path: PROJECT_PATH,
+      trunkMessage: "Update assets",
+      tagMessage: "",
     });
   });
 });

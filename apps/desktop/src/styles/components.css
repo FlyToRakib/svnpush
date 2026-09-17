@@ -23,6 +23,11 @@
   grid-template-columns: 1fr 1fr;
 }
 
+/* Side-by-side fields share a row, so the stacked-field spacing would misalign them. */
+.grid-2 > .field + .field {
+  margin-top: 0;
+}
+
 .muted {
   color: var(--color-text-muted);
 }

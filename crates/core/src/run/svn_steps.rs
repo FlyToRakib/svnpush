@@ -20,8 +20,48 @@ fn delta_counts(delta: &Delta) -> String {
 }
 
 impl Run {
+    /// The username that will commit, when an account is set up.
+    pub(super) fn account_name(&self) -> Option<String> {
+        let host = vault::svn_host(&self.inputs.project.svn_url);
+        vault::resolve_account(
+            &self.inputs.accounts,
+            &host,
+            self.inputs.project.settings.svn_account.as_deref(),
+        )
+        .map(|a| a.username.clone())
+    }
+
+    /// Per-file diffs of the working-copy `areas`, keyed `<area>/<path>`,
+    /// cut short once they reach the budget.
+    pub(super) async fn area_diffs(
+        &self,
+        wc: &Path,
+        areas: &[&str],
+    ) -> Result<Vec<FileDiff>, RunFailure> {
+        let mut diffs = Vec::new();
+        let mut budget = DIFF_BUDGET_BYTES;
+        for area in areas {
+            if !wc.join(area).is_dir() {
+                continue;
+            }
+            for (path, mut diff) in self.svn().diff_files(&wc.join(area)).await? {
+                if diff.len() > budget {
+                    let mut cut = budget;
+                    while !diff.is_char_boundary(cut) {
+                        cut -= 1;
+                    }
+                    diff.truncate(cut);
+                    diff.push_str("\n[diff cut short]\n");
+                }
+                budget = budget.saturating_sub(diff.len());
+                diffs.push(FileDiff { path: format!("{area}/{path}"), diff });
+            }
+        }
+        Ok(diffs)
+    }
+
     /// Replaces rows in the check table by id.
-    fn replace_checks(&mut self, rows: Vec<verify::CheckResult>) {
+    pub(super) fn replace_checks(&mut self, rows: Vec<verify::CheckResult>) {
         for row in rows {
             match self.state.checks.iter_mut().find(|c| c.id == row.id) {
                 Some(existing) => *existing = row,
@@ -151,33 +191,9 @@ impl Run {
             _ => Delta::default(),
         };
 
-        let host = vault::svn_host(&url);
-        let account = vault::resolve_account(
-            &self.inputs.accounts,
-            &host,
-            self.inputs.project.settings.svn_account.as_deref(),
-        )
-        .map(|a| a.username.clone());
+        let account = self.account_name();
         let summary = format!("trunk {} · assets {}", delta_counts(&trunk), delta_counts(&assets));
-        let mut diffs = Vec::new();
-        let mut budget = DIFF_BUDGET_BYTES;
-        for area in ["trunk", "assets"] {
-            if !wc.join(area).is_dir() {
-                continue;
-            }
-            for (path, mut diff) in self.svn().diff_files(&wc.join(area)).await? {
-                if diff.len() > budget {
-                    let mut cut = budget;
-                    while !diff.is_char_boundary(cut) {
-                        cut -= 1;
-                    }
-                    diff.truncate(cut);
-                    diff.push_str("\n[diff cut short]\n");
-                }
-                budget = budget.saturating_sub(diff.len());
-                diffs.push(FileDiff { path: format!("{area}/{path}"), diff });
-            }
-        }
+        let diffs = self.area_diffs(&wc, &["trunk", "assets"]).await?;
         self.state.preview = Some(SvnPreview {
             trunk,
             assets,

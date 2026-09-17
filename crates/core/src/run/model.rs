@@ -262,6 +262,9 @@ pub struct PublishResult {
     /// Tag commit revision.
     #[ts(type = "number | null")]
     pub tag_revision: Option<u64>,
+    /// Assets commit revision, for an assets-only release.
+    #[ts(type = "number | null")]
+    pub assets_revision: Option<u64>,
     /// Tag verification outcome.
     pub verification: Option<TagVerification>,
     /// The public plugin page.
@@ -320,6 +323,8 @@ pub struct RunState {
     pub project_path: String,
     /// Whether this is a dry run.
     pub dry_run: bool,
+    /// Whether this run syncs and commits only `assets/` (plan §8.7).
+    pub assets_only: bool,
     /// Where the run is.
     pub phase: Phase,
     /// The seven step cards.
@@ -363,6 +368,7 @@ impl RunState {
             id,
             project_path,
             dry_run,
+            assets_only: false,
             phase: Phase::Idle,
             steps: Step::ALL
                 .iter()

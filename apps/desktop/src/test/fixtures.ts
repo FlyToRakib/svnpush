@@ -53,6 +53,7 @@ export function runState(
     id: "20260917-101530",
     project_path: PROJECT_PATH,
     dry_run: false,
+    assets_only: false,
     phase,
     steps: STEPS.map((step, i) => {
       let status: StepStatus = "Pending";

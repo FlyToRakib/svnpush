@@ -43,8 +43,10 @@ impl Run {
         let slug = inputs.project.slug.clone();
         let lock = ProjectLock::acquire(&inputs.paths.runs(&slug))?;
         let id = clock::file_stamp(clock::now());
-        let state = RunState::new(id.clone(), inputs.project.path.clone(), inputs.dry_run);
-        let journal = RunJournal::start(&id, &slug, &inputs.project.path, inputs.dry_run);
+        let mut state = RunState::new(id.clone(), inputs.project.path.clone(), inputs.dry_run);
+        state.assets_only = inputs.assets_only;
+        let mut journal = RunJournal::start(&id, &slug, &inputs.project.path, inputs.dry_run);
+        journal.assets_only = inputs.assets_only;
         Ok(Self {
             inputs,
             observer,
@@ -80,6 +82,9 @@ impl Run {
     }
 
     async fn all_steps(&mut self) -> Result<(), RunFailure> {
+        if self.inputs.assets_only {
+            return self.assets_steps().await;
+        }
         self.detect().await?;
         self.draft().await?;
         self.write()?;
@@ -206,7 +211,7 @@ impl Run {
         self.state.error = (!failure.cancelled).then_some(failure.error);
     }
 
-    async fn finish_dry_run(&mut self) -> Result<(), RunFailure> {
+    pub(super) async fn finish_dry_run(&mut self) -> Result<(), RunFailure> {
         self.roll_back(false).await;
         self.snapshot = None;
         self.state.set_step(

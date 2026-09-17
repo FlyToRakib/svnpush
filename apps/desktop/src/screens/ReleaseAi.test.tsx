@@ -88,7 +88,7 @@ describe("Release AI", () => {
   it("asks once before sending project data, with the Revoye note", async () => {
     const user = userEvent.setup();
     open(drafting({ status: "NeedsConsent", privacy: { provider: REVOYE, revoye: true } }));
-    const dialog = await screen.findByRole("dialog", { name: "Before the AI sees your plugin" });
+    const dialog = await screen.findByRole("region", { name: "Before the AI sees your plugin" });
     expect(within(dialog).getByText(/send project data to Revoye/)).toBeTruthy();
     expect(within(dialog).getByText(/through Revoye Desk on your own machine/)).toBeTruthy();
     await user.click(within(dialog).getByRole("button", { name: "Send and continue" }));

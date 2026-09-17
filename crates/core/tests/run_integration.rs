@@ -1,5 +1,6 @@
 //! The run engine end to end against a local `file://` repository: dry run,
-//! publish, cancel, a failing gate, and resume after a trunk commit.
+//! publish, cancel, a failing gate, resume after a trunk commit, an AI draft
+//! with an applied readme fix, and an assets-only release.
 //!
 //! Run with `cargo test -p svnpush-core --features svn-integration`.
 #![cfg(feature = "svn-integration")]
@@ -116,6 +117,7 @@ async fn inputs(env: &Env, dry_run: bool) -> RunInputs {
         paths: env.paths.clone(),
         project: env.project.clone(),
         dry_run,
+        assets_only: false,
         svn: tools::discover_svn(None).await,
         git: None,
         vault: env.vault.clone(),
@@ -133,11 +135,15 @@ struct Driver {
 }
 
 async fn start(env: &Env, dry_run: bool) -> Driver {
+    launch(inputs(env, dry_run).await)
+}
+
+fn launch(inputs: RunInputs) -> Driver {
     let (tx, rx) = watch::channel(None);
     let observer = Arc::new(Watcher { tx, logs: Mutex::new(Vec::new()) });
     let (decisions, receiver) = mpsc::channel(4);
     let cancel = CancellationToken::new();
-    let run = Run::prepare(inputs(env, dry_run).await, observer, cancel.clone(), receiver).unwrap();
+    let run = Run::prepare(inputs, observer, cancel.clone(), receiver).unwrap();
     let task = tokio::spawn(run.execute());
     Driver { rx, decisions, cancel, task }
 }
@@ -426,4 +432,58 @@ async fn ai_draft_and_an_applied_readme_fix_complete_a_dry_run() {
     assert_eq!(state.phase, Phase::DryRunComplete, "{:?}", state.error);
     assert!(state.diffs.iter().any(|d| d.diff.contains("+A fixture plugin.")));
     assert_eq!(read(&env.project.path, "readme.txt"), readme, "the dry run restores the readme");
+}
+
+fn svn_list(url: &str) -> String {
+    let out = Command::new("svn").args(["ls", "--non-interactive", url]).output().unwrap();
+    String::from_utf8(out.stdout).unwrap().replace("\r\n", "\n")
+}
+
+#[tokio::test]
+async fn assets_only_release_commits_assets_without_a_tag() {
+    let env = env();
+    let assets = Path::new(&env.project.path).join(".wordpress-org");
+    std::fs::create_dir_all(&assets).unwrap();
+    std::fs::write(assets.join("banner-772x250.png"), [0x89, b'P', b'N', b'G', 1, 2, 3]).unwrap();
+    std::fs::write(assets.join("icon-128x128.png"), [0x89, b'P', b'N', b'G', 4, 5, 6]).unwrap();
+    let before = read(&env.project.path, "minimal.php");
+
+    let mut assets_inputs = inputs(&env, false).await;
+    assets_inputs.assets_only = true;
+    let mut driver = launch(assets_inputs);
+    let waiting = driver.until(Phase::AwaitingPublish).await;
+    assert!(waiting.assets_only);
+    let preview = waiting.preview.unwrap();
+    assert_eq!(preview.assets.added, ["banner-772x250.png", "icon-128x128.png"]);
+    assert!(preview.trunk.added.is_empty() && preview.tag_url.is_empty());
+    let ids: Vec<&str> = waiting.checks.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["V14", "V16", "W04", "V15"]);
+    for skipped in [run::Step::Draft, run::Step::Write, run::Step::Build] {
+        let view = waiting.steps.iter().find(|s| s.step == skipped).unwrap();
+        assert_eq!(view.status, run::StepStatus::Skipped);
+    }
+    driver
+        .decisions
+        .send(Decision::Publish {
+            trunk_message: preview.trunk_message,
+            tag_message: String::new(),
+        })
+        .await
+        .unwrap();
+    let (state, journal) = driver.task.await.unwrap();
+
+    assert_eq!(state.phase, Phase::Verified, "{:?}", state.error);
+    assert!(journal.assets_only && journal.revisions.assets.is_some());
+    assert!(journal.revisions.trunk.is_none() && journal.revisions.tag.is_none());
+    assert_eq!(state.publish.unwrap().assets_revision, journal.revisions.assets);
+    let url = &env.project.svn_url;
+    assert_eq!(svn_list(&format!("{url}/assets")), "banner-772x250.png\nicon-128x128.png\n");
+    assert_eq!(svn_list(&format!("{url}/trunk")), "");
+    assert_eq!(svn_list(&format!("{url}/tags")), "");
+    assert_eq!(read(&env.project.path, "minimal.php"), before);
+
+    let mut again_inputs = inputs(&env, false).await;
+    again_inputs.assets_only = true;
+    let (state, _) = launch(again_inputs).task.await.unwrap();
+    assert_eq!(state.error.unwrap().code, "NOTHING_TO_RELEASE");
 }

@@ -28,6 +28,12 @@ npm run typecheck
 npm test
 ```
 
+The SVN integration suites need `svn` and `svnadmin` on `PATH`:
+
+```bash
+cargo test -p svnpush-core --features svn-integration --test svn_integration --test run_integration
+```
+
 TypeScript DTO types are generated from the Rust types with `ts-rs`
 (`npm run gen:bindings`); `typecheck` and `test` regenerate them first. They
 are never committed.

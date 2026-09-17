@@ -27,7 +27,7 @@ interface RunStore {
   receiveState: (projectPath: string, state: RunState) => void;
   receiveLog: (projectPath: string, line: LogLine) => void;
   load: (path: string) => Promise<void>;
-  start: (path: string, dryRun: boolean) => Promise<void>;
+  start: (path: string, dryRun: boolean, assetsOnly?: boolean) => Promise<void>;
   approve: (path: string, draft: ReleaseDraft) => Promise<boolean>;
   publish: (path: string, trunkMessage: string, tagMessage: string) => Promise<boolean>;
   decide: (path: string, decision: Decision) => Promise<boolean>;
@@ -99,10 +99,10 @@ export const useRunStore = create<RunStore>((set, get) => {
       });
     },
 
-    start: async (path, dryRun) => {
+    start: async (path, dryRun, assetsOnly = false) => {
       patch(path, { logs: [] });
       await attempt(path, async () => {
-        patch(path, { state: await commands.startRun(path, dryRun) });
+        patch(path, { state: await commands.startRun(path, dryRun, assetsOnly) });
       });
     },
 

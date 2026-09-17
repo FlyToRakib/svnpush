@@ -65,7 +65,7 @@ describe("runStore", () => {
     await useRunStore.getState().start(PROJECT_PATH, true);
     expect(tauriMock.calls.at(-1)).toEqual({
       command: "start_run",
-      args: { path: PROJECT_PATH, dryRun: true },
+      args: { path: PROJECT_PATH, dryRun: true, assetsOnly: false },
     });
     expect(useRunStore.getState().runs[PROJECT_PATH]?.state?.dry_run).toBe(true);
   });

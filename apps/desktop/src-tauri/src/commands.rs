@@ -232,8 +232,9 @@ pub async fn start_run(
     state: Shared<'_>,
     path: String,
     dry_run: bool,
+    assets_only: bool,
 ) -> Result<RunState, ErrorView> {
-    runs::start(state.inner().clone(), sink(app), &path, dry_run).await
+    runs::start(state.inner().clone(), sink(app), &path, dry_run, assets_only).await
 }
 
 #[tauri::command]

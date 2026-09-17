@@ -19,7 +19,7 @@ use super::snapshot::Snapshot;
 use super::{RunFailure, RunInputs, RunObserver};
 
 /// The SVN credentials for the project's account, read from the keychain now.
-fn credentials(inputs: &RunInputs) -> Result<Credentials, RunFailure> {
+pub(super) fn credentials(inputs: &RunInputs) -> Result<Credentials, RunFailure> {
     let host = vault::svn_host(&inputs.project.svn_url);
     let chosen = inputs.project.settings.svn_account.as_deref();
     let Some(account) = vault::resolve_account(&inputs.accounts, &host, chosen) else {
@@ -48,21 +48,23 @@ fn svn_client<'a>(
     Svn::new(bin, observer, cancel.clone())
 }
 
+/// The commit messages from a Publish confirmation; other decisions are not for Step 7.
+pub(super) fn publish_messages(decision: Decision) -> Option<(String, String)> {
+    match decision {
+        Decision::Publish { trunk_message, tag_message } => Some((trunk_message, tag_message)),
+        Decision::Approve { .. }
+        | Decision::Generate { .. }
+        | Decision::AcceptPrivacy { .. }
+        | Decision::Manual
+        | Decision::ApplyFixes { .. }
+        | Decision::Stop => None,
+    }
+}
+
 impl Run {
     pub(super) async fn publish(&mut self) -> Result<(), RunFailure> {
-        let (trunk_message, tag_message) = self
-            .wait_for(Step::Publish, Phase::AwaitingPublish, |d| match d {
-                Decision::Publish { trunk_message, tag_message } => {
-                    Some((trunk_message, tag_message))
-                }
-                Decision::Approve { .. }
-                | Decision::Generate { .. }
-                | Decision::AcceptPrivacy { .. }
-                | Decision::Manual
-                | Decision::ApplyFixes { .. }
-                | Decision::Stop => None,
-            })
-            .await?;
+        let (trunk_message, tag_message) =
+            self.wait_for(Step::Publish, Phase::AwaitingPublish, publish_messages).await?;
         self.begin(Step::Publish, Phase::Publishing)?;
         let creds = credentials(&self.inputs)?;
         let version = self.journal.version.clone().unwrap_or_default();
@@ -94,6 +96,7 @@ impl Run {
         self.state.publish = Some(PublishResult {
             trunk_revision: trunk,
             tag_revision: Some(tag),
+            assets_revision: None,
             verification: Some(verification),
             plugin_url: self.inputs.project.plugin_page(),
             open_plugin_page: self.inputs.project.settings.post_publish_open_page,
@@ -184,6 +187,7 @@ pub async fn resume_tag(
             state.publish = Some(PublishResult {
                 trunk_revision: journal.revisions.trunk,
                 tag_revision: Some(tag),
+                assets_revision: None,
                 verification: Some(verification),
                 plugin_url: inputs.project.plugin_page(),
                 open_plugin_page: inputs.project.settings.post_publish_open_page,

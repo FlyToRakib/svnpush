@@ -231,7 +231,21 @@ impl Run {
         Ok(())
     }
 
-    fn has_credentials(&self) -> Option<bool> {
+    /// File names in the assets folder, when the project has one.
+    pub(super) fn asset_names(&self) -> Option<Vec<String>> {
+        self.inputs.project.assets_folder().map(|dir| {
+            std::fs::read_dir(dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+    }
+
+    pub(super) fn has_credentials(&self) -> Option<bool> {
         if self.inputs.dry_run {
             return None;
         }
@@ -312,16 +326,7 @@ impl Run {
             Err(SvnError::Cancelled) => return Err(RunFailure::cancelled()),
             Err(e) => (WorkingCopyState::NotCreated, Some(ErrorView::from_coded(&e))),
         };
-        let assets: Option<Vec<String>> = self.inputs.project.assets_folder().map(|dir| {
-            std::fs::read_dir(dir)
-                .map(|entries| {
-                    entries
-                        .flatten()
-                        .map(|e| e.file_name().to_string_lossy().into_owned())
-                        .collect()
-                })
-                .unwrap_or_default()
-        });
+        let assets = self.asset_names();
         let credentials = self.has_credentials();
 
         let mut results = verify::run(&VerifyInput {

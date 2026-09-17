@@ -50,6 +50,11 @@ export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
   const active = isActive(state);
   const publishResult = state?.publish ?? null;
   const runId = state?.id ?? null;
+  const phaseText = state
+    ? state.assets_only && state.phase === "Verified"
+      ? S.release.assetsPublished
+      : S.release.phase[state.phase]
+    : null;
 
   // Load the current run and history on open, and again whenever a run ends.
   useEffect(() => {
@@ -104,7 +109,7 @@ export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
     <div className="release">
       <ScreenHeader
         title={project.name}
-        subtitle={state ? S.release.phase[state.phase] : project.slug}
+        subtitle={phaseText ?? project.slug}
         actions={
           <div className="release__actions">
             {active ? (
@@ -140,12 +145,29 @@ export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
                 >
                   {dryRun ? S.release.dryRun : S.release.release}
                 </button>
+                <button
+                  type="button"
+                  className="btn"
+                  title={S.release.assetsHint}
+                  disabled={summary.locked || Boolean(unfinished)}
+                  onClick={() => {
+                    setNotice(null);
+                    void runs.start(path, dryRun, true);
+                  }}
+                >
+                  {S.release.assets}
+                </button>
               </>
             )}
           </div>
         }
       />
 
+      {phaseText && (
+        <p className="visually-hidden" role="status">
+          {phaseText}
+        </p>
+      )}
       <dl className="facts release__facts">
         <dt>{S.release.version}</dt>
         <dd className="mono">{summary.version ?? "—"}</dd>

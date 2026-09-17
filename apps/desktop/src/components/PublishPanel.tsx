@@ -17,23 +17,35 @@ export function PublishPanel({ state, onPublish }: PublishPanelProps) {
   const [tagMessage, setTagMessage] = useState(preview?.tag_message ?? "");
   const [confirming, setConfirming] = useState(false);
 
+  const assetsOnly = state.assets_only;
   const result = state.publish;
   if (result) {
     const verification = result.verification;
     return (
       <div className="stack">
-        <dl className="facts">
-          <dt>{S.publish.trunkRevision}</dt>
-          <dd className="mono">
-            {result.trunk_revision !== null
-              ? `r${String(result.trunk_revision)}`
-              : S.publish.unchanged}
-          </dd>
-          <dt>{S.publish.tagRevision}</dt>
-          <dd className="mono">
-            {result.tag_revision !== null ? `r${String(result.tag_revision)}` : "—"}
-          </dd>
-        </dl>
+        {assetsOnly ? (
+          <dl className="facts">
+            <dt>{S.publish.assetsRevision}</dt>
+            <dd className="mono">
+              {result.assets_revision !== null
+                ? `r${String(result.assets_revision)}`
+                : S.publish.unchanged}
+            </dd>
+          </dl>
+        ) : (
+          <dl className="facts">
+            <dt>{S.publish.trunkRevision}</dt>
+            <dd className="mono">
+              {result.trunk_revision !== null
+                ? `r${String(result.trunk_revision)}`
+                : S.publish.unchanged}
+            </dd>
+            <dt>{S.publish.tagRevision}</dt>
+            <dd className="mono">
+              {result.tag_revision !== null ? `r${String(result.tag_revision)}` : "—"}
+            </dd>
+          </dl>
+        )}
         {verification && (
           <p
             className={`notice ${verification.state === "Verified" ? "notice--ok" : "notice--warn"}`}
@@ -67,7 +79,7 @@ export function PublishPanel({ state, onPublish }: PublishPanelProps) {
     <div className="stack">
       <div className="field">
         <label className="field__label" htmlFor="trunk-message">
-          {S.preview.trunkMessage}
+          {assetsOnly ? S.publish.assetsMessage : S.preview.trunkMessage}
         </label>
         <input
           id="trunk-message"
@@ -78,25 +90,29 @@ export function PublishPanel({ state, onPublish }: PublishPanelProps) {
           }}
         />
       </div>
-      <div className="field">
-        <label className="field__label" htmlFor="tag-message">
-          {S.preview.tagMessage}
-        </label>
-        <input
-          id="tag-message"
-          className="input"
-          value={tagMessage}
-          onChange={(e) => {
-            setTagMessage(e.target.value);
-          }}
-        />
-      </div>
-      <p className="notice notice--warn">{S.publish.confirmBody}</p>
+      {!assetsOnly && (
+        <div className="field">
+          <label className="field__label" htmlFor="tag-message">
+            {S.preview.tagMessage}
+          </label>
+          <input
+            id="tag-message"
+            className="input"
+            value={tagMessage}
+            onChange={(e) => {
+              setTagMessage(e.target.value);
+            }}
+          />
+        </div>
+      )}
+      <p className="notice notice--warn">
+        {assetsOnly ? S.publish.assetsBody : S.publish.confirmBody}
+      </p>
       <div>
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!trunkMessage.trim() || !tagMessage.trim()}
+          disabled={!trunkMessage.trim() || (!assetsOnly && !tagMessage.trim())}
           onClick={() => {
             setConfirming(true);
           }}
@@ -106,7 +122,7 @@ export function PublishPanel({ state, onPublish }: PublishPanelProps) {
       </div>
       <Modal
         open={confirming}
-        title={S.publish.confirmTitle}
+        title={assetsOnly ? S.publish.assetsTitle : S.publish.confirmTitle}
         onClose={() => {
           setConfirming(false);
         }}
@@ -135,8 +151,12 @@ export function PublishPanel({ state, onPublish }: PublishPanelProps) {
         }
       >
         <dl className="facts">
-          <dt>{S.publish.version}</dt>
-          <dd className="mono">{version}</dd>
+          {!assetsOnly && (
+            <>
+              <dt>{S.publish.version}</dt>
+              <dd className="mono">{version}</dd>
+            </>
+          )}
           <dt>{S.publish.slug}</dt>
           <dd className="mono">{state.facts?.slug}</dd>
           <dt>{S.publish.svnUrl}</dt>
@@ -147,7 +167,7 @@ export function PublishPanel({ state, onPublish }: PublishPanelProps) {
         <p className="mono">
           {S.publish.counts(formatDelta(preview.trunk), formatDelta(preview.assets))}
         </p>
-        <p>{S.publish.confirmBody}</p>
+        <p>{assetsOnly ? S.publish.assetsBody : S.publish.confirmBody}</p>
       </Modal>
     </div>
   );

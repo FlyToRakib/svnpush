@@ -30,13 +30,13 @@ export function PastReleases({ journals }: PastReleasesProps) {
               {journals.map((j) => (
                 <tr key={j.id}>
                   <td>{formatDateTime(runIdToIso(j.id))}</td>
-                  <td className="mono">{j.version ?? "—"}</td>
+                  <td className="mono">{j.assets_only ? S.history.assets : (j.version ?? "—")}</td>
                   <td>
                     {j.outcome ? S.outcome[j.outcome.kind] : "—"}
                     {j.dry_run && j.outcome?.kind !== "DryRun" ? ` (${S.history.dryRun})` : ""}
                   </td>
                   <td className="mono">
-                    {[j.revisions.trunk, j.revisions.tag]
+                    {[j.revisions.trunk, j.revisions.tag, j.revisions.assets]
                       .filter((r): r is number => r !== null)
                       .map((r) => `r${String(r)}`)
                       .join(" · ") || "—"}
