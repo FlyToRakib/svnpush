@@ -9,7 +9,11 @@ pub mod edit;
 pub mod error;
 pub mod package;
 pub mod readme;
+pub mod report;
+pub mod secret;
+pub mod svn;
 pub mod text;
+pub mod tools;
 pub mod verify;
 pub mod version;
 

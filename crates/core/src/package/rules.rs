@@ -131,6 +131,17 @@ impl Exclusions {
         })
     }
 
+    /// Only the always-excluded names, for folders that are not packages
+    /// (the assets folder). Reports [`ExclusionSource::Defaults`].
+    pub fn hard_only(root: &Path) -> Result<Self, PackageError> {
+        Ok(Self {
+            rules: compile(root, &[], false)?,
+            hard: compile(root, HARD_EXCLUDES, true)?,
+            source: ExclusionSource::Defaults,
+            excluded_dirs: Vec::new(),
+        })
+    }
+
     /// Which list is in effect.
     pub fn source(&self) -> ExclusionSource {
         self.source

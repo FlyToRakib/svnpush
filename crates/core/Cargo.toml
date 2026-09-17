@@ -8,15 +8,22 @@ repository.workspace = true
 rust-version.workspace = true
 publish = false
 
+[features]
+# Runs the full release protocol against local file:// repositories; needs svn and svnadmin.
+svn-integration = []
+
 [dependencies]
 blake3.workspace = true
 ignore.workspace = true
 regex.workspace = true
+roxmltree.workspace = true
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
 ts-rs.workspace = true
 walkdir.workspace = true
 zip.workspace = true
@@ -24,6 +31,7 @@ zip.workspace = true
 [dev-dependencies]
 proptest.workspace = true
 tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true

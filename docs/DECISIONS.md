@@ -38,3 +38,13 @@ each, dated.
 - 2026-09-17 — W02 compares major.minor only, the precision WordPress.org uses for "Tested up to".
 - 2026-09-17 — Source paths longer than 260 characters are listed on the package (`long_paths`) and shown in Build as a notice, not as an eleventh warning.
 - 2026-09-17 — Builds are pruned to the three most recently modified version folders per plugin.
+- 2026-09-17 — Crates added for M3: `tokio` (`process`, `io-util`, `time`, `sync`, `macros`, `rt`; async child processes with streamed output, plan §4), `tokio-util` (the `CancellationToken` the plan names), `roxmltree` (read-only parsing of `svn status --xml`, avoiding fragile column parsing).
+- 2026-09-17 — The 60-second network timeout (plan §12.2) is Subversion's own `servers:global:http-timeout=60`, passed with `--config-option` on every server call: it bounds a silent connection without cutting off a long but progressing commit. Cancellation kills the child process.
+- 2026-09-17 — `svn` runs with `LC_MESSAGES=C` and `LANGUAGE=C` (English messages) but without overriding `LC_ALL`/`LC_CTYPE`, so non-ASCII file names keep working; errors are classified by Subversion's locale-independent `E` codes.
+- 2026-09-17 — Server calls always pass `--no-auth-cache`, and `--username`/`--password-from-stdin` when credentials are given; `svn add` passes `--no-auto-props --no-ignore` so a user's global auto-props never set `svn:eol-style` and global ignores never silently drop a packaged file.
+- 2026-09-17 — Paths are passed to `svn add/delete/propset` in batches of 100 to stay far below command-line length limits, instead of a `--targets` temp file inside the working copy.
+- 2026-09-17 — `tag` refuses when `tags/<version>` already exists (`SVN_TAG_EXISTS`): the integration suite showed `svn copy` into an existing folder nests the copy (`tags/1.0.0/trunk`) instead of failing. The copy is pinned to the recorded trunk revision (`trunk@REV`).
+- 2026-09-17 — Tag verification retries three times ten seconds apart (thirty seconds) before reporting "published, unverified".
+- 2026-09-17 — The dry-run revert also deletes unversioned files the sync left behind, because `svn revert` keeps added files on disk.
+- 2026-09-17 — The `Secret` type has redacted `Debug`/`Display`, no `Clone` and no `Serialize`; it does not claim to zero memory on drop, which the compiler may optimise away.
+- 2026-09-17 — The `svn-integration` CI job runs on Linux and macOS, where Subversion installs from the package manager in seconds; Windows runs the suite locally.
