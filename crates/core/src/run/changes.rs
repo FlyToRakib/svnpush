@@ -234,6 +234,7 @@ mod tests {
         let cancel = tokio_util::sync::CancellationToken::new();
         let runner = Git::new(&bin, &plugin, &crate::report::NullReporter, &cancel);
         let facts = runner.facts().await.unwrap().unwrap();
+        assert_eq!(facts.dirty, ["demo.php", "new.php"]);
         let set = from_git(&runner, &facts).await.unwrap().unwrap();
         let paths: Vec<(&str, ChangeKind)> =
             set.files.iter().map(|f| (f.path.as_str(), f.kind)).collect();

@@ -68,10 +68,22 @@ impl<'a> Git<'a> {
             .await?
             .map(|b| b.trim().to_owned())
             .filter(|b| !b.is_empty() && b != "HEAD");
+        // Status paths are relative to the repository root; the prefix makes
+        // them relative to the plugin folder when it sits inside a larger repository.
+        let prefix =
+            self.output(&["rev-parse", "--show-prefix"]).await?.map(|p| p.trim().to_owned());
         let dirty = self
             .output(&["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "."])
             .await?
-            .map(|s| parse_porcelain_z(&s))
+            .map(|s| {
+                parse_porcelain_z(&s)
+                    .into_iter()
+                    .map(|path| match prefix.as_deref().filter(|p| !p.is_empty()) {
+                        Some(p) => path.strip_prefix(p).map_or(path.clone(), str::to_owned),
+                        None => path,
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let last_tag = self
             .output(&["describe", "--tags", "--abbrev=0"])
