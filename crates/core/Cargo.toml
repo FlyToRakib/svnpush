@@ -15,9 +15,11 @@ svn-integration = []
 [dependencies]
 blake3.workspace = true
 ignore.workspace = true
+keyring.workspace = true
 regex.workspace = true
 roxmltree.workspace = true
 semver.workspace = true
+similar.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

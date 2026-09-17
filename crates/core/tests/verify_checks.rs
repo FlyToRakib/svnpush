@@ -49,7 +49,7 @@ struct Case {
     allow_phar: bool,
     svn: Option<String>,
     wc: WorkingCopyState,
-    credentials: bool,
+    credentials: Option<bool>,
     dirty: Option<Vec<String>>,
     wordpress: Option<String>,
     assets: Option<Vec<String>>,
@@ -113,7 +113,7 @@ impl Case {
             allow_phar: false,
             svn: Some("1.14.5 (r1922182)".into()),
             wc: WorkingCopyState::Clean,
-            credentials: true,
+            credentials: Some(true),
             dirty: Some(Vec::new()),
             wordpress: Some("6.8.2".into()),
             assets: Some(vec![
@@ -341,10 +341,12 @@ fn v15_fails_on_conflicts_and_skips_before_checkout() {
 }
 
 #[test]
-fn v16_fails_without_credentials() {
+fn v16_fails_without_credentials_and_skips_in_a_dry_run() {
     let mut case = Case::passing();
-    case.credentials = false;
+    case.credentials = Some(false);
     assert_fails(&case, "V16");
+    case.credentials = None;
+    assert_eq!(case.status("V16").status, CheckStatus::Skip);
 }
 
 #[test]
@@ -444,7 +446,7 @@ fn package_checks_are_v10_to_v13() {
         allow_phar: false,
         svn_version: None,
         working_copy: &WorkingCopyState::NotCreated,
-        has_credentials: false,
+        has_credentials: Some(false),
         git_dirty: None,
         current_wordpress: None,
         assets: None,

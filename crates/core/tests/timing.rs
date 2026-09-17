@@ -61,7 +61,7 @@ fn detect_and_verify_5000_files_under_two_seconds() {
         allow_phar: false,
         svn_version: Some("1.14.5"),
         working_copy: &WorkingCopyState::Clean,
-        has_credentials: true,
+        has_credentials: Some(true),
         git_dirty: None,
         current_wordpress: None,
         assets: None,

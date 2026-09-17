@@ -1,0 +1,30 @@
+.projects td {
+  vertical-align: middle;
+}
+
+.project-row__name {
+  background: none;
+  border: 0;
+  color: var(--color-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  text-align: left;
+}
+
+.project-row__name:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.project-row__problem {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.project-row .badge {
+  display: inline-block;
+  margin-right: var(--space-1);
+  margin-top: var(--space-1);
+}

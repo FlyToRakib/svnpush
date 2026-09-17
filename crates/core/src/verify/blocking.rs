@@ -38,7 +38,7 @@ pub(super) fn all(input: &VerifyInput<'_>) -> Vec<CheckResult> {
         v09(input),
     ];
     out.extend(package(input));
-    out.extend([v14(input), v15(input), v16(input)]);
+    out.extend([v14(input), v15(input.working_copy), v16(input)]);
     out
 }
 
@@ -370,9 +370,10 @@ fn v14(input: &VerifyInput<'_>) -> CheckResult {
     }
 }
 
-fn v15(input: &VerifyInput<'_>) -> CheckResult {
+/// V15 on its own, for Preview SVN to repeat after updating the working copy.
+pub fn v15(working_copy: &WorkingCopyState) -> CheckResult {
     let c = check("V15", "SVN working copy is conflict-free and up to date");
-    match input.working_copy {
+    match working_copy {
         WorkingCopyState::NotCreated => {
             c.skip("The working copy is created and updated in Preview SVN.")
         }
@@ -391,12 +392,12 @@ fn v15(input: &VerifyInput<'_>) -> CheckResult {
 
 fn v16(input: &VerifyInput<'_>) -> CheckResult {
     let c = check("V16", "SVN credentials are in the vault");
-    if input.has_credentials {
-        c.pass("Credentials found.")
-    } else {
-        c.fail(
-            "No SVN password is stored for this account.",
+    match input.has_credentials {
+        None => c.skip("Dry run: credentials are needed only to publish."),
+        Some(true) => c.pass("Credentials found."),
+        Some(false) => c.fail(
+            "No SVN password is stored for this project's account.",
             "Open Vault and add the account's SVN password.",
-        )
+        ),
     }
 }

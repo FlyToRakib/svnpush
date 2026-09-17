@@ -189,10 +189,48 @@ impl Svn<'_> {
         Ok(())
     }
 
-    /// The local diff of one path, for the per-file preview.
-    pub async fn diff(&self, path: &Path) -> Result<String, SvnError> {
+    /// The local diff of everything under `folder`, split per file. Keys are
+    /// paths relative to `folder` with `/` separators.
+    pub async fn diff_files(&self, folder: &Path) -> Result<Vec<(String, String)>, SvnError> {
         let mut args = os(&["diff", "--internal-diff"]);
-        args.push(path.as_os_str().to_owned());
-        Ok(self.exec(args, None, false).await?.stdout)
+        args.push(folder.as_os_str().to_owned());
+        let output = self.exec(args, None, false).await?.stdout;
+        Ok(split_diff(&output, folder))
+    }
+}
+
+/// Splits `svn diff` output at its `Index: <path>` lines.
+pub(crate) fn split_diff(output: &str, folder: &Path) -> Vec<(String, String)> {
+    let root = super::slash(folder);
+    let root = root.trim_end_matches('/');
+    let mut files: Vec<(String, String)> = Vec::new();
+    for line in output.split_inclusive('\n') {
+        if let Some(path) = line.strip_prefix("Index: ") {
+            let full = path.trim_end().replace('\\', "/");
+            let rel = full
+                .strip_prefix(root)
+                .map_or(full.as_str(), |r| r.trim_start_matches('/'))
+                .to_owned();
+            files.push((rel, String::new()));
+        } else if let Some((_, text)) = files.last_mut() {
+            text.push_str(line);
+        }
+    }
+    files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn splits_diff_output_per_file() {
+        let output = "Index: C:\\wc\\trunk\\a.php\n===\n--- a\n+++ a\n@@ -1 +1 @@\n-x\n+y\nIndex: C:\\wc\\trunk\\img\\b.png\n===\nCannot display: file marked as a binary type.\n";
+        let files = split_diff(output, Path::new(r"C:\wc\trunk"));
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].0, "a.php");
+        assert!(files[0].1.contains("+y\n"));
+        assert_eq!(files[1].0, "img/b.png");
+        assert!(files[1].1.contains("binary"));
     }
 }

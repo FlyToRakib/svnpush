@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::readme;
@@ -18,7 +18,7 @@ pub const VERIFY_ATTEMPTS: u32 = 3;
 pub const VERIFY_DELAY: Duration = Duration::from_secs(10);
 
 /// The result of checking a freshly created tag.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "state", content = "reason")]
 #[ts(export)]
 pub enum TagVerification {

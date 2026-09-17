@@ -1,5 +1,6 @@
 //! Step 1, Detect: the facts about a plugin that every later step relies on.
 
+pub mod git;
 pub mod header;
 mod slug;
 
@@ -13,6 +14,7 @@ use crate::error::Coded;
 use crate::readme::{self, README_FILE, Readme};
 use crate::version::{self, VersionError, VersionLocation, VersionSource};
 
+pub use git::GitFacts;
 pub use header::Header;
 pub use slug::{slug_from_svn_url, suggested_svn_url};
 

@@ -5,6 +5,9 @@ import { applyTheme, loadTheme } from "./theme";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/shell.css";
+import "./styles/components.css";
+import "./styles/projects.css";
+import "./styles/release.css";
 
 applyTheme(loadTheme());
 

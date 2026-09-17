@@ -11,7 +11,7 @@ use ts_rs::TS;
 
 use crate::detect::PluginFacts;
 
-pub use blocking::{MIN_SVN, svn_major_minor};
+pub use blocking::{MIN_SVN, svn_major_minor, v15 as working_copy_check};
 
 /// Whether a check can stop the release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -106,8 +106,9 @@ pub struct VerifyInput<'a> {
     pub svn_version: Option<&'a str>,
     /// Working copy state.
     pub working_copy: &'a WorkingCopyState,
-    /// Whether the vault holds credentials for the project's SVN account.
-    pub has_credentials: bool,
+    /// Whether the vault holds credentials for the project's SVN account;
+    /// `None` in a dry run, which never commits.
+    pub has_credentials: Option<bool>,
     /// Uncommitted git paths; `None` when git or a repository is unavailable.
     pub git_dirty: Option<&'a [String]>,
     /// The current WordPress version; `None` when the lookup is off or failed.
