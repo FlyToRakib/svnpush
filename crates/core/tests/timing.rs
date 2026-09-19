@@ -70,6 +70,6 @@ fn detect_and_verify_5000_files_under_two_seconds() {
     let elapsed = started.elapsed();
 
     assert_eq!(listing.files.len(), 5_002);
-    assert_eq!(results.len(), 26);
+    assert_eq!(results.len(), 28);
     assert!(elapsed < Duration::from_secs(2), "took {elapsed:?} for 5,002 files");
 }

@@ -7,6 +7,8 @@ use serde::Serialize;
 use svnpush_core::ai::provider::{Fleet, ModelList};
 use svnpush_core::ai::records::ProvidersFile;
 use svnpush_core::project::ProjectSettings;
+use svnpush_core::readme::ReadmeReport;
+use svnpush_core::run::build_only::BuiltPackage;
 use svnpush_core::run::files::FilePreview;
 use svnpush_core::run::{Decision, ErrorView, ReleaseDraft, RunJournal, RunState};
 use svnpush_core::settings::AppSettings;
@@ -16,6 +18,7 @@ use tauri_plugin_updater::UpdaterExt;
 use ts_rs::TS;
 
 use crate::events::{EventSink, TauriSink};
+use crate::service::checks;
 use crate::service::projects::{self, FolderInspection, ProjectSummary};
 use crate::service::providers::{self, AdapterInfo, ProviderInput, ProviderTarget};
 use crate::service::runs;
@@ -284,6 +287,16 @@ pub async fn confirm_release_files(
     distignore: Option<String>,
 ) -> Result<(), ErrorView> {
     runs::confirm_files(&state, &path, distignore).await
+}
+
+#[tauri::command]
+pub async fn check_readme(state: Shared<'_>, path: String) -> Result<ReadmeReport, ErrorView> {
+    checks::check_readme(&state, &path).await
+}
+
+#[tauri::command]
+pub async fn build_package(state: Shared<'_>, path: String) -> Result<BuiltPackage, ErrorView> {
+    checks::build_package(&state, &path).await
 }
 
 #[tauri::command]

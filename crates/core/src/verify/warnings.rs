@@ -1,4 +1,5 @@
-//! Warnings W01–W10 (plan §5.4). They are shown and never block.
+//! Warnings W01–W11 (plan §5.4; W11 added for the readme validator). They
+//! are shown and never block.
 
 use std::collections::BTreeSet;
 
@@ -39,6 +40,7 @@ pub(super) fn all(input: &VerifyInput<'_>) -> Vec<CheckResult> {
         w08(input),
         w09(input),
         w10(input),
+        w11(input),
     ]
 }
 
@@ -269,5 +271,24 @@ fn w10(input: &VerifyInput<'_>) -> CheckResult {
         c.pass("No vendor/ folder is packaged.")
     } else {
         c.pass(format!("vendor/ is {}.", megabytes(vendor)))
+    }
+}
+
+fn w11(input: &VerifyInput<'_>) -> CheckResult {
+    let c = check("W11", "readme.txt has no WordPress.org validator warnings");
+    let Some(text) = input.readme_text else {
+        return c.skip("There is no readme.txt to validate.");
+    };
+    let report = crate::readme::validate(text, input.current_wordpress);
+    let warnings: Vec<&str> =
+        report.at(crate::readme::IssueLevel::Warning).map(|issue| issue.message.as_str()).collect();
+    if warnings.is_empty() {
+        c.pass("The readme has no validator warnings.")
+    } else {
+        c.fail(
+            warnings.join(" "),
+            "WordPress.org ignores or cuts off these parts of the readme. Fix them in readme.txt.",
+        )
+        .with_paths(vec![README_FILE.to_owned()])
     }
 }

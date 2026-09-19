@@ -347,3 +347,17 @@
   color: var(--color-text-muted);
   margin: var(--space-1) 0 0;
 }
+
+.pill--warn {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-ink);
+}
+
+.readme-issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}

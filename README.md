@@ -14,8 +14,14 @@ and nothing is committed until you click Publish.
 - **Every version source in step.** The plugin header, the readme Stable tag,
   the changelog, the upgrade notice, and any extra locations you configure
   (a constant, `package.json`) are written together and shown as a diff.
-- **A real gate.** Sixteen blocking checks (V01–V16) and ten warnings
-  (W01–W10), each with its fix. A failed blocking check stops the release.
+- **A real gate.** Seventeen blocking checks (V01–V17) and eleven warnings
+  (W01–W11), each with its fix. A failed blocking check stops the release.
+- **Readme validator built in.** `readme.txt` is checked with the same rules
+  as the [WordPress.org readme validator](https://wordpress.org/plugins/developers/readme-validator/),
+  instantly and offline, on every release and from **Check readme.txt** on
+  the project page.
+- **Build package** builds exactly what a release would publish (folder and
+  zip) without publishing, so you can inspect it or test it on a site.
 - **AI that you approve.** Your chosen provider suggests the version,
   changelog entry, upgrade notice and summary from what changed. When a
   check fails, it explains why and can suggest readme fixes, applied only

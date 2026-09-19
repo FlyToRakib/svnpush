@@ -23,6 +23,8 @@
     "allow-current-run",
     "allow-approve-draft",
     "allow-ai-decision",
+    "allow-check-readme",
+    "allow-build-package",
     "allow-preview-release-files",
     "allow-confirm-release-files",
     "allow-confirm-publish",

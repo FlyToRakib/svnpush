@@ -2,7 +2,9 @@
 
 use std::path::Path;
 
-use crate::package::{self, Exclusions};
+use crate::detect::PluginFacts;
+use crate::package::{self, Exclusions, Package};
+use crate::project::ProjectSettings;
 use crate::svn::{self, Delta};
 use crate::vault;
 use crate::verify::{self, FileRef, VerifyInput, WorkingCopyState};
@@ -103,28 +105,7 @@ impl Run {
         let built = package::build(&listing, &builds, &slug, &version)?;
         self.package = Some(built.clone());
 
-        let entries = package::zip_entry_names(Path::new(&built.zip_path))?;
-        let files: Vec<FileRef<'_>> =
-            built.files.iter().map(|f| FileRef { rel: &f.rel, size: f.size }).collect();
-        let rows = verify::package_checks(&VerifyInput {
-            facts: &facts,
-            version: &version,
-            previous: None,
-            server_tags: &[],
-            readme_text: None,
-            main_file_text: "",
-            files: &files,
-            zip_entries: Some(&entries),
-            required_paths: &self.inputs.project.settings.required_paths,
-            allow_phar: self.inputs.project.settings.allow_phar,
-            svn_version: None,
-            working_copy: &WorkingCopyState::NotCreated,
-            has_credentials: None,
-            git_dirty: None,
-            current_wordpress: None,
-            assets: None,
-            gitignored: &[],
-        });
+        let rows = package_rows(&facts, &version, &built, &self.inputs.project.settings)?;
         let blocked = verify::is_blocked(&rows);
         self.replace_checks(rows);
         for path in &built.long_paths {
@@ -208,6 +189,37 @@ impl Run {
         self.done(Step::Preview, summary);
         Ok(())
     }
+}
+
+/// V10–V13 against a staged package and its zip.
+pub(super) fn package_rows(
+    facts: &PluginFacts,
+    version: &str,
+    built: &Package,
+    settings: &ProjectSettings,
+) -> Result<Vec<verify::CheckResult>, RunFailure> {
+    let entries = package::zip_entry_names(Path::new(&built.zip_path))?;
+    let files: Vec<FileRef<'_>> =
+        built.files.iter().map(|f| FileRef { rel: &f.rel, size: f.size }).collect();
+    Ok(verify::package_checks(&VerifyInput {
+        facts,
+        version,
+        previous: None,
+        server_tags: &[],
+        readme_text: None,
+        main_file_text: "",
+        files: &files,
+        zip_entries: Some(&entries),
+        required_paths: &settings.required_paths,
+        allow_phar: settings.allow_phar,
+        svn_version: None,
+        working_copy: &WorkingCopyState::NotCreated,
+        has_credentials: None,
+        git_dirty: None,
+        current_wordpress: None,
+        assets: None,
+        gitignored: &[],
+    }))
 }
 
 /// `1.4 MB`, `820 KB`, `12 B`.

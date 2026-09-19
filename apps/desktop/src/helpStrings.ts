@@ -47,7 +47,7 @@ export const HELP = {
     "Detect: SVNpush reads your plugin's version, readme and the releases already on WordPress.org.",
     "Changes and draft: it lists what changed, and the AI (or you) writes the new version and changelog. You approve it.",
     "Write: the version and changelog are written into your files, shown as a diff.",
-    "Verify: 16 safety checks and 10 warnings run. A failed check stops the release.",
+    "Verify: 17 safety checks and 11 warnings run, including the WordPress.org readme rules. A failed check stops the release.",
     "Build: you check which files will be released; the package is built.",
     "Preview SVN: every file to add, change or delete on WordPress.org is listed.",
     "Publish: you confirm, and SVNpush commits trunk, creates the tag and checks it is live.",

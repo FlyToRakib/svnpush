@@ -3,9 +3,11 @@
  * Buttons are verbs. No exclamation marks.
  */
 import { HELP } from "./helpStrings";
+import { TOOLS } from "./toolStrings";
 
 export const S = {
   help: HELP,
+  tools: TOOLS,
   app: {
     name: "SVNpush",
   },

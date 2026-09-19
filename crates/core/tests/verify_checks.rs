@@ -170,7 +170,7 @@ fn assert_fails(case: &Case, id: &str) -> CheckResult {
 #[test]
 fn the_baseline_passes_every_check() {
     let results = Case::passing().results();
-    assert_eq!(results.len(), 26);
+    assert_eq!(results.len(), 28);
     for r in &results {
         assert_eq!(r.status, CheckStatus::Pass, "{} {}: {}", r.id, r.title, r.message);
     }
@@ -178,7 +178,8 @@ fn the_baseline_passes_every_check() {
     let ids: Vec<&str> = results.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ids[0], "V01");
     assert_eq!(ids[15], "V16");
-    assert_eq!(ids[25], "W10");
+    assert_eq!(ids[16], "V17");
+    assert_eq!(ids[27], "W11");
 }
 
 #[test]
@@ -483,4 +484,14 @@ fn readme_default_is_usable_in_checks() {
     case.facts.readme = Some(Readme::default());
     assert_fails(&case, "V04");
     assert_fails(&case, "V05");
+}
+
+#[test]
+fn v17_and_w11_report_the_readme_validator() {
+    let mut case = Case::passing();
+    case.readme(&README.replace("License: GPLv2 or later", "License: Proprietary"));
+    assert!(assert_fails(&case, "V17").message.contains("License field appears to be invalid"));
+    case.readme(&README.replace("Stable tag: 1.2.0", "Stable tag: trunk"));
+    let w = case.status("W11");
+    assert!(w.status == CheckStatus::Fail && w.message.contains("Stable tag"), "{}", w.message);
 }

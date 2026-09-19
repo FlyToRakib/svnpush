@@ -1,6 +1,6 @@
-//! Blocking checks V01–V16 (plan §5.4).
+//! Blocking checks V01–V17 (plan §5.4; V17 added for the readme validator).
 
-use crate::readme::{README_FILE, REQUIRED_HEADERS};
+use crate::readme::{self, IssueLevel, README_FILE, REQUIRED_HEADERS};
 use crate::version::Version;
 
 use super::{CheckResult, Severity, VerifyInput, WorkingCopyState};
@@ -38,7 +38,7 @@ pub(super) fn all(input: &VerifyInput<'_>) -> Vec<CheckResult> {
         v09(input),
     ];
     out.extend(package(input));
-    out.extend([v14(input), v15(input.working_copy), v16(input)]);
+    out.extend([v14(input), v15(input.working_copy), v16(input), v17(input)]);
     out
 }
 
@@ -411,5 +411,24 @@ fn v16(input: &VerifyInput<'_>) -> CheckResult {
             "No SVN password is stored for this project's account.",
             "Open Vault and add the account's SVN password.",
         ),
+    }
+}
+
+fn v17(input: &VerifyInput<'_>) -> CheckResult {
+    let c = check("V17", "readme.txt passes the WordPress.org readme validator");
+    let Some(text) = input.readme_text else {
+        return c.fail(README_MISSING, README_FIX);
+    };
+    let report = readme::validate(text, input.current_wordpress);
+    let errors: Vec<&str> =
+        report.at(IssueLevel::Error).map(|issue| issue.message.as_str()).collect();
+    if errors.is_empty() {
+        c.pass("The readme has no validator errors.")
+    } else {
+        c.fail(
+            errors.join(" "),
+            "Fix these in readme.txt: WordPress.org rejects a readme with validator errors.",
+        )
+        .with_paths(vec![README_FILE.to_owned()])
     }
 }

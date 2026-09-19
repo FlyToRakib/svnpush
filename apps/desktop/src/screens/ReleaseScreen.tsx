@@ -4,7 +4,9 @@ import { ErrorNotice } from "../components/ErrorNotice";
 import { LogDrawer } from "../components/LogDrawer";
 import { Modal } from "../components/Modal";
 import { PastReleases } from "../components/PastReleases";
+import { PackageBuildCard } from "../components/PackageBuildCard";
 import { ProjectSettingsForm } from "../components/ProjectSettingsForm";
+import { ReadmeCheckCard } from "../components/ReadmeCheckCard";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { UnfinishedBanner } from "../components/UnfinishedBanner";
 import type { ErrorView } from "../ipc/bindings/ErrorView";
@@ -247,6 +249,9 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
           }}
         />
       )}
+
+      <ReadmeCheckCard projectPath={path} disabled={active} />
+      <PackageBuildCard projectPath={path} disabled={active} />
 
       <ProjectSettingsForm
         key={project.path}

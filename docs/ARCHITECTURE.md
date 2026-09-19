@@ -39,11 +39,11 @@ a React app that renders the state the engine emits. The specification is
 | Module | Responsibility |
 |---|---|
 | `detect` | Plugin header, slug, main file candidates, git facts. |
-| `readme` | Parses `readme.txt` and edits it byte-for-byte (headers, changelog, upgrade notice). |
+| `readme` | Parses `readme.txt`, edits it byte-for-byte (headers, changelog, upgrade notice), and validates it with the WordPress.org validator's rules. |
 | `version` | Version parsing and ordering, reading and writing every version source. |
 | `edit` | `EditSet`: composes edits to files and writes them once. |
 | `package` | Exclusion rules (`ignore` crate), staging, deterministic zip, SHA-256. |
-| `verify` | V01–V16 and W01–W10 as pure functions over a `VerifyInput`. |
+| `verify` | V01–V17 and W01–W11 as pure functions over a `VerifyInput`. |
 | `tools` | Finding `svn` and `git`, and running processes with cancellation and log streaming. |
 | `svn` | Sparse working copy, mirror sync, status XML, commit, tag, verification. Errors are classified by `E` codes. |
 | `vault` | `CredentialStore` over the OS keychain (`keyring`), SVN accounts, AI key names. |

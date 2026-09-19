@@ -1,6 +1,7 @@
 //! `readme.txt`: parse, validate and write the WordPress.org plugin readme.
 
 mod parse;
+mod validate;
 mod write;
 
 use serde::Serialize;
@@ -9,6 +10,7 @@ use ts_rs::TS;
 use crate::error::Coded;
 
 pub use parse::parse;
+pub use validate::{IssueLevel, OFFICIAL_VALIDATOR_URL, ReadmeIssue, ReadmeReport, validate};
 pub use write::{set_header, upsert_changelog_entry, upsert_upgrade_notice};
 
 /// The file name WordPress.org reads.

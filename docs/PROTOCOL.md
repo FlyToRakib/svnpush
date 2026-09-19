@@ -117,6 +117,7 @@ do. No check can be switched off from the UI.
 | V14 | Subversion 1.10 or newer is available |
 | V15 | SVN working copy is conflict-free and up to date |
 | V16 | SVN credentials are in the vault |
+| V17 | readme.txt passes the WordPress.org readme validator (no validator errors) |
 
 | ID | Warning |
 |---|---|
@@ -130,6 +131,7 @@ do. No check can be switched off from the UI.
 | W08 | No packaged file is ignored by .gitignore |
 | W09 | readme.txt has consistent line endings and no BOM |
 | W10 | vendor/ is not oversized |
+| W11 | readme.txt has no WordPress.org validator warnings |
 
 Notes:
 
@@ -137,6 +139,12 @@ Notes:
   root; Build runs them against the staged tree. V10 to V13 always run again
   in Build against the staged files and the zip.
 - V16 is skipped in a dry run, which never commits.
+- V17 and W11 run the WordPress.org readme validator's rules locally
+  (`crates/core/src/readme/validate.rs`). Its errors block (a plugin name, a
+  GPL-compatible licence); its warnings flag what WordPress.org would ignore
+  or cut off (version fields, Stable tag, tags, a short description over 150
+  characters, sections over 2,500 words or 5,000 for Changelog and FAQ).
+  Checks that need WordPress.org's own data are on the official page.
 - W02 asks `api.wordpress.org` for the current WordPress version, at most
   once a day, and only while the Settings toggle is on.
 

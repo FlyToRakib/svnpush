@@ -4,6 +4,8 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
+- Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.
 - New Help tab: a setup checklist (Subversion, SVN account, AI provider, your plugin), a short guide to how a release works, which files are released, and common problems. It opens by itself the first time you start SVNpush.
 - Install Subversion in one click from Help, through winget on Windows or Homebrew on macOS. The Linux packages install it automatically. If a release can't find Subversion, it offers Open Help.
 - Before a release, SVNpush shows which files will go to WordPress.org and which are left out. If your plugin has no .distignore, it proposes one for you to edit and save. It also asks on the first release and when new files or folders appear.

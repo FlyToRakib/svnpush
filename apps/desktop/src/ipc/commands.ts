@@ -1,5 +1,6 @@
 import type { AdapterInfo } from "./bindings/AdapterInfo";
 import type { AppSettings } from "./bindings/AppSettings";
+import type { BuiltPackage } from "./bindings/BuiltPackage";
 import type { Decision } from "./bindings/Decision";
 import type { DoctorReport } from "./bindings/DoctorReport";
 import type { FilePreview } from "./bindings/FilePreview";
@@ -15,6 +16,7 @@ import type { UpdateInfo } from "./bindings/UpdateInfo";
 import type { VaultView } from "./bindings/VaultView";
 import type { ProjectSettings } from "./bindings/ProjectSettings";
 import type { ProjectSummary } from "./bindings/ProjectSummary";
+import type { ReadmeReport } from "./bindings/ReadmeReport";
 import type { ReleaseDraft } from "./bindings/ReleaseDraft";
 import type { RunJournal } from "./bindings/RunJournal";
 import type { RunState } from "./bindings/RunState";
@@ -70,6 +72,8 @@ export const commands = {
   saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
   runDoctor: () => call<DoctorReport>("run_doctor"),
   svnInstallPlan: () => call<InstallPlan>("svn_install_plan"),
+  checkReadme: (path: string) => call<ReadmeReport>("check_readme", { path }),
+  buildPackage: (path: string) => call<BuiltPackage>("build_package", { path }),
   installSvn: () => call<InstallOutcome>("install_svn"),
   diagnostics: () => call<string>("diagnostics"),
   checkUpdate: () => call<UpdateInfo>("check_update"),

@@ -4,6 +4,7 @@
 mod ai_view;
 mod assets;
 mod assist;
+pub mod build_only;
 pub mod changes;
 mod draft;
 mod engine;
