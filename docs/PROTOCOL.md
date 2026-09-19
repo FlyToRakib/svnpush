@@ -11,11 +11,12 @@ logic of its own.
 
 ```
 Detect → Changes and draft → Write → Verify → Build → Preview SVN → Publish
-                  ▲ Approve                   ▲ Apply fixes      ▲ Publish
+                  ▲ Approve         ▲ Apply fixes   ▲ Check files      ▲ Publish
 ```
 
-Only three moments wait for you: approving the draft, applying suggested
-fixes after a failed check, and confirming Publish. Everything before the
+Four moments wait for you: approving the draft, applying suggested fixes
+after a failed check, checking the files to release, and confirming
+Publish. Everything before the
 trunk commit can be cancelled and is rolled back.
 
 ## Before the run
@@ -110,7 +111,7 @@ do. No check can be switched off from the UI.
 | V08 | Text Domain equals the slug |
 | V09 | Main plugin file blocks direct access |
 | V10 | Package contains every required path |
-| V11 | Package contains no forbidden path |
+| V11 | Package contains no forbidden path, including files that hold secrets (`.env*`, `*.pem`, `*.key`, `wp-config.php`, SSH keys) |
 | V12 | Package contains no archive, executable or version-control folder |
 | V13 | Zip entries use / and sit under the slug folder |
 | V14 | Subversion 1.10 or newer is available |
@@ -153,13 +154,29 @@ local changes are rolled back.
 1. The pre-build command runs in the project folder when one is set. It is
    shown in the log first, its output is streamed, and a non-zero exit stops
    the release (`HOOK_FAILED`).
-2. The package root is walked with the exclusion rules: `.distignore` if
-   present, otherwise the built-in defaults, plus the hard-excluded list
-   (`.git`, `.svn`, `.hg`, `.svnpush.json`, `.distignore`, archives, `.DS_Store`, `Thumbs.db`). The tree is
+2. **Check the files to release.** The run pauses here, showing what will be
+   released and what is left out, when any of these is true:
+   - the plugin has no `.distignore`: SVNpush proposes one to review, edit
+     and save;
+   - this is the first release;
+   - top-level files or folders are not in trunk yet (marked **New**).
+
+   Editing the rules updates both lists as you type. Saving writes
+   `.distignore` to the plugin folder, so commit it. When a pre-build
+   command creates the package root, that command decides the files and
+   the rules are not editable here.
+3. The package root is walked with the exclusion rules. `.distignore` is
+   used if present. Otherwise the built-in rules apply: every hidden file and
+   folder (`.*`), `node_modules`, `tests`, `/docs`, `/bin`, `/build`,
+   `/dist`, and developer files such as `composer.json`, `package.json`,
+   `phpunit.xml` and `README.md`. `/build` and `/dist` are kept when the
+   plugin's PHP or `block.json` loads files from them. The hard-excluded
+   list always applies: `.git`, `.svn`, `.hg`, `.svnpush.json`,
+   `.distignore`, archives, `.DS_Store` and `Thumbs.db`. The tree is
    staged to `<app-data>/svnpush/builds/<slug>/<version>/<slug>/`, and a
    deterministic zip is built with its SHA-256 checksum. Only the last three
    versions are kept.
-3. V10 to V13 run against the staged files and the zip.
+4. V10 to V13 run against the staged files and the zip.
 
 ## 6. Preview SVN
 

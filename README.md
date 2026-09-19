@@ -99,6 +99,27 @@ Open **Project settings** on the project page to set:
 A team can commit the same settings as `.svnpush.json` in the plugin folder.
 That file is never packaged.
 
+## Which files are released
+
+Your git repository can keep everything: docs, tests, guides. Only the plugin
+itself goes to WordPress.org, decided by a `.distignore` file in the plugin
+folder. It uses the same format as `.gitignore`, and is the WordPress
+standard also used by WP-CLI and the 10up deploy action.
+
+- **No `.distignore` yet?** On the next release, SVNpush pauses at Build and
+  proposes one. It leaves out every hidden file and folder (`.git`,
+  `.github`, `.agent`, `.env` …), `docs/`, `tests/`, `node_modules/` and
+  developer files like `composer.json` and `package.json`. You see exactly
+  what will be released and what is left out, edit the rules if needed, and
+  save. Commit the new `.distignore` with your plugin.
+- **First release, or new top-level files or folders?** The same check
+  appears, with new items marked, so nothing unexpected is published.
+- **Secret files are never released.** A `.env` file, a private key or
+  `wp-config.php` in the package stops the release (check V11), whatever the
+  rules say.
+- **Preview SVN** lists every file that will be added, changed or deleted
+  before you click Publish.
+
 ## Privacy and security
 
 - The SVN password and API keys live only in the OS keychain. They never

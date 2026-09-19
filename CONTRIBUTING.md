@@ -31,7 +31,7 @@ npm test
 The SVN integration suites need `svn` and `svnadmin` on `PATH`:
 
 ```bash
-cargo test -p svnpush-core --features svn-integration --test svn_integration --test run_integration
+cargo test -p svnpush-core --features svn-integration --test svn_integration --test run_integration --test run_features
 ```
 
 TypeScript DTO types are generated from the Rust types with `ts-rs`

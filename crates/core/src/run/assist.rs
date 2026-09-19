@@ -386,7 +386,10 @@ impl Run {
                         next = self.generate_draft(record, facts, material, suggested).await?;
                     }
                 },
-                Decision::ApplyFixes { .. } | Decision::Stop | Decision::Publish { .. } => {}
+                Decision::ApplyFixes { .. }
+                | Decision::Stop
+                | Decision::Publish { .. }
+                | Decision::ConfirmFiles { .. } => {}
             }
         }
     }

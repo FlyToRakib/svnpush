@@ -78,21 +78,44 @@ fn relative(root: &Path, path: &Path) -> Result<String, PackageError> {
     Ok(joined)
 }
 
+/// At most this many left-out paths are reported; the rest are counted.
+pub const MAX_EXCLUDED_LISTED: usize = 2000;
+
+/// What the rules keep and what they leave out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Split {
+    /// The files that will be packaged.
+    pub listing: Listing,
+    /// Left-out paths relative to the root; a left-out folder is listed once
+    /// with a trailing `/`. At most [`MAX_EXCLUDED_LISTED`].
+    pub excluded: Vec<String>,
+    /// How many left-out paths there are in total.
+    pub excluded_total: usize,
+}
+
 /// Lists every file under `root` that the exclusion rules keep.
 ///
 /// Symbolic links are followed and their targets listed as files; a loop is
 /// an error. Empty folders produce nothing.
 pub fn list(root: &Path, exclusions: &Exclusions) -> Result<Listing, PackageError> {
+    split(root, exclusions).map(|s| s.listing)
+}
+
+fn lossy_relative(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace('\\', "/")
+}
+
+/// Walks `root` once, sorting every entry into kept files and left-out
+/// paths. A left-out folder is not entered.
+pub fn split(root: &Path, exclusions: &Exclusions) -> Result<Split, PackageError> {
     let mut files = Vec::new();
     let mut long_paths = Vec::new();
-    let walker = walkdir::WalkDir::new(root)
-        .follow_links(true)
-        .min_depth(1)
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(|e| !exclusions.is_excluded(e.path(), e.file_type().is_dir()));
+    let mut excluded = Vec::new();
+    let mut excluded_total = 0;
+    let mut walker =
+        walkdir::WalkDir::new(root).follow_links(true).min_depth(1).sort_by_file_name().into_iter();
 
-    for entry in walker {
+    while let Some(entry) = walker.next() {
         let entry = entry.map_err(|err| {
             let path =
                 err.path().map_or_else(|| root.display().to_string(), |p| p.display().to_string());
@@ -104,6 +127,18 @@ pub fn list(root: &Path, exclusions: &Exclusions) -> Result<Listing, PackageErro
                 PackageError::Io { action: "read", path, source }
             }
         })?;
+        let is_dir = entry.file_type().is_dir();
+        if exclusions.is_excluded(entry.path(), is_dir) {
+            excluded_total += 1;
+            if excluded.len() < MAX_EXCLUDED_LISTED {
+                let rel = lossy_relative(root, entry.path());
+                excluded.push(if is_dir { format!("{rel}/") } else { rel });
+            }
+            if is_dir {
+                walker.skip_current_dir();
+            }
+            continue;
+        }
         if !entry.file_type().is_file() {
             continue;
         }
@@ -127,11 +162,15 @@ pub fn list(root: &Path, exclusions: &Exclusions) -> Result<Listing, PackageErro
     }
     files.sort_by(|a, b| a.rel.cmp(&b.rel));
 
-    Ok(Listing {
-        root: root.display().to_string(),
-        files,
-        exclusion_source: exclusions.source(),
-        long_paths,
+    Ok(Split {
+        listing: Listing {
+            root: root.display().to_string(),
+            files,
+            exclusion_source: exclusions.source(),
+            long_paths,
+        },
+        excluded,
+        excluded_total,
     })
 }
 
@@ -164,6 +203,24 @@ mod tests {
         let rels: Vec<&str> = listing.files.iter().map(|f| f.rel.as_str()).collect();
         assert_eq!(rels, ["includes/a.php", "includes/b.php", "plugin.php"]);
         assert_eq!(listing.files[0].size, 2);
+    }
+
+    #[test]
+    fn split_reports_left_out_folders_once_and_files_individually() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir_all(root.join(".agent/notes")).unwrap();
+        std::fs::create_dir_all(root.join("docs")).unwrap();
+        std::fs::write(root.join(".agent/notes/a.md"), "a").unwrap();
+        std::fs::write(root.join("docs/guide.md"), "g").unwrap();
+        std::fs::write(root.join("README.md"), "r").unwrap();
+        std::fs::write(root.join("plugin.php"), "<?php").unwrap();
+        let ex = Exclusions::load(root, &[]).unwrap();
+        let result = split(root, &ex).unwrap();
+        let kept: Vec<&str> = result.listing.files.iter().map(|f| f.rel.as_str()).collect();
+        assert_eq!(kept, ["plugin.php"]);
+        assert_eq!(result.excluded, [".agent/", "README.md", "docs/"]);
+        assert_eq!(result.excluded_total, 3);
     }
 
     #[cfg(unix)]

@@ -265,3 +265,29 @@
   font-size: var(--text-md);
   margin: 0;
 }
+
+/* Step 5 file check */
+.file-review__heading {
+  font-size: var(--text-md);
+  margin: 0;
+}
+
+.file-review__list {
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius);
+  list-style: none;
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
+}
+
+.file-review__list li + li {
+  margin-top: var(--space-1);
+}
+
+.pill--new {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-ink);
+  margin-left: var(--space-2);
+}

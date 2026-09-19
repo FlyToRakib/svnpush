@@ -11,6 +11,7 @@ use crate::verify::CheckResult;
 
 use super::ai_view::{DraftAi, Explanation};
 use super::changes::ChangeSet;
+use super::files::FileReview;
 
 /// The seven protocol steps, in order (plan §5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
@@ -108,6 +109,8 @@ pub enum Phase {
     AwaitingFixes,
     /// Step 5.
     Building,
+    /// Step 5, waiting for the developer to check the files to release.
+    AwaitingFileReview,
     /// Step 6.
     Previewing,
     /// Step 7, waiting for the Publish confirmation.
@@ -304,6 +307,12 @@ pub enum Decision {
     },
     /// Step 4: stop with the failed checks.
     Stop,
+    /// Step 5: the files to release are right. `distignore` is the text to
+    /// save as `.distignore`; `None` keeps the file as it is.
+    ConfirmFiles {
+        /// The `.distignore` text.
+        distignore: Option<String>,
+    },
     /// Step 7: commit and tag with these messages.
     Publish {
         /// Trunk commit message.
@@ -347,6 +356,8 @@ pub struct RunState {
     pub draft_ai: Option<DraftAi>,
     /// Step 4's explanation of failed checks.
     pub explanation: Option<Explanation>,
+    /// Step 5's file check, when it was needed.
+    pub file_review: Option<FileReview>,
     /// Step 4 (and Build's V10–V13) results.
     pub checks: Vec<CheckResult>,
     /// Step 5 result.
@@ -383,6 +394,7 @@ impl RunState {
             diffs: Vec::new(),
             draft_ai: None,
             explanation: None,
+            file_review: None,
             checks: Vec::new(),
             package: None,
             preview: None,

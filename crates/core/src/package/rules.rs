@@ -10,57 +10,55 @@ use ts_rs::TS;
 use super::PackageError;
 use crate::detect::DISTIGNORE_FILE;
 
-/// Built-in exclusions, used only when the package root has no `.distignore` (plan §7.2).
+/// Built-in exclusions, used only when the package root has no `.distignore`
+/// (plan §7.2, extended: every hidden file and folder, documentation and
+/// more tool files). `/build` and `/dist` are dropped for a plugin whose code
+/// loads them (see `suggest`).
 pub const DEFAULT_EXCLUDES: &[&str] = &[
-    ".git",
-    ".github",
-    ".gitignore",
-    ".gitattributes",
-    ".gitlab-ci.yml",
-    ".svn",
-    ".svnpush.json",
-    ".distignore",
-    ".editorconfig",
+    ".*",
     "node_modules",
     "tests",
     "test",
+    "/docs",
+    "/bin",
+    "/release",
+    "/build",
+    "/dist",
+    "/coverage",
+    "composer.json",
+    "composer.lock",
+    "package.json",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
     "phpunit.xml",
     "phpunit.xml.dist",
     "phpcs.xml",
     "phpcs.xml.dist",
     "phpstan.neon",
     "phpstan.neon.dist",
-    "composer.json",
-    "composer.lock",
-    "package.json",
-    "package-lock.json",
-    "yarn.lock",
+    "psalm.xml",
+    "rector.php",
     "webpack.config.js",
     "vite.config.*",
     "tsconfig.json",
-    ".babelrc",
-    ".eslintrc*",
-    ".prettierrc*",
+    "babel.config.*",
+    "jest.config.*",
+    "Gruntfile.js",
+    "gulpfile.js",
+    "Makefile",
     "docker-compose.yml",
     "Dockerfile",
-    ".docker",
-    ".wordpress-org",
     "README.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
-    ".DS_Store",
+    "CODE_OF_CONDUCT.md",
     "Thumbs.db",
     "*.log",
     "*.zip",
+    "*.tar.gz",
     "*.map",
-    ".phpunit.result.cache",
-    "/release",
-    "/build",
-    "/dist",
-    "/coverage",
-    "/.idea",
-    "/.vscode",
     "*.swp",
 ];
 
@@ -121,12 +119,28 @@ impl Exclusions {
             }
             (builder.build().map_err(|e| bad(&e))?, ExclusionSource::Distignore)
         } else {
-            (compile(root, DEFAULT_EXCLUDES, false)?, ExclusionSource::Defaults)
+            let lines = super::suggest::default_rules(root);
+            (compile(root, &lines, false)?, ExclusionSource::Defaults)
         };
         Ok(Self {
             rules,
             hard: compile(root, HARD_EXCLUDES, true)?,
             source,
+            excluded_dirs: excluded_dirs.to_vec(),
+        })
+    }
+
+    /// Rules from `.distignore` text that is not saved yet, for previewing an edit.
+    pub fn from_text(
+        root: &Path,
+        text: &str,
+        excluded_dirs: &[PathBuf],
+    ) -> Result<Self, PackageError> {
+        let lines: Vec<&str> = text.lines().collect();
+        Ok(Self {
+            rules: compile(root, &lines, false)?,
+            hard: compile(root, HARD_EXCLUDES, true)?,
+            source: ExclusionSource::Distignore,
             excluded_dirs: excluded_dirs.to_vec(),
         })
     }
@@ -212,6 +226,10 @@ mod tests {
         assert!(ex.is_excluded(&root.join("src/tests"), true));
         assert!(ex.is_excluded(&root.join("vite.config.ts"), false));
         assert!(ex.is_excluded(&root.join("build"), true));
+        assert!(ex.is_excluded(&root.join(".agent"), true));
+        assert!(ex.is_excluded(&root.join("config/.env.local"), false));
+        assert!(ex.is_excluded(&root.join("docs"), true));
+        assert!(!ex.is_excluded(&root.join("includes/docs"), true));
         assert!(!ex.is_excluded(&root.join("assets/build"), true));
         assert!(!ex.is_excluded(&root.join("vendor"), true));
         assert!(!ex.is_excluded(&root.join("plugin.php"), false));
@@ -231,6 +249,23 @@ mod tests {
         assert!(ex.is_excluded(&root.join("sub/backup.ZIP"), false));
         assert!(ex.is_excluded(&root.join("x.tar.gz"), false));
         assert!(ex.is_excluded(&root.join(".distignore"), false));
+    }
+
+    #[test]
+    fn unsaved_text_previews_like_a_distignore() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let ex = Exclusions::from_text(
+            root,
+            "# comment
+/docs
+",
+            &[],
+        )
+        .unwrap();
+        assert!(ex.is_excluded(&root.join("docs"), true));
+        assert!(!ex.is_excluded(&root.join(".agent"), true), "only what the text says");
+        assert!(ex.is_excluded(&root.join(".git"), true), "hard excludes still apply");
     }
 
     #[test]

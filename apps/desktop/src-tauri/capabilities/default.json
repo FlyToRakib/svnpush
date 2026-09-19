@@ -23,6 +23,8 @@
     "allow-current-run",
     "allow-approve-draft",
     "allow-ai-decision",
+    "allow-preview-release-files",
+    "allow-confirm-release-files",
     "allow-confirm-publish",
     "allow-cancel-run",
     "allow-resume-run",

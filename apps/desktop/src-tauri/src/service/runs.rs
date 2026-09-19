@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use svnpush_core::package::Exclusions;
 use svnpush_core::report::NullReporter;
+use svnpush_core::run::files::FilePreview;
 use svnpush_core::run::{
     self, Decision, ErrorView, Phase, ReleaseDraft, Run, RunInputs, RunJournal, RunObserver,
     RunState, journal,
@@ -129,6 +131,50 @@ pub async fn approve(app: &AppState, path: &str, draft: ReleaseDraft) -> Result<
         ));
     }
     control.decisions.send(Decision::Approve { draft }).await.map_err(|_| no_run(path))
+}
+
+/// What `distignore` would release from the project's package root, for the
+/// Step 5 file check while the developer edits the rules.
+pub async fn preview_files(
+    app: &AppState,
+    path: &str,
+    distignore: &str,
+) -> Result<FilePreview, ErrorView> {
+    let project = projects::load(app, path).await?;
+    let root = project.package_root();
+    if !root.is_dir() {
+        return Err(ErrorView::new(
+            "PACKAGE_ROOT_MISSING",
+            format!("The package root {} does not exist.", root.display()),
+            Some("Check the package root in project settings.".to_owned()),
+        ));
+    }
+    run::files::preview(&root, distignore, &[app.paths.builds()])
+        .map_err(|e| ErrorView::from_coded(&e))
+}
+
+/// Step 5: the files to release are right. `distignore`, when given, is saved
+/// as the project's `.distignore` first.
+pub async fn confirm_files(
+    app: &AppState,
+    path: &str,
+    distignore: Option<String>,
+) -> Result<(), ErrorView> {
+    if let Some(text) = &distignore {
+        let project = projects::load(app, path).await?;
+        Exclusions::from_text(&project.package_root(), text, &[])
+            .map_err(|e| ErrorView::from_coded(&e))?;
+    }
+    let control = control(app, path)?;
+    let waiting = app.runs().get(path).is_some_and(|s| s.state.phase == Phase::AwaitingFileReview);
+    if !waiting {
+        return Err(ErrorView::new(
+            "RUN_NOT_WAITING",
+            "The release is not waiting for the file check.",
+            None,
+        ));
+    }
+    control.decisions.send(Decision::ConfirmFiles { distignore }).await.map_err(|_| no_run(path))
 }
 
 /// Step 2 and Step 4 AI actions: generate (or Change provider), accept the

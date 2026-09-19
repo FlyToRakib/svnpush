@@ -34,6 +34,7 @@ export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
     approve: useRunStore((s) => s.approve),
     publish: useRunStore((s) => s.publish),
     decide: useRunStore((s) => s.decide),
+    confirmFiles: useRunStore((s) => s.confirmFiles),
     cancel: useRunStore((s) => s.cancel),
     resume: useRunStore((s) => s.resume),
     discard: useRunStore((s) => s.discard),
@@ -232,6 +233,9 @@ export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
             void runs.decide(path, decision);
           }}
           onOpenProviders={onOpenProviders}
+          onConfirmFiles={(distignore) => {
+            void runs.confirmFiles(path, distignore);
+          }}
         />
       )}
 

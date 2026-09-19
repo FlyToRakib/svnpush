@@ -121,7 +121,9 @@ impl Run {
                         task.privacy = None;
                     }
                 }
-                Decision::Approve { .. } | Decision::Publish { .. } => {}
+                Decision::Approve { .. }
+                | Decision::Publish { .. }
+                | Decision::ConfirmFiles { .. } => {}
             }
         }
     }

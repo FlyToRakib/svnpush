@@ -4,6 +4,9 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Before a release, SVNpush shows which files will go to WordPress.org and which are left out. If your plugin has no .distignore, it proposes one for you to edit and save. It also asks on the first release and when new files or folders appear.
+- Hidden files and folders, docs/, bin/ and more developer files are now left out by default. A build/ or dist/ folder your plugin loads is kept.
+- Files that hold secrets (.env, private keys, wp-config.php) can never be released.
 - Plugins that live in a subfolder of a larger git repository now list their changes correctly.
 - Update assets: sync and commit only your banners, icons and screenshots, with the same preview and confirmation and no version change.
 - The AI data notice now appears inline in the step instead of a dialog, and takes keyboard focus.

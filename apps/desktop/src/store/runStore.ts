@@ -31,6 +31,7 @@ interface RunStore {
   approve: (path: string, draft: ReleaseDraft) => Promise<boolean>;
   publish: (path: string, trunkMessage: string, tagMessage: string) => Promise<boolean>;
   decide: (path: string, decision: Decision) => Promise<boolean>;
+  confirmFiles: (path: string, distignore: string | null) => Promise<boolean>;
   cancel: (path: string) => Promise<void>;
   resume: (path: string, runId: string) => Promise<void>;
   discard: (path: string, runId: string) => Promise<void>;
@@ -112,6 +113,9 @@ export const useRunStore = create<RunStore>((set, get) => {
       attempt(path, () => commands.confirmPublish(path, trunkMessage, tagMessage)),
 
     decide: (path, decision) => attempt(path, () => commands.aiDecision(path, decision)),
+
+    confirmFiles: (path, distignore) =>
+      attempt(path, () => commands.confirmReleaseFiles(path, distignore)),
 
     cancel: async (path) => {
       await attempt(path, () => commands.cancelRun(path));

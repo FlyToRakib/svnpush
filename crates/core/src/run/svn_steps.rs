@@ -94,6 +94,7 @@ impl Run {
             ));
         }
         let builds = self.inputs.paths.builds();
+        self.review_files(&package_root, &builds).await?;
         let listing = package::list(
             &package_root,
             &Exclusions::load(&package_root, std::slice::from_ref(&builds))?,

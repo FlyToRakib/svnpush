@@ -2,6 +2,7 @@ import type { AdapterInfo } from "./bindings/AdapterInfo";
 import type { AppSettings } from "./bindings/AppSettings";
 import type { Decision } from "./bindings/Decision";
 import type { DoctorReport } from "./bindings/DoctorReport";
+import type { FilePreview } from "./bindings/FilePreview";
 import type { Fleet } from "./bindings/Fleet";
 import type { FolderInspection } from "./bindings/FolderInspection";
 import type { ModelList } from "./bindings/ModelList";
@@ -32,6 +33,10 @@ export const commands = {
   currentRun: (path: string) => call<RunState | null>("current_run", { path }),
   approveDraft: (path: string, draft: ReleaseDraft) => call<null>("approve_draft", { path, draft }),
   aiDecision: (path: string, decision: Decision) => call<null>("ai_decision", { path, decision }),
+  previewReleaseFiles: (path: string, distignore: string) =>
+    call<FilePreview>("preview_release_files", { path, distignore }),
+  confirmReleaseFiles: (path: string, distignore: string | null) =>
+    call<null>("confirm_release_files", { path, distignore }),
   confirmPublish: (path: string, trunkMessage: string, tagMessage: string) =>
     call<null>("confirm_publish", { path, trunkMessage, tagMessage }),
   cancelRun: (path: string) => call<null>("cancel_run", { path }),

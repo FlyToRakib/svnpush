@@ -69,6 +69,7 @@ export function runState(
     draft: null,
     draft_ai: null,
     explanation: null,
+    file_review: null,
     diffs: [],
     checks: [],
     package: null,

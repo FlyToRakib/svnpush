@@ -8,6 +8,7 @@ pub mod changes;
 mod draft;
 mod engine;
 mod explain;
+pub mod files;
 mod hook;
 pub mod journal;
 mod lock;

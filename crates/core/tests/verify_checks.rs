@@ -298,6 +298,27 @@ fn v11_fails_on_a_forbidden_path() {
 }
 
 #[test]
+fn v11_fails_on_files_that_hold_secrets() {
+    for secret in [
+        ".env",
+        "config/.env.production",
+        "certs/site.PEM",
+        "deploy.key",
+        "wp-config.php",
+        "keys/id_rsa",
+    ] {
+        let mut case = Case::passing();
+        case.files.push((secret.into(), 10));
+        let r = assert_fails(&case, "V11");
+        assert_eq!(r.paths, [secret]);
+    }
+    let mut case = Case::passing();
+    case.files.push(("includes/class-keyring.php".into(), 10));
+    case.files.push(("assets/environment.js".into(), 10));
+    assert_eq!(case.status("V11").status, CheckStatus::Pass);
+}
+
+#[test]
 fn v12_fails_on_executables_and_phar_unless_allowed() {
     let mut case = Case::passing();
     case.files.push(("bin/tool.phar".into(), 10));

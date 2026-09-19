@@ -12,6 +12,8 @@ fn main() {
         "current_run",
         "approve_draft",
         "ai_decision",
+        "preview_release_files",
+        "confirm_release_files",
         "confirm_publish",
         "cancel_run",
         "resume_run",

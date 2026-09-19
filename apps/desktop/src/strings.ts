@@ -103,6 +103,7 @@ export const S = {
       Verifying: "Verifying",
       AwaitingFixes: "Waiting for fixes",
       Building: "Building",
+      AwaitingFileReview: "Waiting for you to check the files",
       Previewing: "Preparing the SVN preview",
       AwaitingPublish: "Waiting for your confirmation",
       Publishing: "Publishing",
@@ -247,6 +248,31 @@ export const S = {
     checksum: "SHA-256",
     reveal: "Show zip",
     copyPath: "Copy zip path",
+  },
+  files: {
+    title: "Check the files to release",
+    reason: {
+      NoDistignore:
+        "Your plugin has no .distignore yet. SVNpush suggests one below: hidden files and developer-only files are left out.",
+      FirstRelease: "This is the first release, so every file below goes to WordPress.org.",
+      NewItems:
+        "Some files or folders were not in the last release. Check they belong in the plugin.",
+    },
+    summary: (count: number, size: string, left: number) =>
+      `${String(count)} file(s), ${size}, will be released · ${String(left)} left out`,
+    released: "Will be released",
+    leftOut: "Left out",
+    fileCount: (count: number) => `${String(count)} file(s)`,
+    more: (count: number) => `and ${String(count)} more`,
+    newBadge: "New",
+    rules: "Rules (.distignore)",
+    rulesHint:
+      "One pattern per line, like .gitignore. A leading / means the plugin folder; lines starting with # are notes. Saved in your plugin folder: commit it with your code.",
+    builtByCommand:
+      "These files come from your pre-build command, so change that command to change them.",
+    updating: "Updating the list…",
+    save: "Save .distignore and continue",
+    confirm: "The files are right, continue",
   },
   preview: {
     trunk: "trunk/",

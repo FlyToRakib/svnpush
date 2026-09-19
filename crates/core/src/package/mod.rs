@@ -3,6 +3,7 @@
 mod archive;
 pub mod rules;
 mod stage;
+pub mod suggest;
 mod walk;
 
 use std::path::{Path, PathBuf};
@@ -15,7 +16,8 @@ use crate::error::Coded;
 pub use archive::{sha256_file, write_zip, zip_entry_names};
 pub use rules::{DEFAULT_EXCLUDES, ExclusionSource, Exclusions, HARD_EXCLUDES, gitignored};
 pub use stage::{hash_file, stage};
-pub use walk::{ListedFile, Listing, list};
+pub use suggest::suggested_distignore;
+pub use walk::{ListedFile, Listing, MAX_EXCLUDED_LISTED, Split, list, split};
 
 /// Paths longer than this warn: some Windows tooling still rejects them.
 pub const LONG_PATH_CHARS: usize = 260;

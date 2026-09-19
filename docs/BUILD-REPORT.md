@@ -54,7 +54,7 @@ npm test               # regenerates the ts-rs bindings first
 The SVN integration suites, which need `svn` and `svnadmin` on `PATH`:
 
 ```bash
-cargo test -p svnpush-core --features svn-integration --test svn_integration --test run_integration
+cargo test -p svnpush-core --features svn-integration --test svn_integration --test run_integration --test run_features
 ```
 
 ## Test results

@@ -12,6 +12,7 @@ import { DraftAiPanel } from "./DraftAiPanel";
 import { DraftForm } from "./DraftForm";
 import { ExplanationPanel } from "./ExplanationPanel";
 import { FileList } from "./FileList";
+import { FileReviewPanel } from "./FileReviewPanel";
 import { PublishPanel } from "./PublishPanel";
 import { StepCard } from "./StepCard";
 import { SvnPreviewView } from "./SvnPreviewView";
@@ -24,6 +25,7 @@ interface ChecklistProps {
   onPublish: (trunkMessage: string, tagMessage: string) => void;
   onDecide: (decision: Decision) => void;
   onOpenProviders: () => void;
+  onConfirmFiles: (distignore: string | null) => void;
 }
 
 /** The seven-step release checklist. Each card expands to its content. */
@@ -34,6 +36,7 @@ export function Checklist({
   onPublish,
   onDecide,
   onOpenProviders,
+  onConfirmFiles,
 }: ChecklistProps) {
   const [toggled, setToggled] = useState<Partial<Record<Step, boolean>>>({});
 
@@ -110,7 +113,17 @@ export function Checklist({
           )
         );
       case "Build":
-        return state.package && <FileList pkg={state.package} />;
+        return state.phase === "AwaitingFileReview" && state.file_review ? (
+          <FileReviewPanel
+            key={state.id}
+            projectPath={state.project_path}
+            review={state.file_review}
+            disabled={disabled}
+            onConfirm={onConfirmFiles}
+          />
+        ) : (
+          state.package && <FileList pkg={state.package} />
+        );
       case "Preview":
         return state.preview && <SvnPreviewView preview={state.preview} />;
       case "Publish":

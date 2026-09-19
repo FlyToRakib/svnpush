@@ -280,6 +280,17 @@ fn has_extension(rel: &str, extensions: &[&str]) -> bool {
     extensions.iter().any(|ext| lower.ends_with(ext))
 }
 
+/// A file that holds credentials: environment files, private keys, the
+/// WordPress configuration. It must never reach a public repository.
+pub fn looks_like_secret(rel: &str) -> bool {
+    let name = file_name(rel).to_ascii_lowercase();
+    name.starts_with(".env")
+        || name == "wp-config.php"
+        || name.starts_with("id_rsa")
+        || name.starts_with("id_ed25519")
+        || has_extension(&name, &[".pem", ".key", ".p12", ".pfx"])
+}
+
 fn v11(input: &VerifyInput<'_>) -> CheckResult {
     const NAMES: [&str; 7] =
         [".git", ".svn", ".hg", ".svnpush.json", ".distignore", ".ds_store", "thumbs.db"];
@@ -290,6 +301,7 @@ fn v11(input: &VerifyInput<'_>) -> CheckResult {
         .filter(|f| {
             f.rel.split('/').any(|part| NAMES.contains(&part.to_ascii_lowercase().as_str()))
                 || has_extension(f.rel, &[".zip", ".tar.gz"])
+                || looks_like_secret(f.rel)
         })
         .map(|f| f.rel.to_owned())
         .collect();
@@ -298,7 +310,7 @@ fn v11(input: &VerifyInput<'_>) -> CheckResult {
     } else {
         c.fail(
             format!("{} forbidden path(s) in the package.", offending.len()),
-            "These are always excluded; remove them from the package root.",
+            "These must never be published: version-control data, archives, or files that hold secrets such as .env, private keys or wp-config.php. Add them to .distignore.",
         )
         .with_paths(offending)
     }

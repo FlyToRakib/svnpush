@@ -7,6 +7,7 @@ use serde::Serialize;
 use svnpush_core::ai::provider::{Fleet, ModelList};
 use svnpush_core::ai::records::ProvidersFile;
 use svnpush_core::project::ProjectSettings;
+use svnpush_core::run::files::FilePreview;
 use svnpush_core::run::{Decision, ErrorView, ReleaseDraft, RunJournal, RunState};
 use svnpush_core::settings::AppSettings;
 use tauri::{AppHandle, State};
@@ -254,6 +255,24 @@ pub async fn approve_draft(
     draft: ReleaseDraft,
 ) -> Result<(), ErrorView> {
     runs::approve(&state, &path, draft).await
+}
+
+#[tauri::command]
+pub async fn preview_release_files(
+    state: Shared<'_>,
+    path: String,
+    distignore: String,
+) -> Result<FilePreview, ErrorView> {
+    runs::preview_files(&state, &path, &distignore).await
+}
+
+#[tauri::command]
+pub async fn confirm_release_files(
+    state: Shared<'_>,
+    path: String,
+    distignore: Option<String>,
+) -> Result<(), ErrorView> {
+    runs::confirm_files(&state, &path, distignore).await
 }
 
 #[tauri::command]

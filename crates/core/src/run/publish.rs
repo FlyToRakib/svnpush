@@ -57,7 +57,8 @@ pub(super) fn publish_messages(decision: Decision) -> Option<(String, String)> {
         | Decision::AcceptPrivacy { .. }
         | Decision::Manual
         | Decision::ApplyFixes { .. }
-        | Decision::Stop => None,
+        | Decision::Stop
+        | Decision::ConfirmFiles { .. } => None,
     }
 }
 
