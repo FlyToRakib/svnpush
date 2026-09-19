@@ -38,7 +38,7 @@ function open(state: RunState) {
   tauriMock.handle("list_projects", () => [summary()]);
   tauriMock.handle("provider_adapters", () => []);
   tauriMock.handle("list_providers", () => ({ schema: 1, providers: [], fallback: [] }));
-  render(<ReleaseScreen onOpenProviders={vi.fn()} />);
+  render(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
 }
 
 const confirmations = () =>

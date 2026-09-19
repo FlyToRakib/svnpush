@@ -15,7 +15,7 @@ function open(state = runState("AwaitingApproval", "Draft", { draft_context: DRA
   tauriMock.handle("list_projects", () => [summary()]);
   tauriMock.handle("provider_adapters", () => []);
   tauriMock.handle("list_providers", () => ({ schema: 1, providers: [], fallback: [] }));
-  return render(<ReleaseScreen onOpenProviders={vi.fn()} />);
+  return render(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
 }
 
 describe("ReleaseScreen", () => {
@@ -25,7 +25,7 @@ describe("ReleaseScreen", () => {
 
   it("shows what to do when no project is open", () => {
     useProjectStore.setState({ projects: [], selectedPath: null });
-    render(<ReleaseScreen onOpenProviders={vi.fn()} />);
+    render(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
     expect(screen.getByText("No project open")).toBeTruthy();
   });
 
@@ -103,7 +103,7 @@ describe("ReleaseScreen", () => {
     act(() => {
       useRunStore.getState().receiveState(PROJECT_PATH, { ...published, notices: ["again"] });
     });
-    view.rerender(<ReleaseScreen onOpenProviders={vi.fn()} />);
+    view.rerender(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
     expect(tauriMock.opened).toEqual(["https://wordpress.org/plugins/demo/"]);
   });
 

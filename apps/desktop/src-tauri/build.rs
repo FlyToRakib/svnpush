@@ -36,6 +36,8 @@ fn main() {
         "get_settings",
         "save_settings",
         "run_doctor",
+        "svn_install_plan",
+        "install_svn",
         "diagnostics",
         "check_update",
         "install_update",

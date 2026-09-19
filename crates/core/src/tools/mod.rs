@@ -1,5 +1,6 @@
 //! Finding `svn` and `git`, and gating on the Subversion version.
 
+pub mod install;
 pub mod process;
 
 use std::ffi::OsString;
@@ -73,11 +74,11 @@ fn known_git_locations() -> Vec<PathBuf> {
 /// Platform install instructions for Subversion.
 pub fn svn_install_instructions() -> &'static str {
     if cfg!(windows) {
-        "Install TortoiseSVN with the command-line tools, run choco install svn, or install SlikSVN."
+        "Open Help and click Install Subversion, or run: winget install --id Slik.Subversion --exact"
     } else if cfg!(target_os = "macos") {
-        "Run brew install subversion. Xcode no longer ships it."
+        "Open Help and click Install Subversion, or run: brew install subversion"
     } else {
-        "Run apt install subversion, or your distribution's equivalent."
+        "Run: sudo apt install subversion (or your distribution's equivalent), then open Help and click Check again."
     }
 }
 

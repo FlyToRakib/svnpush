@@ -31,6 +31,8 @@ pub struct AppSettings {
     pub wordpress_version_lookup: bool,
     /// Provider record ids whose data-sharing notice the developer has seen.
     pub privacy_notice_seen: Vec<String>,
+    /// Whether the first-launch setup guide has been shown.
+    pub setup_seen: bool,
 }
 
 impl Default for AppSettings {
@@ -41,6 +43,7 @@ impl Default for AppSettings {
             git_path: None,
             wordpress_version_lookup: true,
             privacy_notice_seen: Vec::new(),
+            setup_seen: false,
         }
     }
 }

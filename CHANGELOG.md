@@ -4,6 +4,8 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- New Help tab: a setup checklist (Subversion, SVN account, AI provider, your plugin), a short guide to how a release works, which files are released, and common problems. It opens by itself the first time you start SVNpush.
+- Install Subversion in one click from Help, through winget on Windows or Homebrew on macOS. The Linux packages install it automatically. If a release can't find Subversion, it offers Open Help.
 - Before a release, SVNpush shows which files will go to WordPress.org and which are left out. If your plugin has no .distignore, it proposes one for you to edit and save. It also asks on the first release and when new files or folders appear.
 - Hidden files and folders, docs/, bin/ and more developer files are now left out by default. A build/ or dist/ folder your plugin loads is kept.
 - Files that hold secrets (.env, private keys, wp-config.php) can never be released.

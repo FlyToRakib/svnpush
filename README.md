@@ -34,11 +34,12 @@ and nothing is committed until you click Publish.
 
 ## Requirements
 
-- **Subversion 1.10 or newer**
-  - Windows: TortoiseSVN with the command-line tools, `choco install svn`, or
-    SlikSVN
-  - macOS: `brew install subversion`
-  - Linux: `apt install subversion` or your distribution's equivalent
+- **Subversion 1.10 or newer.** You don't need to set it up in advance. On first
+  launch SVNpush opens **Help** with a setup checklist, and **Install
+  Subversion** installs it in one click: through winget on Windows, or
+  Homebrew on macOS. The Linux `.deb` and `.rpm` packages install it
+  automatically. To do it yourself: `winget install --id Slik.Subversion`,
+  `brew install subversion` or `sudo apt install subversion`.
 - **Git** (optional): changes are compared with your last git tag, and
   commit subjects feed the draft
 - A **WordPress.org plugin** you can commit to, and its **SVN password**
@@ -58,8 +59,9 @@ The 1.0 installers are not code-signed:
 
 ## Your first release
 
-1. **Settings → Run Doctor.** Confirm `svn` is found. Set its path if it is
-   not on `PATH`.
+1. **Help → Get ready.** Follow the checklist: Subversion, your SVN
+   account, an AI provider (optional) and your plugin. It opens by itself
+   the first time.
 2. **Vault → add your account.** Use host `plugins.svn.wordpress.org`, your
    WordPress.org username, and your **SVN password** from your WordPress.org
    profile (*Account & Security → Subversion password*), not your account

@@ -20,10 +20,11 @@ const NO_LOGS: never[] = [];
 
 interface ReleaseScreenProps {
   onOpenProviders: () => void;
+  onOpenHelp: () => void;
 }
 
 /** The project page: header, Release and Dry run, the checklist, the log and past releases. */
-export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
+export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProps) {
   const { projects, selectedPath, load: loadProjects, update, remove, select } = useProjectStore();
   const summary = projects.find((p) => p.project.path === selectedPath);
   const path = summary?.project.path ?? "";
@@ -194,6 +195,14 @@ export function ReleaseScreen({ onOpenProviders }: ReleaseScreenProps) {
       {run?.actionError && <ErrorNotice error={run.actionError} />}
       {localError && <ErrorNotice error={localError} />}
       {state?.error && <ErrorNotice error={state.error} />}
+      {(state?.error?.code === "TOOLS_SVN_UNAVAILABLE" ||
+        state?.checks.some((c) => c.id === "V14" && c.status === "Fail")) && (
+        <div className="row">
+          <button type="button" className="btn btn--primary" onClick={onOpenHelp}>
+            {S.release.openHelp}
+          </button>
+        </div>
+      )}
       {state?.error?.code === "SVN_WORKING_COPY" ||
       state?.error?.code === "SVN_OUT_OF_DATE" ||
       state?.checks.some((c) => c.id === "V15" && c.status === "Fail") ? (

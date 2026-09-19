@@ -10,6 +10,7 @@ use svnpush_core::project::ProjectSettings;
 use svnpush_core::run::files::FilePreview;
 use svnpush_core::run::{Decision, ErrorView, ReleaseDraft, RunJournal, RunState};
 use svnpush_core::settings::AppSettings;
+use svnpush_core::tools::install::{InstallOutcome, InstallPlan};
 use tauri::{AppHandle, State};
 use tauri_plugin_updater::UpdaterExt;
 use ts_rs::TS;
@@ -160,6 +161,16 @@ pub async fn save_settings(
 #[tauri::command]
 pub async fn run_doctor(state: Shared<'_>) -> Result<DoctorReport, ErrorView> {
     settings::doctor(&state).await
+}
+
+#[tauri::command]
+pub async fn svn_install_plan() -> Result<InstallPlan, ErrorView> {
+    Ok(settings::svn_install_plan())
+}
+
+#[tauri::command]
+pub async fn install_svn() -> Result<InstallOutcome, ErrorView> {
+    Ok(settings::install_svn().await)
 }
 
 #[tauri::command]

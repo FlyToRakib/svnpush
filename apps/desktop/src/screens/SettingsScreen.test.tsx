@@ -12,6 +12,7 @@ const SETTINGS = {
   git_path: null,
   wordpress_version_lookup: true,
   privacy_notice_seen: [],
+  setup_seen: true,
 };
 
 const DOCTOR = {

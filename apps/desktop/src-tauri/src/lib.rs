@@ -59,6 +59,8 @@ macro_rules! handlers {
             commands::get_settings,
             commands::save_settings,
             commands::run_doctor,
+            commands::svn_install_plan,
+            commands::install_svn,
             commands::diagnostics,
             commands::check_update,
             commands::install_update,

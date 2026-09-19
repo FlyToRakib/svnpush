@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { TitleBar } from "./components/TitleBar";
+import { commands } from "./ipc/commands";
+import { HelpScreen } from "./screens/HelpScreen";
 import { ProjectsScreen } from "./screens/ProjectsScreen";
 import { ProvidersScreen } from "./screens/ProvidersScreen";
 import { ReleaseScreen } from "./screens/ReleaseScreen";
@@ -12,6 +14,7 @@ import { useRunStore } from "./store/runStore";
 /** The application frame: title bar and the current screen. */
 export function App() {
   const [screen, setScreen] = useState<Screen>("projects");
+  const [welcome, setWelcome] = useState(false);
   const loadProjects = useProjectStore((s) => s.load);
   const selectProject = useProjectStore((s) => s.select);
   const listen = useRunStore((s) => s.listen);
@@ -20,6 +23,20 @@ export function App() {
     void listen();
     void loadProjects();
   }, [listen, loadProjects]);
+
+  // The first launch opens Help with the setup checklist, once.
+  useEffect(() => {
+    commands.getSettings().then(
+      (settings) => {
+        if (!settings.setup_seen) {
+          setWelcome(true);
+          setScreen("help");
+          void commands.saveSettings({ ...settings, setup_seen: true });
+        }
+      },
+      () => undefined,
+    );
+  }, []);
 
   const openProject = (path: string) => {
     selectProject(path);
@@ -36,6 +53,9 @@ export function App() {
             onOpenProviders={() => {
               setScreen("providers");
             }}
+            onOpenHelp={() => {
+              setScreen("help");
+            }}
           />
         );
       case "providers":
@@ -44,6 +64,8 @@ export function App() {
         return <VaultScreen />;
       case "settings":
         return <SettingsScreen />;
+      case "help":
+        return <HelpScreen welcome={welcome} onNavigate={setScreen} />;
     }
   };
 

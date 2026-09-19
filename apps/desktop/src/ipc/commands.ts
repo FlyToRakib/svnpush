@@ -5,6 +5,8 @@ import type { DoctorReport } from "./bindings/DoctorReport";
 import type { FilePreview } from "./bindings/FilePreview";
 import type { Fleet } from "./bindings/Fleet";
 import type { FolderInspection } from "./bindings/FolderInspection";
+import type { InstallOutcome } from "./bindings/InstallOutcome";
+import type { InstallPlan } from "./bindings/InstallPlan";
 import type { ModelList } from "./bindings/ModelList";
 import type { ProviderInput } from "./bindings/ProviderInput";
 import type { ProvidersFile } from "./bindings/ProvidersFile";
@@ -67,6 +69,8 @@ export const commands = {
   getSettings: () => call<AppSettings>("get_settings"),
   saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
   runDoctor: () => call<DoctorReport>("run_doctor"),
+  svnInstallPlan: () => call<InstallPlan>("svn_install_plan"),
+  installSvn: () => call<InstallOutcome>("install_svn"),
   diagnostics: () => call<string>("diagnostics"),
   checkUpdate: () => call<UpdateInfo>("check_update"),
   installUpdate: () => call<null>("install_update"),

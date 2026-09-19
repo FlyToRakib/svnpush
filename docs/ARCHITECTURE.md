@@ -120,8 +120,9 @@ mock server.
 
 ## UI (`apps/desktop/src`)
 
-- `screens/` holds the five screens: Projects, Release, Providers, Vault and
-  Settings. `components/` has one component per file.
+- `screens/` holds the six screens: Projects, Release, Providers, Vault,
+  Settings and Help. Help opens on first launch with the setup checklist.
+  `components/` has one component per file.
 - `store/` holds zustand stores for projects, runs and providers. The run
   store keeps the last `RunState` and up to 2,000 log lines per project, and
   contains no workflow logic.

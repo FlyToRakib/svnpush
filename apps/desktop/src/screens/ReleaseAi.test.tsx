@@ -50,7 +50,7 @@ function open(state: RunState, onOpenProviders = vi.fn()) {
   tauriMock.handle("list_projects", () => [summary()]);
   tauriMock.handle("provider_adapters", () => []);
   tauriMock.handle("list_providers", () => ({ schema: 1, providers: [], fallback: [] }));
-  render(<ReleaseScreen onOpenProviders={onOpenProviders} />);
+  render(<ReleaseScreen onOpenProviders={onOpenProviders} onOpenHelp={vi.fn()} />);
   return onOpenProviders;
 }
 

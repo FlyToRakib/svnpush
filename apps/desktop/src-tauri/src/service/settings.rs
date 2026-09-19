@@ -5,6 +5,7 @@ use std::path::Path;
 use serde::Serialize;
 use svnpush_core::run::ErrorView;
 use svnpush_core::settings::{self, AppSettings};
+use svnpush_core::tools::install::{InstallOutcome, InstallPlan};
 use svnpush_core::tools::{self, ToolReport};
 use svnpush_core::vault::Keychain;
 use ts_rs::TS;
@@ -65,6 +66,16 @@ pub async fn doctor(app: &AppState) -> Result<DoctorReport, ErrorView> {
         git: tools::discover_git(current.git_path.as_deref().map(Path::new)).await,
         keychain_problem: Keychain::status().err().map(|e| coded(&e)),
     })
+}
+
+/// How Subversion would be installed here, shown before the Install button runs.
+pub fn svn_install_plan() -> InstallPlan {
+    tools::install::install_plan()
+}
+
+/// Installs Subversion with the system package manager, when there is one.
+pub async fn install_svn() -> InstallOutcome {
+    tools::install::install_svn().await
 }
 
 /// A plain-text bundle for a bug report: version, platform, Doctor, settings

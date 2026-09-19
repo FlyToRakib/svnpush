@@ -2,7 +2,10 @@
  * Every user-visible string in SVNpush. Short, factual, second person.
  * Buttons are verbs. No exclamation marks.
  */
+import { HELP } from "./helpStrings";
+
 export const S = {
+  help: HELP,
   app: {
     name: "SVNpush",
   },
@@ -13,6 +16,7 @@ export const S = {
     providers: "Providers",
     vault: "Vault",
     settings: "Settings",
+    help: "Help",
   },
   theme: {
     label: "Theme",
@@ -94,6 +98,7 @@ export const S = {
     notices: "Notes",
     resetWorkingCopy: "Reset working copy",
     resetDone: "The working copy was checked out again.",
+    openHelp: "Open Help",
     phase: {
       Idle: "Starting",
       Detecting: "Detecting",

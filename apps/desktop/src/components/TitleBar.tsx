@@ -13,9 +13,10 @@ const LABELS: Record<Screen, string> = {
   providers: S.nav.providers,
   vault: S.nav.vault,
   settings: S.nav.settings,
+  help: S.nav.help,
 };
 
-/** App title, the five-screen navigation and the theme toggle. */
+/** App title, the navigation and the theme toggle. */
 export function TitleBar({ current, onNavigate }: TitleBarProps) {
   return (
     <header className="titlebar">

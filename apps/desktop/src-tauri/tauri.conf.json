@@ -48,7 +48,11 @@
     "category": "DeveloperTool",
     "shortDescription": "Publish WordPress.org plugin releases in one click.",
     "license": "MIT",
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "linux": {
+      "deb": { "depends": ["subversion"] },
+      "rpm": { "depends": ["subversion"] }
+    }
   },
   "plugins": {
     "updater": {

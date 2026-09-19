@@ -47,6 +47,8 @@
     "allow-get-settings",
     "allow-save-settings",
     "allow-run-doctor",
+    "allow-svn-install-plan",
+    "allow-install-svn",
     "allow-diagnostics",
     "allow-check-update",
     "allow-install-update"
