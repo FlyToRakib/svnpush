@@ -22,5 +22,6 @@ pub mod tools;
 pub mod vault;
 pub mod verify;
 pub mod version;
+pub mod wporg_assets;
 
 pub use error::Coded;

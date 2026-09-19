@@ -85,4 +85,45 @@ describe("Project tools", () => {
       path: PROJECT_PATH,
     });
   });
+
+  it("shows each image with its size and what WordPress.org needs, and creates the folder", async () => {
+    let exists = false;
+    tauriMock.handle("check_assets", () => ({
+      folder: "C:/plugins/demo/.wordpress-org",
+      exists,
+      files: exists
+        ? [
+            {
+              name: "banner-772x250.png",
+              kind: "Banner",
+              width: 800,
+              height: 300,
+              bytes: 2048,
+              problem: "It is 800×300 pixels; it must be exactly 772×250.",
+            },
+            {
+              name: "icon-256x256.png",
+              kind: "Icon",
+              width: 256,
+              height: 256,
+              bytes: 1024,
+              problem: null,
+            },
+          ]
+        : [],
+      suggestions: [],
+    }));
+    tauriMock.handle("create_assets_folder", () => {
+      exists = true;
+      return tauriMock.invoke("check_assets", { path: PROJECT_PATH });
+    });
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: "Create the folder" }));
+    expect(
+      await screen.findByText("It is 800×300 pixels; it must be exactly 772×250."),
+    ).toBeTruthy();
+    expect(screen.getByText("800 × 300")).toBeTruthy();
+    expect(screen.getAllByText("icon-256x256.png").length).toBeGreaterThan(0);
+  });
 });

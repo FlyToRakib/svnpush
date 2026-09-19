@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Checklist } from "../components/Checklist";
+import { AssetsCard } from "../components/AssetsCard";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { LogDrawer } from "../components/LogDrawer";
 import { Modal } from "../components/Modal";
@@ -251,6 +252,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
       )}
 
       <ReadmeCheckCard projectPath={path} disabled={active} />
+      <AssetsCard projectPath={path} disabled={active} />
       <PackageBuildCard projectPath={path} disabled={active} />
 
       <ProjectSettingsForm

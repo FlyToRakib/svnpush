@@ -53,6 +53,9 @@ export const HELP = {
     "Publish: you confirm, and SVNpush commits trunk, creates the tag and checks it is live.",
   ],
   tip: "Turn on Dry run to rehearse everything without publishing. Your files are restored afterwards.",
+  imagesTitle: "Plugin images (icon, banner, screenshots)",
+  images:
+    "Put your icon, banner and screenshots in the .wordpress-org folder inside your plugin. Every release uploads them to SVN assets/ (the place WordPress.org reads them from), and Update assets uploads only them. The project page checks their names and sizes.",
   filesTitle: "Which files are released",
   files:
     "Your git repository can keep docs, tests and notes. A .distignore file in your plugin folder decides what stays out of the release. If you have none, SVNpush suggests one at the Build step for you to check and save. Hidden files and folders are left out by default, and files that hold secrets are never released.",

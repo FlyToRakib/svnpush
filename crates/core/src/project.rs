@@ -207,6 +207,17 @@ impl Project {
         }
     }
 
+    /// Where the assets folder is or would be: the configured folder, or
+    /// `.wordpress-org` in the project folder. `None` when assets are turned off.
+    pub fn assets_folder_target(&self) -> Option<PathBuf> {
+        let base = PathBuf::from(&self.path);
+        match self.settings.assets_folder.as_deref() {
+            Some("") => None,
+            Some(folder) => Some(base.join(folder)),
+            None => Some(base.join(DEFAULT_ASSETS_FOLDER)),
+        }
+    }
+
     /// The public plugin page on WordPress.org.
     pub fn plugin_page(&self) -> String {
         format!("https://wordpress.org/plugins/{}/", self.slug)

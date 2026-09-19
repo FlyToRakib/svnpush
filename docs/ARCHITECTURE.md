@@ -43,12 +43,13 @@ a React app that renders the state the engine emits. The specification is
 | `version` | Version parsing and ordering, reading and writing every version source. |
 | `edit` | `EditSet`: composes edits to files and writes them once. |
 | `package` | Exclusion rules (`ignore` crate), staging, deterministic zip, SHA-256. |
-| `verify` | V01–V17 and W01–W11 as pure functions over a `VerifyInput`. |
+| `verify` | V01–V17 and W01–W12 as pure functions over a `VerifyInput`. |
 | `tools` | Finding `svn` and `git`, and running processes with cancellation and log streaming. |
 | `svn` | Sparse working copy, mirror sync, status XML, commit, tag, verification. Errors are classified by `E` codes. |
 | `vault` | `CredentialStore` over the OS keychain (`keyring`), SVN accounts, AI key names. |
 | `secret` | `Secret` (never printed, cloned or serialised) and `redact_secrets`. |
 | `project`, `settings` | App data paths, `projects.json`, `.svnpush.json` overlay, `settings.json`, WordPress version lookup. |
+| `wporg_assets` | The WordPress.org images in the assets folder: roles, pixel sizes read from PNG, JPEG and GIF headers, and the handbook's names, sizes and limits. |
 | `ai` | The AI layer (below). |
 | `run` | The release state machine (below). |
 | `report`, `clock`, `error`, `text` | Log lines, time, the `Coded` error trait, text helpers. |

@@ -13,6 +13,7 @@ use svnpush_core::run::files::FilePreview;
 use svnpush_core::run::{Decision, ErrorView, ReleaseDraft, RunJournal, RunState};
 use svnpush_core::settings::AppSettings;
 use svnpush_core::tools::install::{InstallOutcome, InstallPlan};
+use svnpush_core::wporg_assets::AssetReport;
 use tauri::{AppHandle, State};
 use tauri_plugin_updater::UpdaterExt;
 use ts_rs::TS;
@@ -292,6 +293,19 @@ pub async fn confirm_release_files(
 #[tauri::command]
 pub async fn check_readme(state: Shared<'_>, path: String) -> Result<ReadmeReport, ErrorView> {
     checks::check_readme(&state, &path).await
+}
+
+#[tauri::command]
+pub async fn check_assets(state: Shared<'_>, path: String) -> Result<AssetReport, ErrorView> {
+    checks::check_assets(&state, &path).await
+}
+
+#[tauri::command]
+pub async fn create_assets_folder(
+    state: Shared<'_>,
+    path: String,
+) -> Result<AssetReport, ErrorView> {
+    checks::create_assets_folder(&state, &path).await
 }
 
 #[tauri::command]

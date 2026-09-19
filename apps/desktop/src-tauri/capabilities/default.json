@@ -25,6 +25,8 @@
     "allow-ai-decision",
     "allow-check-readme",
     "allow-build-package",
+    "allow-check-assets",
+    "allow-create-assets-folder",
     "allow-preview-release-files",
     "allow-confirm-release-files",
     "allow-confirm-publish",

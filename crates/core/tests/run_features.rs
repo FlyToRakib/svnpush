@@ -133,7 +133,13 @@ async fn assets_only_release_commits_assets_without_a_tag() {
     assert_eq!(preview.assets.added, ["banner-772x250.png", "icon-128x128.png"]);
     assert!(preview.trunk.added.is_empty() && preview.tag_url.is_empty());
     let ids: Vec<&str> = waiting.checks.iter().map(|c| c.id.as_str()).collect();
-    assert_eq!(ids, ["V14", "V16", "W04", "V15"]);
+    assert_eq!(ids, ["V14", "V16", "W04", "W12", "V15"]);
+    let w12 = waiting.checks.iter().find(|c| c.id == "W12").unwrap();
+    assert!(
+        w12.message.contains("not a PNG, JPG or GIF"),
+        "fake images are flagged: {}",
+        w12.message
+    );
     for skipped in [run::Step::Draft, run::Step::Write, run::Step::Build] {
         let view = waiting.steps.iter().find(|s| s.step == skipped).unwrap();
         assert_eq!(view.status, run::StepStatus::Skipped);

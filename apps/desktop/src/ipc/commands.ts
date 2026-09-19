@@ -1,5 +1,6 @@
 import type { AdapterInfo } from "./bindings/AdapterInfo";
 import type { AppSettings } from "./bindings/AppSettings";
+import type { AssetReport } from "./bindings/AssetReport";
 import type { BuiltPackage } from "./bindings/BuiltPackage";
 import type { Decision } from "./bindings/Decision";
 import type { DoctorReport } from "./bindings/DoctorReport";
@@ -74,6 +75,8 @@ export const commands = {
   svnInstallPlan: () => call<InstallPlan>("svn_install_plan"),
   checkReadme: (path: string) => call<ReadmeReport>("check_readme", { path }),
   buildPackage: (path: string) => call<BuiltPackage>("build_package", { path }),
+  checkAssets: (path: string) => call<AssetReport>("check_assets", { path }),
+  createAssetsFolder: (path: string) => call<AssetReport>("create_assets_folder", { path }),
   installSvn: () => call<InstallOutcome>("install_svn"),
   diagnostics: () => call<string>("diagnostics"),
   checkUpdate: () => call<UpdateInfo>("check_update"),

@@ -17,6 +17,50 @@ export const TOOLS = {
     counts: (errors: number, warnings: number, notes: number) =>
       `${String(errors)} error(s), ${String(warnings)} warning(s), ${String(notes)} note(s)`,
   },
+  assets: {
+    title: "Plugin images (icon, banner, screenshots)",
+    intro:
+      "WordPress.org shows these on your plugin page. Keep them in this folder: every release uploads them to SVN assets/, and Update assets uploads only them. They are never part of the plugin zip.",
+    none: "There is no assets folder yet.",
+    create: "Create the folder",
+    open: "Open folder",
+    checkAgain: "Check again",
+    empty: "The folder is empty. Add your icon, banner and screenshots.",
+    ok: "OK",
+    columns: { file: "File", role: "What it is", pixels: "Size", status: "Status" },
+    role: {
+      Icon: "Icon",
+      IconSvg: "Icon (SVG)",
+      Banner: "Banner",
+      Screenshot: "Screenshot",
+      Blueprints: "Live preview",
+      Unknown: "Not used",
+    },
+    guideTitle: "Names and sizes WordPress.org expects",
+    guide: [
+      { name: "icon-128x128.png", size: "128 × 128", note: "Icon. PNG, JPG or GIF, up to 1 MB." },
+      { name: "icon-256x256.png", size: "256 × 256", note: "Icon for high-resolution screens." },
+      { name: "icon.svg", size: "any", note: "Optional. Needs the PNG icons as a fallback." },
+      { name: "banner-772x250.png", size: "772 × 250", note: "Banner. PNG or JPG, up to 4 MB." },
+      {
+        name: "banner-1544x500.png",
+        size: "1544 × 500",
+        note: "Banner for high-resolution screens.",
+      },
+      {
+        name: "banner-772x250-rtl.png",
+        size: "772 × 250",
+        note: "Optional. For right-to-left languages.",
+      },
+      {
+        name: "screenshot-1.png",
+        size: "any",
+        note: "PNG or JPG, up to 10 MB. One per line in the readme's == Screenshots ==: 1. matches screenshot-1.",
+      },
+    ],
+    guideNote:
+      "Names are lowercase. The folder is .wordpress-org, the name WordPress developers and tools such as the 10up deploy action use; you can choose another in Project settings → Assets folder.",
+  },
   build: {
     title: "Build package",
     intro:

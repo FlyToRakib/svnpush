@@ -132,6 +132,7 @@ do. No check can be switched off from the UI.
 | W09 | readme.txt has consistent line endings and no BOM |
 | W10 | vendor/ is not oversized |
 | W11 | readme.txt has no WordPress.org validator warnings |
+| W12 | WordPress.org images are named and sized correctly (icon, banner, screenshots) |
 
 Notes:
 

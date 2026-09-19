@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.
 - New Help tab: a setup checklist (Subversion, SVN account, AI provider, your plugin), a short guide to how a release works, which files are released, and common problems. It opens by itself the first time you start SVNpush.

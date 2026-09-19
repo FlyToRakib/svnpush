@@ -37,6 +37,8 @@ macro_rules! handlers {
             commands::ai_decision,
             commands::check_readme,
             commands::build_package,
+            commands::check_assets,
+            commands::create_assets_folder,
             commands::preview_release_files,
             commands::confirm_release_files,
             commands::confirm_publish,

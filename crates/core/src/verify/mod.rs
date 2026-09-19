@@ -12,6 +12,7 @@ use ts_rs::TS;
 use crate::detect::PluginFacts;
 
 pub use blocking::{MIN_SVN, svn_major_minor, v15 as working_copy_check};
+pub use warnings::assets_check;
 
 /// Whether a check can stop the release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]

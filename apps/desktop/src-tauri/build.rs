@@ -14,6 +14,8 @@ fn main() {
         "ai_decision",
         "check_readme",
         "build_package",
+        "check_assets",
+        "create_assets_folder",
         "preview_release_files",
         "confirm_release_files",
         "confirm_publish",

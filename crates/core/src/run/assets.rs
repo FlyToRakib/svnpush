@@ -6,6 +6,7 @@ use crate::edit;
 use crate::readme::README_FILE;
 use crate::svn::{self, Delta};
 use crate::verify::{self, VerifyInput, WorkingCopyState};
+use crate::wporg_assets;
 
 use super::RunFailure;
 use super::engine::Run;
@@ -72,6 +73,10 @@ impl Run {
         })
         .into_iter()
         .filter(|r| ASSETS_CHECKS.contains(&r.id.as_str()))
+        .chain([verify::assets_check(&wporg_assets::inspect(
+            self.inputs.project.assets_folder().as_deref(),
+            None,
+        ))])
         .collect();
         let blocked = verify::is_blocked(&results);
         self.state.checks = results;

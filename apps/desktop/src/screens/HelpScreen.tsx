@@ -1,3 +1,4 @@
+import { AssetGuide } from "../components/AssetGuide";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { SetupChecklist } from "../components/SetupChecklist";
 import type { Screen } from "./screen";
@@ -35,6 +36,15 @@ export function HelpScreen({ welcome, onNavigate }: HelpScreenProps) {
               ))}
             </ol>
             <p className="muted">{S.help.tip}</p>
+          </div>
+        </section>
+        <section className="card">
+          <div className="card__header">
+            <h2 className="card__title">{S.help.imagesTitle}</h2>
+          </div>
+          <div className="card__body stack">
+            <p className="prose">{S.help.images}</p>
+            <AssetGuide />
           </div>
         </section>
         <section className="card">

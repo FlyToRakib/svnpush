@@ -13,6 +13,7 @@ use crate::svn::SvnError;
 use crate::vault;
 use crate::verify::{self, CheckResult, CheckStatus, FileRef, VerifyInput, WorkingCopyState};
 use crate::version::{self, Version};
+use crate::wporg_assets;
 
 use crate::project::AiChoice;
 
@@ -349,6 +350,8 @@ impl Run {
             gitignored: &gitignored,
         });
         adjust(&mut results, package_ready, wc_error.as_ref());
+        let asset_folder = self.inputs.project.assets_folder();
+        results.push(verify::assets_check(&wporg_assets::inspect(asset_folder.as_deref(), None)));
         let blocked = verify::is_blocked(&results);
         let failed = results.iter().filter(|r| r.status == CheckStatus::Fail).count();
         self.state.checks = results;

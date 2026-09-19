@@ -14,8 +14,8 @@ and nothing is committed until you click Publish.
 - **Every version source in step.** The plugin header, the readme Stable tag,
   the changelog, the upgrade notice, and any extra locations you configure
   (a constant, `package.json`) are written together and shown as a diff.
-- **A real gate.** Seventeen blocking checks (V01–V17) and eleven warnings
-  (W01–W11), each with its fix. A failed blocking check stops the release.
+- **A real gate.** Seventeen blocking checks (V01–V17) and twelve warnings
+  (W01–W12), each with its fix. A failed blocking check stops the release.
 - **Readme validator built in.** `readme.txt` is checked with the same rules
   as the [WordPress.org readme validator](https://wordpress.org/plugins/developers/readme-validator/),
   instantly and offline, on every release and from **Check readme.txt** on
@@ -106,6 +106,24 @@ Open **Project settings** on the project page to set:
 
 A team can commit the same settings as `.svnpush.json` in the plugin folder.
 That file is never packaged.
+
+## Plugin images (icon, banner, screenshots)
+
+Keep them in the `.wordpress-org` folder of your plugin (or set another
+folder in Project settings). Every release uploads them to SVN `assets/`,
+where WordPress.org reads them, and **Update assets** uploads only them.
+They are never part of the plugin zip. The **Plugin images** card on the
+project page lists each file with its size and says what WordPress.org
+needs:
+
+| File | Size |
+|---|---|
+| `icon-128x128.png`, `icon-256x256.png` (or `icon.svg` plus the PNGs) | 128×128, 256×256 |
+| `banner-772x250.png`, `banner-1544x500.png` | 772×250, 1544×500 |
+| `screenshot-1.png`, `screenshot-2.png` … | any; one per `== Screenshots ==` caption |
+
+Names are lowercase, and PNG or JPG work for all of them (GIF also for
+icons). Wrong names or sizes are reported as warning W12.
 
 ## Which files are released
 

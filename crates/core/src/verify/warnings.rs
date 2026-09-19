@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use crate::readme::README_FILE;
 use crate::text;
 use crate::version::Version;
+use crate::wporg_assets::AssetReport;
 
 use super::{CheckResult, Severity, VerifyInput};
 
@@ -291,4 +292,26 @@ fn w11(input: &VerifyInput<'_>) -> CheckResult {
         )
         .with_paths(vec![README_FILE.to_owned()])
     }
+}
+
+/// W12, from an inspected assets folder. The run inspects the folder (which
+/// reads image files) and passes the report in, so this stays pure.
+pub fn assets_check(report: &AssetReport) -> CheckResult {
+    let c = check("W12", "WordPress.org images are named and sized correctly");
+    if !report.exists {
+        return c.skip("There is no assets folder.");
+    }
+    let bad: Vec<&crate::wporg_assets::AssetFile> = report.problems().collect();
+    if bad.is_empty() {
+        return c.pass(format!("{} file(s) checked.", report.files.len()));
+    }
+    let detail: Vec<String> = bad
+        .iter()
+        .map(|f| format!("{}: {}", f.name, f.problem.as_deref().unwrap_or_default()))
+        .collect();
+    c.fail(
+        detail.join(" "),
+        "Rename or resize these files. WordPress.org uses icon-128x128/icon-256x256, banner-772x250/banner-1544x500 and screenshot-N files in PNG or JPG.",
+    )
+    .with_paths(bad.iter().map(|f| f.name.clone()).collect())
 }
