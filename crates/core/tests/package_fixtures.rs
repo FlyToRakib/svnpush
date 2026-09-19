@@ -112,10 +112,10 @@ fn prune_keeps_the_newest_three_builds() {
 fn invalid_windows_names_are_reported_with_the_path() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("plugin.php"), "<?php").unwrap();
-    std::fs::create_dir_all(dir.path().join("docs")).unwrap();
-    std::fs::write(dir.path().join("docs/a:b.txt"), "x").unwrap();
+    std::fs::create_dir_all(dir.path().join("includes")).unwrap();
+    std::fs::write(dir.path().join("includes/a:b.txt"), "x").unwrap();
     let err = package::list(dir.path(), &Exclusions::load(dir.path(), &[]).unwrap()).unwrap_err();
     assert!(
-        matches!(err, package::PackageError::InvalidName { ref path, .. } if path == "docs/a:b.txt")
+        matches!(err, package::PackageError::InvalidName { ref path, .. } if path == "includes/a:b.txt")
     );
 }
