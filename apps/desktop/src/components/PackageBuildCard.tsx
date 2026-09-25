@@ -10,11 +10,13 @@ import { FileList } from "./FileList";
 
 interface PackageBuildCardProps {
   projectPath: string;
+  /** The version in the plugin files now, which is the version this builds. */
+  currentVersion: string | null;
   disabled: boolean;
 }
 
 /** Builds the release package without releasing, to inspect or test it. */
-export function PackageBuildCard({ projectPath, disabled }: PackageBuildCardProps) {
+export function PackageBuildCard({ projectPath, currentVersion, disabled }: PackageBuildCardProps) {
   const [built, setBuilt] = useState<BuiltPackage | null>(null);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<ErrorView | null>(null);
@@ -34,10 +36,12 @@ export function PackageBuildCard({ projectPath, disabled }: PackageBuildCardProp
   return (
     <section className="card">
       <div className="card__header">
-        <h2 className="card__title">{S.tools.build.title}</h2>
+        <h3 className="card__title">{S.tools.build.title}</h3>
       </div>
       <div className="card__body stack">
         <p className="muted">{S.tools.build.intro}</p>
+        {currentVersion && <p>{S.tools.build.current(currentVersion)}</p>}
+        <p className="muted">{S.tools.build.newVersionNote}</p>
         <div>
           <button
             type="button"
@@ -47,7 +51,11 @@ export function PackageBuildCard({ projectPath, disabled }: PackageBuildCardProp
               void build();
             }}
           >
-            {building ? S.tools.build.building : S.tools.build.build}
+            {building
+              ? S.tools.build.building
+              : built
+                ? S.tools.build.rebuild
+                : S.tools.build.build}
           </button>
         </div>
         {error && <ErrorNotice error={error} />}
@@ -56,7 +64,10 @@ export function PackageBuildCard({ projectPath, disabled }: PackageBuildCardProp
             {built.blocked ? (
               <p className="notice notice--error">{S.tools.build.blocked}</p>
             ) : (
-              <p className="notice notice--ok">{S.tools.build.ready(built.package.files.length)}</p>
+              <p className="notice notice--ok">
+                {S.tools.build.builtVersion(built.version)}.{" "}
+                {S.tools.build.ready(built.package.files.length)}
+              </p>
             )}
             {built.blocked && <CheckTable checks={built.checks} />}
             <FileList pkg={built.package} />

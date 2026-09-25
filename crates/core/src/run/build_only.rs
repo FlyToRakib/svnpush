@@ -23,6 +23,8 @@ use super::svn_steps::package_rows;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct BuiltPackage {
+    /// The version read from the plugin files, which names the zip.
+    pub version: String,
     /// The staged folder and zip.
     pub package: Package,
     /// V10–V13 against it.
@@ -78,7 +80,7 @@ pub async fn build_package(
     )?;
     let built = package::build(&listing, &builds, &project.slug, &version)?;
     let checks = package_rows(&facts, &version, &built, &project.settings)?;
-    Ok(BuiltPackage { blocked: verify::is_blocked(&checks), package: built, checks })
+    Ok(BuiltPackage { blocked: verify::is_blocked(&checks), version, package: built, checks })
 }
 
 #[cfg(test)]
@@ -112,6 +114,7 @@ mod tests {
             .unwrap();
         let files: Vec<&str> = built.package.files.iter().map(|f| f.rel.as_str()).collect();
         assert_eq!(files, ["minimal.php", "readme.txt"]);
+        assert!(built.package.zip_path.contains(&built.version), "the zip is named by the version");
         assert!(!built.blocked, "{:?}", built.checks);
         assert!(Path::new(&built.package.zip_path).is_file());
         assert!(!plugin.join("dist").exists(), "nothing is written into the plugin folder");

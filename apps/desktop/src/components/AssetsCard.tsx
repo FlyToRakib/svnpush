@@ -48,7 +48,7 @@ export function AssetsCard({ projectPath, disabled }: AssetsCardProps) {
   return (
     <section className="card">
       <div className="card__header">
-        <h2 className="card__title">{S.tools.assets.title}</h2>
+        <h3 className="card__title">{S.tools.assets.title}</h3>
       </div>
       <div className="card__body stack">
         <p className="muted">{S.tools.assets.intro}</p>

@@ -8,6 +8,7 @@ import { PastReleases } from "../components/PastReleases";
 import { PackageBuildCard } from "../components/PackageBuildCard";
 import { ProjectSettingsForm } from "../components/ProjectSettingsForm";
 import { ReadmeCheckCard } from "../components/ReadmeCheckCard";
+import { ReleaseGuide } from "../components/ReleaseGuide";
 import { ScreenHeader } from "../components/ScreenHeader";
 import { UnfinishedBanner } from "../components/UnfinishedBanner";
 import type { ErrorView } from "../ipc/bindings/ErrorView";
@@ -26,7 +27,10 @@ interface ReleaseScreenProps {
   onOpenHelp: () => void;
 }
 
-/** The project page: header, Release and Dry run, the checklist, the log and past releases. */
+/**
+ * The project page, in the order a release happens: the checks to run before
+ * releasing, the seven release steps, then the project's settings and history.
+ */
 export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProps) {
   const { projects, selectedPath, load: loadProjects, update, remove, select } = useProjectStore();
   const summary = projects.find((p) => p.project.path === selectedPath);
@@ -50,9 +54,24 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
   const [notice, setNotice] = useState<string | null>(null);
   const [localError, setLocalError] = useState<ErrorView | null>(null);
   const opened = useRef<string | null>(null);
+  const stepsRef = useRef<HTMLElement>(null);
+  // The checks are open between releases and folded during one, unless the
+  // developer toggled them while in that same state.
+  const [beforeToggle, setBeforeToggle] = useState<{ active: boolean; open: boolean } | null>(null);
 
   const state = run?.state ?? null;
   const active = isActive(state);
+  const showBefore = beforeToggle?.active === active ? beforeToggle.open : !active;
+  const setBeforeOpen = (open: boolean) => {
+    setBeforeToggle({ active, open });
+  };
+
+  // When a release starts, bring the release steps into view.
+  useEffect(() => {
+    if (active) {
+      stepsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [active]);
   const publishResult = state?.publish ?? null;
   const runId = state?.id ?? null;
   const phaseText = state
@@ -231,41 +250,87 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         </ul>
       )}
 
-      {state && (
-        <Checklist
-          state={state}
-          disabled={!active}
-          onApprove={(draft) => {
-            void runs.approve(path, draft);
-          }}
-          onPublish={(trunk, tag) => {
-            void runs.publish(path, trunk, tag);
-          }}
-          onDecide={(decision) => {
-            void runs.decide(path, decision);
-          }}
-          onOpenProviders={onOpenProviders}
-          onConfirmFiles={(distignore) => {
-            void runs.confirmFiles(path, distignore);
-          }}
-        />
+      {state?.phase === "DryRunComplete" && state.draft && (
+        <p className="notice notice--ok">
+          {S.tools.dryRunDone(state.draft.version, summary.version ?? "—")}
+        </p>
       )}
 
-      <ReadmeCheckCard projectPath={path} disabled={active} />
-      <AssetsCard projectPath={path} disabled={active} />
-      <PackageBuildCard projectPath={path} disabled={active} />
+      {!active && <ReleaseGuide />}
 
-      <ProjectSettingsForm
-        key={project.path}
-        project={project}
-        disabled={active}
-        onSave={(svnUrl, settings) => update(path, svnUrl, settings)}
-        onRemove={() => {
-          setRemoving(true);
-        }}
-      />
+      <section className="release__group" aria-labelledby="group-before">
+        <div className="release__group-header">
+          <h2 id="group-before" className="release__group-title">
+            {S.tools.groups.before}
+          </h2>
+          <button
+            type="button"
+            className="btn btn--sm btn--ghost"
+            aria-expanded={showBefore}
+            aria-controls="group-before-body"
+            onClick={() => {
+              setBeforeOpen(!showBefore);
+            }}
+          >
+            {showBefore ? S.tools.groups.hide : S.tools.groups.show}
+          </button>
+        </div>
+        {showBefore && (
+          <div id="group-before-body" className="release__group-body">
+            <p className="muted">{S.tools.groups.beforeHint}</p>
+            <ReadmeCheckCard projectPath={path} disabled={active} />
+            <AssetsCard projectPath={path} disabled={active} />
+            <PackageBuildCard
+              projectPath={path}
+              currentVersion={summary.version}
+              disabled={active}
+            />
+          </div>
+        )}
+      </section>
 
-      <PastReleases journals={history} />
+      <section className="release__group" aria-labelledby="group-steps" ref={stepsRef}>
+        <h2 id="group-steps" className="release__group-title">
+          {S.tools.groups.steps}
+        </h2>
+        {state ? (
+          <Checklist
+            state={state}
+            disabled={!active}
+            onApprove={(draft) => {
+              void runs.approve(path, draft);
+            }}
+            onPublish={(trunk, tag) => {
+              void runs.publish(path, trunk, tag);
+            }}
+            onDecide={(decision) => {
+              void runs.decide(path, decision);
+            }}
+            onOpenProviders={onOpenProviders}
+            onConfirmFiles={(distignore) => {
+              void runs.confirmFiles(path, distignore);
+            }}
+          />
+        ) : (
+          <p className="muted">{S.tools.groups.stepsEmpty}</p>
+        )}
+      </section>
+
+      <section className="release__group" aria-labelledby="group-project">
+        <h2 id="group-project" className="release__group-title">
+          {S.tools.groups.project}
+        </h2>
+        <ProjectSettingsForm
+          key={project.path}
+          project={project}
+          disabled={active}
+          onSave={(svnUrl, settings) => update(path, svnUrl, settings)}
+          onRemove={() => {
+            setRemoving(true);
+          }}
+        />
+        <PastReleases journals={history} />
+      </section>
 
       <LogDrawer logs={run?.logs ?? NO_LOGS} />
 

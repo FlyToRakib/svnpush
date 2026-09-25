@@ -11,7 +11,7 @@ export function PastReleases({ journals }: PastReleasesProps) {
   return (
     <section className="card">
       <div className="card__header">
-        <h2 className="card__title">{S.history.title}</h2>
+        <h3 className="card__title">{S.history.title}</h3>
       </div>
       <div className="card__body">
         {journals.length === 0 ? (

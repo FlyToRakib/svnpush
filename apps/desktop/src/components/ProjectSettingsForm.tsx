@@ -61,7 +61,7 @@ export function ProjectSettingsForm({
   return (
     <details className="card settings">
       <summary className="card__header card__summary">
-        <h2 className="card__title">{S.projectSettings.title}</h2>
+        <h3 className="card__title">{S.projectSettings.title}</h3>
       </summary>
       <form
         className="card__body stack"

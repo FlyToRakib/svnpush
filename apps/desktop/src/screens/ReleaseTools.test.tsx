@@ -64,6 +64,7 @@ describe("Project tools", () => {
 
   it("builds the package without releasing and shows the zip", async () => {
     tauriMock.handle("build_package", () => ({
+      version: "1.0.0",
       package: {
         root: "C:/app/builds/demo/1.0.0/demo",
         zip_path: "C:/app/builds/demo/1.0.0/demo.zip",
@@ -79,7 +80,10 @@ describe("Project tools", () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole("button", { name: "Build package" }));
-    expect(await screen.findByText(/Built 1 file\(s\). Nothing was published./)).toBeTruthy();
+    expect(
+      await screen.findByText(/Version 1.0.0. Built 1 file\(s\). Nothing was published./),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Build again" })).toBeTruthy();
     expect(screen.getByText("C:/app/builds/demo/1.0.0/demo.zip")).toBeTruthy();
     expect(tauriMock.calls.find((c) => c.command === "build_package")?.args).toEqual({
       path: PROJECT_PATH,

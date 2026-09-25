@@ -64,10 +64,42 @@ export const TOOLS = {
   build: {
     title: "Build package",
     intro:
-      "Builds exactly what a release would publish, using your .distignore and pre-build command. Nothing is committed and your plugin folder is not changed. Use the zip to test the plugin on a WordPress site.",
+      "Builds a zip of the version that is in your plugin files right now, using your .distignore and pre-build command. Nothing is committed and your plugin folder is not changed. Use the zip to test the plugin on a WordPress site.",
+    current: (version: string) =>
+      `This builds version ${version}, the version in your plugin files.`,
+    newVersionNote:
+      "The new version number is written into your files at release step 3 (Write). A dry run puts your files back afterwards, so its package is only a preview and this button still builds the current version.",
     build: "Build package",
+    rebuild: "Build again",
     building: "Building…",
     blocked: "A package check failed, so a release would stop at Build. Fix it before you release.",
     ready: (files: number) => `Built ${String(files)} file(s). Nothing was published.`,
+    builtVersion: (version: string) => `Version ${version}`,
   },
+  flow: {
+    title: "How to release",
+    steps: [
+      "Check readme.txt and your plugin images below. Fix any errors.",
+      "Optional: build the package and test the zip on a WordPress site.",
+      "Tick Dry run and click Dry run. It goes through the release steps without publishing, then puts your files back.",
+      "Untick Dry run and click Release. Approve the draft, check the files and confirm the publish.",
+    ],
+    assetsNote:
+      "Changed only the icon, banner or screenshots? Use Update assets. It publishes the images without a new version.",
+    hide: "Hide",
+    show: "Show how to release",
+  },
+  groups: {
+    before: "1. Before you release",
+    beforeHint:
+      "Optional checks. Each one runs again inside a release, so nothing here is required.",
+    steps: "2. Release steps",
+    stepsEmpty:
+      "Click Dry run or Release at the top. The seven release steps appear here and wait for you where your approval is needed.",
+    project: "Project",
+    show: "Show",
+    hide: "Hide",
+  },
+  dryRunDone: (tried: string, current: string) =>
+    `Dry run finished. It tried version ${tried}, and your files are back at ${current}. When you are ready, untick Dry run and click Release.`,
 };

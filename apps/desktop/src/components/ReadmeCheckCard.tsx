@@ -39,7 +39,7 @@ export function ReadmeCheckCard({ projectPath, disabled }: ReadmeCheckCardProps)
   return (
     <section className="card">
       <div className="card__header">
-        <h2 className="card__title">{S.tools.readme.title}</h2>
+        <h3 className="card__title">{S.tools.readme.title}</h3>
       </div>
       <div className="card__body stack">
         <p className="muted">{S.tools.readme.intro}</p>
