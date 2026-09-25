@@ -93,23 +93,59 @@ pub static EXPLAIN_FAILURES: LazyLock<Value> = LazyLock::new(|| {
 });
 
 /// The JSON object inside a model's answer: the whole text, a fenced block,
-/// or the outermost braces.
+/// or the outermost braces, each tried as is and then with unescaped quotes
+/// inside strings repaired.
 pub fn extract_json(text: &str) -> Option<Value> {
     let trimmed = text.trim();
-    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
-        return Some(value);
-    }
     let unfenced = trimmed
         .strip_prefix("```json")
         .or_else(|| trimmed.strip_prefix("```"))
         .and_then(|rest| rest.trim_end().strip_suffix("```"))
         .map(str::trim);
-    if let Some(value) = unfenced.and_then(|t| serde_json::from_str(t).ok()) {
-        return Some(value);
+    let braced = match (trimmed.find('{'), trimmed.rfind('}')) {
+        (Some(start), Some(end)) if start < end => Some(&trimmed[start..=end]),
+        _ => None,
+    };
+    let candidates = [Some(trimmed), unfenced, braced];
+    candidates.iter().flatten().find_map(|t| serde_json::from_str(t).ok()).or_else(|| {
+        candidates.iter().flatten().find_map(|t| serde_json::from_str(&repair_quotes(t)).ok())
+    })
+}
+
+/// Escapes a `"` inside a string when it cannot be the closing quote, that
+/// is when the next non-space character is not `,` `:` `}` `]` or the end.
+/// Models often write `"Click "Add New" to…"` inside a JSON string.
+fn repair_quotes(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len() + 8);
+    let mut in_string = false;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if in_string && c == '\\' {
+            out.push(c);
+            if let Some(&next) = chars.get(i + 1) {
+                out.push(next);
+            }
+            i += 2;
+            continue;
+        }
+        if c == '"' {
+            if in_string {
+                let next = chars[i + 1..].iter().find(|ch| !ch.is_whitespace());
+                if matches!(next, None | Some(',' | ':' | '}' | ']')) {
+                    in_string = false;
+                } else {
+                    out.push('\\');
+                }
+            } else {
+                in_string = true;
+            }
+        }
+        out.push(c);
+        i += 1;
     }
-    let start = trimmed.find('{')?;
-    let end = trimmed.rfind('}')?;
-    (start < end).then(|| serde_json::from_str(&trimmed[start..=end]).ok())?
+    out
 }
 
 /// Parses and validates an answer against `schema`. The error text is what a
@@ -145,6 +181,15 @@ mod tests {
         assert!(extract_json(&format!("```json\n{GOOD}\n```")).is_some());
         assert!(extract_json(&format!("Here you go:\n{GOOD}\nThanks.")).is_some());
         assert!(extract_json("no json here").is_none());
+    }
+
+    #[test]
+    fn repairs_unescaped_quotes_inside_strings() {
+        let text = r#"{"path":"assets/guest-admin.js","summary":"Clicking "Add New Post" now opens a picker, "fast"."}"#;
+        let answer: FileSummary = parse_answer(text, &SUMMARISE_FILE).unwrap();
+        assert_eq!(answer.summary, r#"Clicking "Add New Post" now opens a picker, "fast"."#);
+        let fenced = format!("```json\n{text}\n```");
+        assert!(parse_answer::<FileSummary>(&fenced, &SUMMARISE_FILE).is_ok());
     }
 
     #[test]
