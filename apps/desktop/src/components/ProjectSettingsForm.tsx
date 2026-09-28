@@ -22,7 +22,9 @@ const lines = (text: string) =>
     .map((l) => l.trim())
     .filter(Boolean);
 
-const orNull = (text: string) => (text.trim() ? text.trim() : null);
+// Blank means not set. Spaces stay while you type (a command has them) and are trimmed on save.
+const orNull = (text: string) => (text.trim() ? text : null);
+const trimmed = (text: string | null) => text?.trim() ?? null;
 
 /** Project settings, all optional (plan §6.2). */
 export function ProjectSettingsForm({
@@ -54,6 +56,10 @@ export function ProjectSettingsForm({
     try {
       await onSave(svnUrl, {
         ...settings,
+        main_file: trimmed(settings.main_file),
+        pre_build_command: trimmed(settings.pre_build_command),
+        assets_folder: trimmed(settings.assets_folder),
+        svn_account: trimmed(settings.svn_account),
         required_paths: lines(required),
         ai_exclude_patterns: lines(exclude),
       });

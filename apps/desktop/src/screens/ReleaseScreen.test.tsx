@@ -307,6 +307,20 @@ describe("ReleaseScreen", () => {
     expect(screen.queryByRole("button", { name: "Use this command" })).toBeNull();
   });
 
+  it("keeps the spaces you type in project settings and saves them trimmed", async () => {
+    const user = userEvent.setup();
+    open(runState("DryRunComplete", null));
+    tauriMock.handle("update_project", () => summary());
+    const field = screen.getByLabelText<HTMLInputElement>("Pre-build command");
+    await user.type(field, "npm run build ");
+    expect(field.value).toBe("npm run build ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const call = tauriMock.calls.find((c) => c.command === "update_project");
+    expect((call?.args?.settings as { pre_build_command: string }).pre_build_command).toBe(
+      "npm run build",
+    );
+  });
+
   it("starts a dry run when the toggle is on", async () => {
     const user = userEvent.setup();
     open(runState("DryRunComplete", null));
