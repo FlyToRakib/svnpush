@@ -66,6 +66,20 @@ describe("ReleaseScreen", () => {
     });
   });
 
+  it("keeps the SVN preview open while it asks to confirm the publish", async () => {
+    const user = userEvent.setup();
+    open(
+      runState("AwaitingPublish", "Publish", { preview: PREVIEW, draft: DRAFT_CONTEXT.prefill }),
+    );
+    const preview = await screen.findByRole("button", { name: /Preview SVN/ });
+    expect(preview.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("inc/new.php")).toBeTruthy();
+    // Your own toggle still wins.
+    await user.click(preview);
+    expect(preview.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("inc/new.php")).toBeNull();
+  });
+
   it("renders a failed check with its fix and offers Cancel only while running", async () => {
     open(
       runState("Failed", "Verify", {

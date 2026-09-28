@@ -43,7 +43,9 @@ export function Checklist({
   const current = state.steps.find((s) => ["Running", "Waiting", "Failed"].includes(s.status));
   const focus: Step | undefined =
     current?.step ?? (state.publish ? "Publish" : state.preview ? "Preview" : undefined);
-  const isExpanded = (step: Step) => toggled[step] ?? step === focus;
+  // The SVN preview stays open while Publish asks you to confirm what it lists.
+  const isExpanded = (step: Step) =>
+    toggled[step] ?? (step === focus || (step === "Preview" && state.phase === "AwaitingPublish"));
   const drafting = state.phase === "AwaitingApproval" || state.phase === "Drafting";
 
   const content = (step: Step) => {
