@@ -105,6 +105,14 @@ export const TOOLS = {
     show: "Show",
     hide: "Hide",
   },
+  teamCommand: {
+    offered:
+      "This project's .svnpush.json suggests a pre-build command. SVNpush never runs a command from a project file until you save it here yourself:",
+    use: "Use this command",
+  },
+  inFlight: (version: string) =>
+    `SVNpush stopped while publishing ${version}, before WordPress.org confirmed it. Resume checks WordPress.org and finishes the release.`,
+  resumeInFlight: "Resume: check and finish",
   dryRunDone: (tried: string, current: string) =>
     `Dry run finished. It tried version ${tried}, and your files are back at ${current}. When you are ready, untick Dry run and click Release.`,
 };

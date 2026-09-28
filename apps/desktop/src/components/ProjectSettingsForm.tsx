@@ -10,6 +10,8 @@ import { ErrorNotice } from "./ErrorNotice";
 interface ProjectSettingsFormProps {
   project: Project;
   disabled: boolean;
+  /** The command `.svnpush.json` suggests, which runs only once saved here. */
+  teamPreBuildCommand: string | null;
   onSave: (svnUrl: string, settings: ProjectSettings) => Promise<void>;
   onRemove: () => void;
 }
@@ -26,6 +28,7 @@ const orNull = (text: string) => (text.trim() ? text.trim() : null);
 export function ProjectSettingsForm({
   project,
   disabled,
+  teamPreBuildCommand,
   onSave,
   onRemove,
 }: ProjectSettingsFormProps) {
@@ -203,6 +206,22 @@ export function ProjectSettingsForm({
             }}
           />
           <p className="field__hint">{S.projectSettings.preBuildHint}</p>
+          {teamPreBuildCommand && settings.pre_build_command !== teamPreBuildCommand && (
+            <div className="notice notice--info">
+              <p>{S.tools.teamCommand.offered}</p>
+              <p className="mono break">{teamPreBuildCommand}</p>
+              <button
+                type="button"
+                className="btn btn--sm"
+                disabled={disabled}
+                onClick={() => {
+                  change({ pre_build_command: teamPreBuildCommand });
+                }}
+              >
+                {S.tools.teamCommand.use}
+              </button>
+            </div>
+          )}
         </div>
         <div className="grid-2">
           <div className="field">

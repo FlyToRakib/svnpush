@@ -14,6 +14,8 @@ All notable changes to SVNpush are listed here, newest first.
 - If SVNpush cannot start, it says why in a message box instead of closing silently.
 - The Projects list, the file check, Build package and the Vault no longer freeze the app while they read the disk or the keychain.
 - The window background follows the system theme from the first moment, with no white flash in dark mode.
+- If SVNpush stopped while publishing, before WordPress.org confirmed the commit, the project page says so and offers Resume: check and finish.
+- A pre-build command in a project's .svnpush.json is shown in Project settings with Use this command; it never runs until you save it. Folder settings that point outside the plugin folder are refused.
 - Perplexity works again: its Sonar API was retired on 2026-09-27, so SVNpush now uses Perplexity's Router API with perplexity/kimi-k3, including for providers saved with a sonar model.
 - DeepSeek works again: its old model names were retired on 2026-07-24, so SVNpush now uses deepseek-flash, including for providers saved with deepseek-chat or deepseek-reasoner.
 - Providers: a base URL that sends an API key must use https://; plain http:// works only for localhost. Changing a provider's type or host asks for its key again, so a stored key never goes to a new address.

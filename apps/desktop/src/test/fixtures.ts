@@ -37,6 +37,7 @@ export function summary(overrides: Partial<ProjectSummary> = {}): ProjectSummary
     unfinished: null,
     locked: false,
     account: "someone",
+    team_pre_build_command: null,
     ...overrides,
   };
 }

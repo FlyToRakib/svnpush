@@ -28,6 +28,9 @@ pub struct ProjectSummary {
     pub locked: bool,
     /// The Vault account that will commit, when one resolves.
     pub account: Option<String>,
+    /// The pre-build command `.svnpush.json` proposes, when it differs from
+    /// the saved one. It never runs until it is saved in Project settings.
+    pub team_pre_build_command: Option<String>,
 }
 
 /// What a folder looks like before it is added.
@@ -118,8 +121,10 @@ fn summarise(paths: &AppPaths, project: Project, active: bool) -> ProjectSummary
         project.settings.svn_account.as_deref(),
     )
     .map(|a| a.username.clone());
+    let team_pre_build_command = project::team_pre_build_command(&project).ok().flatten();
     ProjectSummary {
         account,
+        team_pre_build_command,
         locked: !active && ProjectLock::is_held(&paths.runs(&project.slug)),
         version: detected.as_ref().ok().and_then(|f| f.header.version.clone()),
         problem: detected.err(),
@@ -190,6 +195,13 @@ pub async fn update(
     settings: ProjectSettings,
 ) -> Result<ProjectSummary, ErrorView> {
     let slug = slug_or_error(svn_url.trim())?;
+    project::validate_settings(&settings).map_err(|reason| {
+        ErrorView::new(
+            "CONFIG_INVALID",
+            format!("{reason}."),
+            Some("Use a folder path relative to the plugin folder.".to_owned()),
+        )
+    })?;
     for location in &settings.version_locations {
         svnpush_core::version::validate_location(location)
             .map_err(|e| ErrorView::from_coded(&e))?;
@@ -297,6 +309,7 @@ mod tests {
         assert_eq!(json["problem"], Value::Null);
         assert_eq!(json["unfinished"], Value::Null);
         assert_eq!(json["locked"], false);
+        assert_eq!(json["team_pre_build_command"], Value::Null);
         assert_eq!(json["project"]["settings"]["post_publish_open_page"], true);
 
         let again = add(&app, &folder, "https://plugins.svn.wordpress.org/minimal", None)
@@ -314,6 +327,21 @@ mod tests {
 
         let bad = update(&app, &folder, "not a url", ProjectSettings::default()).await.unwrap_err();
         assert_eq!(bad.code, "PROJECT_INVALID_SVN_URL");
+        let escapes = ProjectSettings { package_root: "../elsewhere".into(), ..Default::default() };
+        let url = "https://plugins.svn.wordpress.org/renamed";
+        assert_eq!(update(&app, &folder, url, escapes).await.unwrap_err().code, "CONFIG_INVALID");
+
+        std::fs::write(
+            Path::new(&folder).join(".svnpush.json"),
+            r#"{"settings": {"pre_build_command": "npm run build"}}"#,
+        )
+        .unwrap();
+        let offered = list(&app).await.unwrap().remove(0);
+        assert_eq!(offered.team_pre_build_command.as_deref(), Some("npm run build"));
+        assert_eq!(
+            serde_json::to_value(&offered).unwrap()["team_pre_build_command"],
+            "npm run build"
+        );
 
         remove(&app, &folder).await.unwrap();
         assert!(list(&app).await.unwrap().is_empty());

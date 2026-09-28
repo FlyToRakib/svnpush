@@ -343,6 +343,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
           key={project.path}
           project={project}
           disabled={active}
+          teamPreBuildCommand={summary.team_pre_build_command}
           onSave={(svnUrl, settings) => update(path, svnUrl, settings)}
           onRemove={() => {
             setRemoving(true);

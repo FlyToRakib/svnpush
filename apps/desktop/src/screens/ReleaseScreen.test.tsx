@@ -205,6 +205,51 @@ describe("ReleaseScreen", () => {
     });
   });
 
+  it("offers to check and finish a publish the server never confirmed", async () => {
+    const stopped = summary({
+      unfinished: {
+        id: "20260917-090000",
+        slug: "demo",
+        project_path: PROJECT_PATH,
+        version: "1.0.1",
+        main_file: "demo.php",
+        dry_run: false,
+        started: "2026-09-17T09:00:00Z",
+        finished: null,
+        steps: [],
+        revisions: { trunk: null, tag: null, assets: null },
+        outcome: null,
+        diffs: [],
+        tag_message: null,
+        verification: null,
+        snapshot: null,
+        discarded: false,
+        assets_only: false,
+        in_flight: { kind: "Commit", since: 41, message: "Release 1.0.1" },
+      },
+    });
+    open(runState("Failed", "Publish"), stopped);
+    expect(
+      await screen.findByText(
+        "SVNpush stopped while publishing 1.0.1, before WordPress.org confirmed it. Resume checks WordPress.org and finishes the release.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume: check and finish" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Discard" })).toBeNull();
+  });
+
+  it("offers the team's pre-build command but never saves it by itself", async () => {
+    const user = userEvent.setup();
+    open(runState("DryRunComplete", null), summary({ team_pre_build_command: "npm run build" }));
+    expect(await screen.findByText("npm run build")).toBeTruthy();
+    const field = screen.getByLabelText<HTMLInputElement>("Pre-build command");
+    expect(field.value).toBe("");
+    await user.click(screen.getByRole("button", { name: "Use this command" }));
+    expect(field.value).toBe("npm run build");
+    expect(tauriMock.calls.some((c) => c.command === "update_project")).toBe(false);
+    expect(screen.queryByRole("button", { name: "Use this command" })).toBeNull();
+  });
+
   it("starts a dry run when the toggle is on", async () => {
     const user = userEvent.setup();
     open(runState("DryRunComplete", null));

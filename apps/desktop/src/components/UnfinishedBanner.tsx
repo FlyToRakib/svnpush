@@ -18,24 +18,38 @@ interface UnfinishedBannerProps {
   onDiscard: () => void;
 }
 
-/** An interrupted run, or a trunk commit whose tag is missing, with Resume and Discard. */
+/**
+ * An interrupted run, a trunk commit whose tag is missing, or a publish that
+ * stopped before the server confirmed it, with Resume and Discard.
+ */
 export function UnfinishedBanner({
   journal,
   disabled,
   onResume,
   onDiscard,
 }: UnfinishedBannerProps) {
-  const needsTag = journal.revisions.trunk !== null && journal.revisions.tag === null;
+  // Mirrors `RunJournal::needs_tag`: a trunk commit, or a commit or copy that
+  // may have landed, with no tag recorded.
+  const unconfirmed = journal.revisions.trunk === null && journal.in_flight != null;
+  const needsTag =
+    (journal.revisions.trunk !== null || journal.in_flight != null) &&
+    journal.revisions.tag === null &&
+    !journal.dry_run &&
+    !journal.discarded &&
+    !journal.assets_only;
   const last = journal.steps.at(-1)?.step;
-  const message = needsTag
-    ? S.release.needsTag(journal.version ?? "")
-    : S.release.interrupted(last ? STEP_NUMBERS[last] : 1);
+  const version = journal.version ?? "";
+  const message = unconfirmed
+    ? S.tools.inFlight(version)
+    : needsTag
+      ? S.release.needsTag(version)
+      : S.release.interrupted(last ? STEP_NUMBERS[last] : 1);
   return (
     <div className="notice notice--warn banner" role="status">
       <p>{message}</p>
       <div className="row">
         <button type="button" className="btn btn--sm" disabled={disabled} onClick={onResume}>
-          {needsTag ? S.release.resumeTag : S.release.resume}
+          {unconfirmed ? S.tools.resumeInFlight : needsTag ? S.release.resumeTag : S.release.resume}
         </button>
         {!needsTag && (
           <button type="button" className="btn btn--sm" disabled={disabled} onClick={onDiscard}>
