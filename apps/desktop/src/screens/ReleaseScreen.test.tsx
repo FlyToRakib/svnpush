@@ -321,6 +321,17 @@ describe("ReleaseScreen", () => {
     );
   });
 
+  it("stops saying the settings are saved once the SVN URL is edited", async () => {
+    const user = userEvent.setup();
+    open(runState("DryRunComplete", null));
+    tauriMock.handle("update_project", () => summary());
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Settings saved.")).toBeTruthy();
+    const url = document.getElementById("ps-svn") as HTMLInputElement;
+    await user.type(url, "x");
+    expect(screen.queryByText("Settings saved.")).toBeNull();
+  });
+
   it("starts a dry run when the toggle is on", async () => {
     const user = userEvent.setup();
     open(runState("DryRunComplete", null));

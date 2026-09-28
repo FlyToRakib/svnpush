@@ -93,6 +93,7 @@ export function ProjectSettingsForm({
             value={svnUrl}
             onChange={(e) => {
               setSvnUrl(e.target.value);
+              setSaved(false);
             }}
           />
         </div>
