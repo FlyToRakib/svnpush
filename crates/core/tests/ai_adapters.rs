@@ -85,6 +85,19 @@ fn revoye_submit_is_async_with_a_work_derived_idempotency_key() {
     next.work = next.work.map(|w| WorkId { operation: "run1.2", ..w });
     let regenerated = adapter("revoye").build_request(&next).unwrap();
     assert_ne!(header(&regenerated, "idempotency-key"), Some(key.as_str()));
+
+    // Falling back to a Revoye record pinned to another provider sends a
+    // different body; the same key would be refused with 409 CONFLICT.
+    let key_for = |model: &str| {
+        let mut req = request(&messages, Some(&schema));
+        req.model = model;
+        let built = adapter("revoye").build_request(&req).unwrap();
+        header(&built, "idempotency-key").unwrap().to_owned()
+    };
+    assert_ne!(key_for("revoye/chatgpt"), key_for("revoye/claude"));
+    assert_ne!(key_for("revoye/chatgpt"), key);
+    assert_eq!(key_for("claude"), key_for("revoye/claude"));
+    assert_eq!(key_for("revoye/auto"), key);
 }
 
 #[test]

@@ -673,14 +673,17 @@ nothing outside it exists. Behaviour, mirroring the SyncDock adapter:
   The job is durable the moment it is accepted, so a cancelled poll loop
   never loses work.
 - **Idempotency-Key** derived from the work, not random:
-  `svnpush:<slug>:<version>:<task>:<operation>:<blake3(prompt)[..16]>`,
-  where `<operation>` is `<run id>.<n>` and `n` counts the explicit
-  Generates in the run. Resending the same request recomputes the same key
+  `svnpush:<slug>:<version>:<task>:<operation>:<hash>`, where
+  `<operation>` is `<run id>.<n>`, `n` counts the explicit Generates in the
+  run, and `<hash>` is the first 16 hex digits of the BLAKE3 hash of the
+  provider constraint and the prompt. Revoye refuses a reused key with a
+  different body (`409 CONFLICT`), so a fallback to a Revoye record pinned
+  to another provider must not reuse the key. Resending the same request recomputes the same key
   and gets the same job back instead of running a second one. Revoye
   returns the original job for a reused key even when it failed or was
   cancelled, so each Generate (a regenerate, or a generate after Stop or a
   failure) is new work with a new key. A connection test (no work) uses
-  `svnpush:test:<nanosecond timestamp>:<blake3(prompt)[..16]>`, new every
+  `svnpush:test:<nanosecond timestamp>:<hash>`, new every
   time.
 - **Poll** `GET /v1/completions/{id}` every 4 s, up to 600 s, showing
   `queue_position` as "waiting for an agent (N ahead)" in the UI. Cancel via

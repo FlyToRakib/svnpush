@@ -111,9 +111,13 @@ pub fn flatten_prompt(req: &GenerateRequest<'_>) -> Result<String, ProviderError
 /// Derived from the work, so resending the same request gets the same job
 /// back (plan §9.3). The operation makes each explicit Generate new work:
 /// Revoye returns the original job, even a cancelled or failed one, for a
-/// reused key.
-pub fn idempotency_key(req: &GenerateRequest<'_>, prompt: &str) -> String {
-    let hash = blake3::hash(prompt.as_bytes()).to_hex();
+/// reused key. The hash covers the provider constraint as well as the
+/// prompt: Revoye refuses a reused key with a different body (409), which a
+/// fallback to a Revoye record pinned to another provider would send.
+pub fn idempotency_key(req: &GenerateRequest<'_>, provider: Option<&str>, prompt: &str) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(provider.unwrap_or_default().as_bytes()).update(b"\0").update(prompt.as_bytes());
+    let hash = hasher.finalize().to_hex();
     if let Some(work) = req.work {
         return format!(
             "svnpush:{}:{}:{}:{}:{}",
@@ -187,7 +191,7 @@ impl Adapter for Revoye {
         let prompt = flatten_prompt(req)?;
         let mut headers = auth(api_key);
         headers.push(("content-type".to_owned(), "application/json".to_owned()));
-        headers.push(("idempotency-key".to_owned(), idempotency_key(req, &prompt)));
+        headers.push(("idempotency-key".to_owned(), idempotency_key(req, provider, &prompt)));
         let task = req.work.map_or("test", |w| w.task);
         Ok(HttpRequest::post(
             format!("{BASE_URL}/v1/completions"),
