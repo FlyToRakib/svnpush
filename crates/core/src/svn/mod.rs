@@ -318,13 +318,15 @@ fn classify(command: &str, stderr: &str, username: String) -> SvnError {
 
     if has(&["E170001", "E215004"]) {
         SvnError::CredentialsRejected { username }
-    } else if has(&["E175013", "E220004", "E170011"]) || stderr.contains("403 Forbidden") {
+    } else if has(&["E175013", "E220004"]) || stderr.contains("403 Forbidden") {
         SvnError::Forbidden { username }
     } else if has(&["E155011", "E160028", "E160024", "E170004", "E155035"]) {
         SvnError::OutOfDate { detail }
     } else if has(&["E155004", "E155037", "E155015", "E155007", "E155016"]) {
         SvnError::WorkingCopy { detail }
-    } else if has(&["E160013", "W160013", "E170000", "W170000", "E180001"]) {
+    } else if has(&["E160013", "W160013", "E170000", "W170000", "E180001", "E170011"]) {
+        // E170011 (session URL mismatch): "Repository moved permanently",
+        // a URL the server redirects, not a missing permission.
         SvnError::NotFound { detail }
     } else if has(&["E200009"]) {
         // "Illegal target": a peg revision in a file name, or a path svn
@@ -352,6 +354,10 @@ mod tests {
         let e = classify("commit", "svn: E175013: Access to '/x' forbidden\n", "bob".into());
         assert_eq!(e.code(), "SVN_FORBIDDEN");
         assert!(e.fix().unwrap().contains("bob"));
+
+        let moved = "svn: E170011: Repository moved permanently to 'https://x/'; please relocate\n";
+        let e = classify("info", moved, "bob".into());
+        assert_eq!(e.code(), "SVN_NOT_FOUND");
 
         let e = classify("commit", "svn: E155011: File 'a' is out of date\n", String::new());
         assert_eq!(e.code(), "SVN_OUT_OF_DATE");
