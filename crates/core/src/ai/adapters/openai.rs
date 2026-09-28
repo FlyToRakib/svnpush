@@ -215,20 +215,28 @@ pub static QWEN: OpenAiCompatible = OpenAiCompatible::new(
 )
 .with_output_cap(8_192);
 
-/// Perplexity.
+/// Perplexity through its Router API. The Sonar chat completions API and its
+/// `sonar*` models were retired on 2026-09-27; saved records that name one are
+/// sent the Router default.
 pub static PERPLEXITY: OpenAiCompatible = OpenAiCompatible::new(
     meta(
         "perplexity",
         "Perplexity",
-        "https://api.perplexity.ai",
-        "sonar-pro",
+        "https://api.perplexity.ai/router/v1",
+        "perplexity/kimi-k3",
         false,
         "pplx-…",
         "Requests are billed to your Perplexity account.",
-        "Default: sonar-pro.",
+        "Default: perplexity/kimi-k3. Enter any model id from Perplexity's Router catalogue.",
     ),
     TokenField::MaxTokens,
-);
+)
+.with_renamed_models(&[
+    ("sonar", "perplexity/kimi-k3"),
+    ("sonar-pro", "perplexity/kimi-k3"),
+    ("sonar-reasoning-pro", "perplexity/kimi-k3"),
+    ("sonar-deep-research", "perplexity/kimi-k3"),
+]);
 
 /// Any OpenAI-compatible endpoint.
 pub static OPENAI_COMPATIBLE: OpenAiCompatible = OpenAiCompatible::new(

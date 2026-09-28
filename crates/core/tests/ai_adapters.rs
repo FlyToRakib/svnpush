@@ -309,6 +309,10 @@ fn openai_family_requests_differ_only_where_they_must() {
     retired.model = "deepseek-chat";
     let body = adapter("deepseek").build_request(&retired).unwrap().body.unwrap();
     assert_eq!(body["model"], "deepseek-flash");
+    retired.model = "sonar-pro";
+    let perplexity = adapter("perplexity").build_request(&retired).unwrap();
+    assert_eq!(perplexity.url, "https://api.perplexity.ai/router/v1/chat/completions");
+    assert_eq!(perplexity.body.unwrap()["model"], "perplexity/kimi-k3");
     let mut large = req;
     large.max_tokens = Some(16_000);
     for (kind, field, sent) in [

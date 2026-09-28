@@ -642,7 +642,7 @@ Registered adapters, in this order after Revoye:
 | `openrouter` | OpenRouter | `/chat/completions` | `anthropic/claude-sonnet-5` | Factory plus attribution headers `HTTP-Referer` and `X-OpenRouter-Title`, 200-with-error handling, live `GET /models` catalogue. |
 | `deepseek` | DeepSeek | `/chat/completions` | `deepseek-flash` | Factory. The retired `deepseek-chat` and `deepseek-reasoner` are sent as `deepseek-flash`. |
 | `qwen` | Qwen (DashScope) | `/chat/completions` | `qwen-plus` | Factory. |
-| `perplexity` | Perplexity | `/chat/completions` | `sonar-pro` | Factory. |
+| `perplexity` | Perplexity | Router API `/router/v1/chat/completions` | `perplexity/kimi-k3` | Factory. The retired `sonar*` ids are sent as the default. |
 | `openai_compatible` | OpenAI-compatible | `/chat/completions` | free text | Factory; base URL required. |
 | `local` | Local model (Ollama / LM Studio) | `/chat/completions` | `gemma3` | Factory; keyless; default base URL `http://localhost:11434/v1`. |
 
