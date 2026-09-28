@@ -136,7 +136,9 @@ impl Exclusions {
         text: &str,
         excluded_dirs: &[PathBuf],
     ) -> Result<Self, PackageError> {
-        let lines: Vec<&str> = text.lines().collect();
+        // A leading byte order mark is dropped, as the `ignore` crate does
+        // when it reads the saved file.
+        let lines: Vec<&str> = text.trim_start_matches(crate::text::BOM).lines().collect();
         Ok(Self {
             rules: compile(root, &lines, false)?,
             hard: compile(root, HARD_EXCLUDES, true)?,
@@ -266,6 +268,20 @@ mod tests {
         assert!(ex.is_excluded(&root.join("docs"), true));
         assert!(!ex.is_excluded(&root.join(".agent"), true), "only what the text says");
         assert!(ex.is_excluded(&root.join(".git"), true), "hard excludes still apply");
+    }
+
+    #[test]
+    fn unsaved_text_with_a_bom_previews_like_the_saved_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let text = "\u{feff}/vendor\r\n/docs\r\n";
+        std::fs::write(root.join(".distignore"), text).unwrap();
+        let saved = rules_for(root);
+        let preview = Exclusions::from_text(root, text, &[]).unwrap();
+        for ex in [&saved, &preview] {
+            assert!(ex.is_excluded(&root.join("vendor"), true));
+            assert!(ex.is_excluded(&root.join("docs"), true));
+        }
     }
 
     #[test]
