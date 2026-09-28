@@ -195,9 +195,10 @@ local changes are rolled back.
 2. The staged tree is mirrored into `trunk/`, and the assets folder into
    `assets/`: new files are added, changed files overwritten, and removed
    files deleted. Files an interrupted run left in the working copy are
-   removed first, and a folder renamed only in case is replaced. On
-   Windows, a file to delete whose name is not ASCII stops the preview with
-   `SVN_CANNOT_DELETE`, which names its server URL to delete by hand.
+   removed first. A folder renamed only in case, or replaced by a file of
+   the same name, is deleted as a whole before the new files are copied in.
+   On Windows, a file to delete whose name is not ASCII stops the preview
+   with `SVN_CANNOT_DELETE`, which names its server URL to delete by hand.
 3. Added, modified and deleted lists for trunk and assets are shown, with a
    diff per file (2 MB in total), the tag URL and the default commit
    messages.

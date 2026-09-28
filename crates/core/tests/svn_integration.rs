@@ -437,3 +437,50 @@ async fn missing_repository_is_not_found() {
     let err = client(&env).list_tags(&format!("{}-missing", env.url), None).await.unwrap_err();
     assert!(matches!(err, svn::SvnError::NotFound { .. }), "{err}");
 }
+
+#[tokio::test]
+async fn a_folder_replaced_by_a_file_of_the_same_name() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::create_dir_all(plugin.join("lib")).unwrap();
+    std::fs::write(plugin.join("lib/a.php"), "<?php\n").unwrap();
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::remove_dir_all(plugin.join("lib")).unwrap();
+    std::fs::write(plugin.join("lib"), "now a file\n").unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.1").await;
+    assert_eq!(trunk.added, ["lib"]);
+    assert_eq!(trunk.deleted, ["lib/", "lib/a.php"]);
+    // A dry run reverts; the next preview must find the same changes.
+    let wc = env.root.join("wc/minimal");
+    client(&env).revert(&wc).await.unwrap();
+    assert!(client(&env).status(&wc).await.unwrap().is_empty());
+    assert!(wc.join("trunk/lib/a.php").is_file());
+    let (again, _) = preview(&env, &plugin, "minimal", "1.0.1").await;
+    assert_eq!(again, trunk);
+    publish(&env, "minimal", "1.0.1", "minimal.php").await;
+    let listed = client(&env).list(&format!("{}/trunk", env.url), None).await.unwrap();
+    assert_eq!(listed, ["lib", "minimal.php", "readme.txt"]);
+}
+
+#[tokio::test]
+async fn a_file_replaced_by_a_folder_of_the_same_name() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::write(plugin.join("lib"), "a file\n").unwrap();
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::remove_file(plugin.join("lib")).unwrap();
+    std::fs::create_dir_all(plugin.join("lib")).unwrap();
+    std::fs::write(plugin.join("lib/a.php"), "<?php\n").unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.1").await;
+    assert_eq!(trunk.added, ["lib/a.php"]);
+    assert_eq!(trunk.deleted, ["lib"]);
+    publish(&env, "minimal", "1.0.1", "minimal.php").await;
+    let listed = client(&env).list(&format!("{}/trunk", env.url), None).await.unwrap();
+    assert_eq!(listed, ["lib/", "minimal.php", "readme.txt"]);
+}

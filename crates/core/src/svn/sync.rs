@@ -124,19 +124,23 @@ fn folders_of(rel: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Existing folders whose name changed only in case (`Includes/` →
-/// `includes/`), outermost only. A case-insensitive file system would keep
-/// copying into the old spelling, so these are deleted as a whole first.
-fn case_renamed_folders<'a>(
+/// `includes/`), or that became a file (`lib/` → `lib`), outermost only. A
+/// case-insensitive file system would keep copying into the old spelling,
+/// and a file cannot be copied over a folder, so these are deleted as a
+/// whole first.
+fn replaced_folders<'a>(
     existing: impl Iterator<Item = &'a String>,
     wanted: &[&str],
 ) -> Vec<String> {
     let source: HashSet<&str> = wanted.iter().flat_map(|rel| folders_of(rel)).collect();
     let source_lower: HashSet<String> = source.iter().map(|f| f.to_lowercase()).collect();
+    let files_lower: HashSet<String> = wanted.iter().map(|f| f.to_lowercase()).collect();
     let current: BTreeSet<&str> = existing.flat_map(|rel| folders_of(rel)).collect();
     let mut out: Vec<String> = Vec::new();
     for folder in current {
+        let lower = folder.to_lowercase();
         if !source.contains(folder)
-            && source_lower.contains(&folder.to_lowercase())
+            && (source_lower.contains(&lower) || files_lower.contains(&lower))
             && !out.iter().any(|o| folder.starts_with(&format!("{o}/")))
         {
             out.push(folder.to_owned());
@@ -197,7 +201,7 @@ impl Svn<'_> {
             existing.keys().map(|k| (k.to_lowercase(), k)).collect();
         let wanted: Vec<&str> = sources.iter().map(|s| s.rel.as_str()).collect();
         let wanted_set: HashSet<&str> = wanted.iter().copied().collect();
-        let renamed = case_renamed_folders(existing.keys(), &wanted);
+        let replaced = replaced_folders(existing.keys(), &wanted);
 
         let mut delta = Delta::default();
         let mut changed: Vec<&SourceFile> = Vec::new();
@@ -223,18 +227,18 @@ impl Svn<'_> {
         for rel in existing.keys() {
             if !wanted_set.contains(rel.as_str()) {
                 delta.deleted.push(rel.clone());
-                if !renamed.iter().any(|folder| within(rel, folder)) {
+                if !replaced.iter().any(|folder| within(rel, folder)) {
                     to_delete.push(rel.clone());
                 }
             }
         }
-        self.check_deletable(target, renamed.iter().chain(&to_delete)).await?;
-        if !renamed.is_empty() {
-            for folder in &renamed {
-                self.reporter.info(&format!("Case-only folder rename: {folder}/."));
+        self.check_deletable(target, replaced.iter().chain(&to_delete)).await?;
+        if !replaced.is_empty() {
+            for folder in &replaced {
+                self.reporter.info(&format!("Replacing the folder {folder}/."));
                 delta.deleted.push(format!("{folder}/"));
             }
-            self.batched(&["delete", "--force"], target, &renamed).await?;
+            self.batched(&["delete", "--force"], target, &replaced).await?;
         }
         if !to_delete.is_empty() {
             self.reporter
@@ -386,17 +390,20 @@ mod tests {
     }
 
     #[test]
-    fn case_only_folder_renames_are_found_outermost_first() {
+    fn replaced_folders_are_found_outermost_first() {
         let existing: Vec<String> =
             ["Includes/Sub/a.php", "Includes/b.php", "lib/c.php", "Same/d.php"]
                 .map(str::to_owned)
                 .to_vec();
         let wanted = ["includes/Sub/a.php", "includes/b.php", "lib/c.php", "Same/d.php"];
-        assert_eq!(case_renamed_folders(existing.iter(), &wanted), ["Includes"]);
+        assert_eq!(replaced_folders(existing.iter(), &wanted), ["Includes"]);
         assert!(within("Includes/b.php", "Includes"));
         assert!(!within("IncludesX/b.php", "Includes"));
         // Both spellings wanted (a case-sensitive file system): nothing to rename.
         let both = ["Includes/b.php", "includes/b.php"];
-        assert!(case_renamed_folders(existing.iter(), &both).is_empty());
+        assert!(replaced_folders(existing.iter(), &both).is_empty());
+        // A folder that became a file of the same name.
+        let file = ["Includes/Sub/a.php", "Includes/b.php", "lib", "Same/d.php"];
+        assert_eq!(replaced_folders(existing.iter(), &file), ["lib"]);
     }
 }
