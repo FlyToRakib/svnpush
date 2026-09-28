@@ -112,6 +112,15 @@ describe("ProvidersScreen", () => {
     ).toBeTruthy();
   });
 
+  it("moves focus into the form and back to Add provider when it closes", async () => {
+    setup();
+    const user = await openAdd();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Add provider" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    // The empty state shows a second Add provider; focus returns to the header's.
+    expect(document.activeElement).toBe(screen.getAllByRole("button", { name: "Add provider" })[0]);
+  });
+
   it("lists Revoye first with (Recommended) and hides its base URL", async () => {
     setup();
     const user = await openAdd();

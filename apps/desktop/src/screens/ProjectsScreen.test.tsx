@@ -14,6 +14,16 @@ describe("ProjectsScreen", () => {
     expect(screen.getAllByRole("button", { name: "Add project" })).toHaveLength(2);
   });
 
+  it("moves focus into the Add project form and back when it is cancelled", async () => {
+    const user = userEvent.setup();
+    useProjectStore.setState({ projects: [summary()], loaded: true, error: null });
+    render(<ProjectsScreen onOpen={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Add project" }));
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Add a project" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add project" }));
+  });
+
   it("lists projects with version and last release, and opens one", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();

@@ -21,6 +21,9 @@ interface TestResult {
   message: string;
 }
 
+/** The header's Add button, where focus returns when the form closes. */
+const ADD_ID = "providers-add";
+
 /** AI providers: a port of SyncDock's Providers page, Revoye first. */
 export function ProvidersScreen() {
   const {
@@ -88,24 +91,26 @@ export function ProvidersScreen() {
 
   // The form is built from the adapter list: without it (it failed to load) there is nothing to add.
   const canAdd = adapters.length > 0;
-  const addButton = canAdd && (
-    <button
-      type="button"
-      className="btn btn--primary"
-      onClick={() => {
-        setForm({ mode: "add" });
-      }}
-    >
-      {S.providers.add}
-    </button>
-  );
+  const addButton = (id?: string) =>
+    canAdd && (
+      <button
+        id={id}
+        type="button"
+        className="btn btn--primary"
+        onClick={() => {
+          setForm({ mode: "add" });
+        }}
+      >
+        {S.providers.add}
+      </button>
+    );
 
   return (
     <div className="providers">
       <ScreenHeader
         title={S.providers.title}
         subtitle={S.providers.subtitle}
-        actions={form.mode === "closed" && addButton}
+        actions={form.mode === "closed" && addButton(ADD_ID)}
       />
       {error && <ErrorNotice error={error} />}
       {actionError && <ErrorNotice error={actionError} />}
@@ -115,6 +120,7 @@ export function ProvidersScreen() {
           key={form.mode === "edit" ? form.record.id : "new"}
           adapters={adapters}
           editing={form.mode === "edit" ? form.record : null}
+          returnFocus={ADD_ID}
           onCancel={() => {
             setForm({ mode: "closed" });
           }}
@@ -130,7 +136,7 @@ export function ProvidersScreen() {
           <div className="empty">
             <h2 className="empty__title">{S.providers.emptyTitle}</h2>
             <p className="empty__body">{S.providers.emptyBody}</p>
-            {addButton}
+            {addButton()}
           </div>
         </div>
       )}

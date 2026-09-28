@@ -11,6 +11,9 @@ interface ProjectsScreenProps {
   onOpen: (path: string) => void;
 }
 
+/** The header's Add button, where focus returns when the form closes. */
+const ADD_ID = "projects-add";
+
 /** The list of plugin projects. */
 export function ProjectsScreen({ onOpen }: ProjectsScreenProps) {
   const { projects, loaded, error, add } = useProjectStore(
@@ -18,8 +21,9 @@ export function ProjectsScreen({ onOpen }: ProjectsScreenProps) {
   );
   const [adding, setAdding] = useState(false);
 
-  const addButton = (
+  const addButton = (id?: string) => (
     <button
+      id={id}
       type="button"
       className="btn btn--primary"
       onClick={() => {
@@ -35,11 +39,12 @@ export function ProjectsScreen({ onOpen }: ProjectsScreenProps) {
       <ScreenHeader
         title={S.projects.title}
         subtitle={S.projects.subtitle}
-        actions={!adding && addButton}
+        actions={!adding && addButton(ADD_ID)}
       />
       {error && <ErrorNotice error={error} />}
       {adding && (
         <AddProjectForm
+          returnFocus={ADD_ID}
           onCancel={() => {
             setAdding(false);
           }}
@@ -56,7 +61,7 @@ export function ProjectsScreen({ onOpen }: ProjectsScreenProps) {
           <div className="empty">
             <h2 className="empty__title">{S.projects.emptyTitle}</h2>
             <p className="empty__body">{S.projects.emptyBody}</p>
-            {addButton}
+            {addButton()}
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useState, type SyntheticEvent } from "react";
 import type { AccountView } from "../ipc/bindings/AccountView";
 import { S } from "../strings";
+import { useFormFocus } from "./useFormFocus";
 
 /** The WordPress.org plugin SVN host, pre-filled for new accounts. */
 export const WORDPRESS_SVN_HOST = "plugins.svn.wordpress.org";
@@ -9,10 +10,14 @@ interface AccountFormProps {
   editing: AccountView | null;
   onSave: (host: string, username: string, password: string) => Promise<void>;
   onCancel: () => void;
+  /** The id of the element to focus when the form closes, if the button that opened it is gone. */
+  returnFocus?: string;
 }
 
 /** Host, username and a write-only password. */
-export function AccountForm({ editing, onSave, onCancel }: AccountFormProps) {
+export function AccountForm({ editing, onSave, onCancel, returnFocus }: AccountFormProps) {
+  // The first field you can type in: the host for a new account, the password otherwise.
+  const first = useFormFocus<HTMLInputElement>(returnFocus);
   const [host, setHost] = useState(editing?.host ?? WORDPRESS_SVN_HOST);
   const [username, setUsername] = useState(editing?.username ?? "");
   const [password, setPassword] = useState("");
@@ -38,6 +43,7 @@ export function AccountForm({ editing, onSave, onCancel }: AccountFormProps) {
           </label>
           <input
             id="acc-host"
+            ref={editing ? undefined : first}
             className="input mono"
             value={host}
             readOnly={editing !== null}
@@ -69,6 +75,7 @@ export function AccountForm({ editing, onSave, onCancel }: AccountFormProps) {
         <div className="input-group">
           <input
             id="acc-pass"
+            ref={editing ? first : undefined}
             className="input mono"
             type={show ? "text" : "password"}
             autoComplete="off"

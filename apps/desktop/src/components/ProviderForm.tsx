@@ -8,12 +8,15 @@ import { commands } from "../ipc/commands";
 import { toErrorView } from "../ipc/tauri";
 import { S } from "../strings";
 import { ErrorNotice } from "./ErrorNotice";
+import { useFormFocus } from "./useFormFocus";
 
 interface ProviderFormProps {
   adapters: AdapterInfo[];
   editing: ProviderRecord | null;
   onSave: (input: ProviderInput) => Promise<void>;
   onCancel: () => void;
+  /** The id of the element to focus when the form closes, if the button that opened it is gone. */
+  returnFocus?: string;
 }
 
 /** Whether the model field is a dropdown for this adapter. */
@@ -56,7 +59,14 @@ function optionLabel(model: string, fleet: Fleet | null): string {
 }
 
 /** Add or edit a provider. Every visibility rule comes from the adapter's metadata. */
-export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFormProps) {
+export function ProviderForm({
+  adapters,
+  editing,
+  onSave,
+  onCancel,
+  returnFocus,
+}: ProviderFormProps) {
+  const title = useFormFocus<HTMLHeadingElement>(returnFocus);
   const first = adapters[0];
   const initial = adapters.find((a) => a.kind === editing?.kind) ?? first;
   const [kind, setKind] = useState(initial?.kind ?? "");
@@ -214,7 +224,9 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
   return (
     <section className="card">
       <div className="card__header">
-        <h2 className="card__title">{editing ? S.providers.formEdit : S.providers.formAdd}</h2>
+        <h2 ref={title} className="card__title" tabIndex={-1}>
+          {editing ? S.providers.formEdit : S.providers.formAdd}
+        </h2>
         <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel}>
           {S.common.cancel}
         </button>

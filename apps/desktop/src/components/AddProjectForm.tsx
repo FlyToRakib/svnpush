@@ -6,14 +6,18 @@ import { commands } from "../ipc/commands";
 import { toErrorView } from "../ipc/tauri";
 import { S } from "../strings";
 import { ErrorNotice } from "./ErrorNotice";
+import { useFormFocus } from "./useFormFocus";
 
 interface AddProjectFormProps {
   onAdd: (folder: string, svnUrl: string, mainFile: string | null) => Promise<void>;
   onCancel: () => void;
+  /** The id of the element to focus when the form closes, if the button that opened it is gone. */
+  returnFocus?: string;
 }
 
 /** Folder, then detection, then the SVN URL (plan §6.1). */
-export function AddProjectForm({ onAdd, onCancel }: AddProjectFormProps) {
+export function AddProjectForm({ onAdd, onCancel, returnFocus }: AddProjectFormProps) {
+  const title = useFormFocus<HTMLHeadingElement>(returnFocus);
   const [inspection, setInspection] = useState<FolderInspection | null>(null);
   const [svnUrl, setSvnUrl] = useState("");
   const [mainFile, setMainFile] = useState("");
@@ -58,7 +62,9 @@ export function AddProjectForm({ onAdd, onCancel }: AddProjectFormProps) {
   return (
     <section className="card">
       <div className="card__header">
-        <h2 className="card__title">{S.projects.addTitle}</h2>
+        <h2 ref={title} className="card__title" tabIndex={-1}>
+          {S.projects.addTitle}
+        </h2>
         <button type="button" className="btn btn--ghost btn--sm" onClick={onCancel}>
           {S.common.cancel}
         </button>

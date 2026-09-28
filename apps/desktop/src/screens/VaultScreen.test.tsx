@@ -51,6 +51,22 @@ describe("VaultScreen", () => {
     expect(screen.queryByRole("button", { name: "Add account" })).toBeNull();
   });
 
+  it("moves focus into the form and back to the button that opened it", async () => {
+    tauriMock.handle("vault_view", () => ONE);
+    const user = userEvent.setup();
+    render(<VaultScreen />);
+    const change = await screen.findByRole("button", { name: "Change password" });
+    await user.click(change);
+    expect(document.activeElement).toBe(screen.getByLabelText("SVN password"));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(change);
+
+    await user.click(screen.getByRole("button", { name: "Add account" }));
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Host" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add account" }));
+  });
+
   it("tests and removes an account after confirmation", async () => {
     tauriMock.handle("vault_view", () => ONE);
     tauriMock.handle(

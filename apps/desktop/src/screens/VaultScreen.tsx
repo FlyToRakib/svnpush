@@ -14,6 +14,9 @@ type FormState = { mode: "closed" } | { mode: "add" } | { mode: "edit"; account:
 
 const key = (a: AccountView) => `${a.host}/${a.username}`;
 
+/** The header's Add button, where focus returns when the form closes. */
+const ADD_ID = "vault-add";
+
 /** SVN accounts. Passwords go to the keychain and never come back to the UI. */
 export function VaultScreen() {
   const [view, setView] = useState<VaultView | null>(null);
@@ -52,8 +55,9 @@ export function VaultScreen() {
     }
   };
 
-  const addButton = (
+  const addButton = (id?: string) => (
     <button
+      id={id}
       type="button"
       className="btn btn--primary"
       onClick={() => {
@@ -69,7 +73,7 @@ export function VaultScreen() {
       <ScreenHeader
         title={S.vault.title}
         subtitle={S.vault.subtitle}
-        actions={form.mode === "closed" && !view?.keychain_problem && addButton}
+        actions={form.mode === "closed" && !view?.keychain_problem && addButton(ADD_ID)}
       />
       <p className="notice notice--info">{S.vault.reminder}</p>
       {view?.keychain_problem && <ErrorNotice error={view.keychain_problem} />}
@@ -81,6 +85,7 @@ export function VaultScreen() {
           <AccountForm
             key={form.mode === "edit" ? key(form.account) : "new"}
             editing={form.mode === "edit" ? form.account : null}
+            returnFocus={ADD_ID}
             onCancel={() => {
               setForm({ mode: "closed" });
             }}
@@ -101,7 +106,7 @@ export function VaultScreen() {
           <div className="empty">
             <h2 className="empty__title">{S.vault.emptyTitle}</h2>
             <p className="empty__body">{S.vault.emptyBody}</p>
-            {addButton}
+            {addButton()}
           </div>
         </div>
       )}
