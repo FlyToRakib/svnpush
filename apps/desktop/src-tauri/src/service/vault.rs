@@ -72,7 +72,9 @@ pub fn save(
     username: &str,
     password: &str,
 ) -> Result<VaultView, ErrorView> {
-    let host = host.trim().to_ascii_lowercase();
+    // Projects look accounts up by the host of their SVN URL, so a pasted
+    // URL is saved as that host.
+    let host = vault::svn_host(host.trim());
     let username = username.trim().to_owned();
     if host.is_empty() || username.is_empty() {
         return Err(ErrorView::new(
@@ -166,6 +168,17 @@ mod tests {
         assert!(unchanged.accounts[0].has_password);
         assert!(remove(&app, "plugins.svn.wordpress.org", "bob").unwrap().accounts.is_empty());
         assert!(app.vault.get("svn:plugins.svn.wordpress.org:bob").unwrap().is_none());
+    }
+
+    #[test]
+    fn a_pasted_svn_url_is_saved_as_its_host() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::test_support::app(dir.path());
+        let url = "https://plugins.svn.wordpress.org/my-plugin/";
+        let saved = save(&app, url, "bob", "pw").unwrap();
+        assert_eq!(saved.accounts[0].host, "plugins.svn.wordpress.org");
+        let accounts = vault::load_accounts(&app.paths).unwrap();
+        assert!(vault::resolve_account(&accounts, &vault::svn_host(url), None).is_some());
     }
 
     /// A keychain slow enough that a second remove reads `accounts.json`
