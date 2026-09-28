@@ -188,9 +188,15 @@ pub fn newest<'a>(candidates: impl IntoIterator<Item = &'a str>) -> Option<Versi
     candidates.into_iter().filter_map(|c| Version::parse(c.trim_end_matches('/')).ok()).max()
 }
 
-/// The version a changelog title starts with, such as `1.2.3` in `v1.2.3 - 2026-09-01`.
+/// The version a changelog title starts with, such as `1.2.3` in
+/// `v1.2.3 - 2026-09-01` or `Version 1.2.3`.
 pub fn extract_leading(title: &str) -> Option<String> {
-    let rest = title.trim().strip_prefix(['v', 'V']).unwrap_or_else(|| title.trim());
+    let title = title.trim();
+    let title = title
+        .get(..8)
+        .filter(|word| word.eq_ignore_ascii_case("version "))
+        .map_or(title, |_| title[8..].trim_start());
+    let rest = title.strip_prefix(['v', 'V']).unwrap_or(title);
     let core_len = rest.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(rest.len());
     let mut end = core_len;
     if rest[core_len..].starts_with('-') {
@@ -322,7 +328,10 @@ mod tests {
         assert_eq!(extract_leading("1.2.3").as_deref(), Some("1.2.3"));
         assert_eq!(extract_leading("v2.0 - 2026-01-01").as_deref(), Some("2.0"));
         assert_eq!(extract_leading("1.3.0-beta1 (preview)").as_deref(), Some("1.3.0-beta1"));
-        assert_eq!(extract_leading("Version 1.0"), None);
+        assert_eq!(extract_leading("Version 1.0").as_deref(), Some("1.0"));
+        assert_eq!(extract_leading("version 2.1.3 (2026-09-01)").as_deref(), Some("2.1.3"));
+        assert_eq!(extract_leading("Versions"), None);
+        assert_eq!(extract_leading("Version one"), None);
         assert_eq!(extract_leading("1.0."), Some("1.0".to_owned()));
     }
 }

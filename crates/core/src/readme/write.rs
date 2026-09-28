@@ -200,6 +200,13 @@ Old notice.
     }
 
     #[test]
+    fn replaces_an_entry_titled_with_the_word_version() {
+        let text = SAMPLE.replace("= 1.1.0 =\n* Old.", "= Version 1.1.0 =\n* Old.");
+        let out = upsert_changelog_entry(&text, "1.1.0", "* Rewritten.");
+        assert_eq!(out, text.replace("* Old.", "* Rewritten."));
+    }
+
+    #[test]
     fn keeps_the_blank_line_after_an_existing_title() {
         let text = SAMPLE.replace("= 1.1.0 =\n* Old.", "= 1.1.0 =\n\n* Old.");
         let out = upsert_changelog_entry(&text, "1.1.0", "* Rewritten.");
