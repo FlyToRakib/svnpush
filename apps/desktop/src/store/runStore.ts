@@ -11,21 +11,36 @@ import { toErrorView } from "../ipc/tauri";
 /** Lines kept per project in the log drawer. */
 export const LOG_LIMIT = 2000;
 
-export interface ProjectRun {
-  state: RunState | null;
-  logs: LogLine[];
-  /** A command the UI sent was refused. */
-  actionError: ErrorView | null;
+/** A log line with its arrival number, which is its stable key in the drawer. */
+export interface LogEntry extends LogLine {
+  seq: number;
 }
 
-const EMPTY: ProjectRun = { state: null, logs: [], actionError: null };
+export interface ProjectRun {
+  state: RunState | null;
+  logs: LogEntry[];
+  /** A command the UI sent was refused. */
+  actionError: ErrorView | null;
+  /** Start, Resume or Discard was sent and has not answered yet. */
+  pending: boolean;
+  /** Build package is running. It holds the project lock, so a release cannot start. */
+  building: boolean;
+}
+
+const EMPTY: ProjectRun = {
+  state: null,
+  logs: [],
+  actionError: null,
+  pending: false,
+  building: false,
+};
 
 interface RunStore {
   runs: Record<string, ProjectRun>;
   listening: boolean;
   listen: () => Promise<void>;
   receiveState: (projectPath: string, state: RunState) => void;
-  receiveLog: (projectPath: string, line: LogLine) => void;
+  receiveLogs: (projectPath: string, lines: LogLine[]) => void;
   load: (path: string) => Promise<void>;
   start: (path: string, dryRun: boolean, assetsOnly?: boolean) => Promise<void>;
   approve: (path: string, draft: ReleaseDraft) => Promise<boolean>;
@@ -35,6 +50,7 @@ interface RunStore {
   cancel: (path: string) => Promise<void>;
   resume: (path: string, runId: string) => Promise<void>;
   discard: (path: string, runId: string) => Promise<void>;
+  setBuilding: (path: string, building: boolean) => void;
   clearError: (path: string) => void;
 }
 
@@ -65,6 +81,72 @@ export const useRunStore = create<RunStore>((set, get) => {
     }
   };
 
+  // Log lines arrive one event each; they are added once per frame, so a
+  // chatty svn command re-renders the drawer once a frame, not once a line.
+  let nextSeq = 0;
+  let queued: { path: string; line: LogLine }[] = [];
+  let scheduled = false;
+  const flushLogs = () => {
+    scheduled = false;
+    const batch = queued;
+    queued = [];
+    const byPath = new Map<string, LogLine[]>();
+    for (const { path, line } of batch) {
+      byPath.set(path, [...(byPath.get(path) ?? []), line]);
+    }
+    for (const [path, lines] of byPath) {
+      get().receiveLogs(path, lines);
+    }
+  };
+  const queueLog = (path: string, line: LogLine) => {
+    queued.push({ path, line });
+    if (!scheduled) {
+      scheduled = true;
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(flushLogs);
+      } else {
+        setTimeout(flushLogs, 16);
+      }
+    }
+  };
+
+  // The shell starts a run before it answers, so run-state events can arrive
+  // before the command's own reply. Those events are newer: keep them.
+  const adopt = (path: string, before: RunState | null, returned: RunState) => {
+    const now = get().runs[path]?.state ?? null;
+    if (now !== before && now?.id === returned.id) {
+      return;
+    }
+    patch(path, { state: returned });
+  };
+
+  // Start, Resume and Discard: one at a time per project. A new run's log
+  // replaces the old one only once the shell has accepted it.
+  const launch = async (
+    path: string,
+    action: () => Promise<RunState | null>,
+    freshLog: boolean,
+  ) => {
+    if (get().runs[path]?.pending) {
+      return;
+    }
+    flushLogs();
+    const mark = nextSeq;
+    const before = get().runs[path]?.state ?? null;
+    patch(path, { pending: true });
+    await attempt(path, async () => {
+      const state = await action();
+      if (freshLog) {
+        flushLogs();
+        patch(path, { logs: (get().runs[path]?.logs ?? []).filter((l) => l.seq >= mark) });
+      }
+      if (state) {
+        adopt(path, before, state);
+      }
+    });
+    patch(path, { pending: false });
+  };
+
   return {
     runs: {},
     listening: false,
@@ -74,38 +156,50 @@ export const useRunStore = create<RunStore>((set, get) => {
         return;
       }
       set({ listening: true });
-      await onRunState((event) => {
-        get().receiveState(event.project_path, event.state);
-      });
-      await onRunLog((event) => {
-        get().receiveLog(event.project_path, event.line);
-      });
+      const unlisten: (() => void)[] = [];
+      try {
+        unlisten.push(
+          await onRunState((event) => {
+            get().receiveState(event.project_path, event.state);
+          }),
+        );
+        unlisten.push(
+          await onRunLog((event) => {
+            queueLog(event.project_path, event.line);
+          }),
+        );
+      } catch (error) {
+        // Without events the release page would never move; allow another try.
+        for (const stop of unlisten) {
+          stop();
+        }
+        set({ listening: false });
+        console.error("Could not listen for run events", error);
+      }
     },
 
     receiveState: (projectPath, state) => {
       patch(projectPath, { state });
     },
 
-    receiveLog: (projectPath, line) => {
-      const logs = [...(get().runs[projectPath]?.logs ?? []), line];
+    receiveLogs: (projectPath, lines) => {
+      const added = lines.map((line) => ({ ...line, seq: nextSeq++ }));
+      const logs = [...(get().runs[projectPath]?.logs ?? []), ...added];
       patch(projectPath, { logs: logs.length > LOG_LIMIT ? logs.slice(-LOG_LIMIT) : logs });
     },
 
     load: async (path) => {
+      const before = get().runs[path]?.state ?? null;
       await attempt(path, async () => {
         const state = await commands.currentRun(path);
         if (state) {
-          patch(path, { state });
+          adopt(path, before, state);
         }
       });
     },
 
-    start: async (path, dryRun, assetsOnly = false) => {
-      patch(path, { logs: [] });
-      await attempt(path, async () => {
-        patch(path, { state: await commands.startRun(path, dryRun, assetsOnly) });
-      });
-    },
+    start: (path, dryRun, assetsOnly = false) =>
+      launch(path, () => commands.startRun(path, dryRun, assetsOnly), true),
 
     approve: (path, draft) => attempt(path, () => commands.approveDraft(path, draft)),
 
@@ -121,15 +215,20 @@ export const useRunStore = create<RunStore>((set, get) => {
       await attempt(path, () => commands.cancelRun(path));
     },
 
-    resume: async (path, runId) => {
-      patch(path, { logs: [] });
-      await attempt(path, async () => {
-        patch(path, { state: await commands.resumeRun(path, runId) });
-      });
-    },
+    resume: (path, runId) => launch(path, () => commands.resumeRun(path, runId), true),
 
-    discard: async (path, runId) => {
-      await attempt(path, () => commands.discardRun(path, runId));
+    discard: (path, runId) =>
+      launch(
+        path,
+        async () => {
+          await commands.discardRun(path, runId);
+          return null;
+        },
+        false,
+      ),
+
+    setBuilding: (path, building) => {
+      patch(path, { building });
     },
 
     clearError: (path) => {

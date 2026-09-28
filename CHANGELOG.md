@@ -4,6 +4,18 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- A release that fails straight away (for example with no Subversion) now shows the failure instead of staying on "Starting".
+- If you edit the release notes while the AI is drafting, its draft no longer replaces your text. You can choose "Use the AI draft" instead.
+- The plugin page opens once after a publish, not again every time you come back to the Release screen.
+- Release, Dry run, Update assets and Resume show "Starting…" and ignore a second click, and they wait while Build package runs. The previous log stays until the new release has started.
+- Discarding an unfinished release asks first, and Cancel is hidden while SVNpush is publishing.
+- Install and restart asks first, and waits until no release is running.
+- The log follows new output only while you are at the end of it, and long releases no longer slow the page down.
+- The commit messages are filled in when the SVN preview arrives, and ticked AI fixes are cleared when a new explanation arrives.
+- Double-clicking Save no longer adds a provider twice; models loaded for a provider you switched away from are ignored.
+- Errors that were silently ignored (removing a project, saving the fallback order, installing Subversion, copying to the clipboard, loading plugin images) are now shown.
+- Projects, Vault, Settings and plugin images show that they are loading, and long file paths wrap instead of widening the page.
+
 - Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.

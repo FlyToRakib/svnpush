@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Phase } from "../ipc/bindings/Phase";
 import { PROJECT_PATH, runState } from "../test/fixtures";
 import { tauriMock } from "../test/tauriMock";
@@ -45,19 +45,68 @@ describe("runStore", () => {
     tauriMock.emit("run-state", { project_path: "b", state: runState("Failed", "Verify") });
     const runs = useRunStore.getState().runs;
     expect(runs.a?.state?.phase).toBe("Detecting");
-    expect(runs.a?.logs).toHaveLength(1);
     expect(runs.b?.state?.phase).toBe("Failed");
-    expect(runs.b?.logs).toHaveLength(0);
+    // Log lines are added once per frame.
+    await vi.waitFor(() => {
+      expect(useRunStore.getState().runs.a?.logs).toHaveLength(1);
+    });
+    expect(useRunStore.getState().runs.b?.logs ?? []).toHaveLength(0);
   });
 
-  it("keeps only the newest log lines", () => {
-    const store = useRunStore.getState();
-    for (let i = 0; i < LOG_LIMIT + 5; i += 1) {
-      store.receiveLog(PROJECT_PATH, { stream: "Stdout", text: String(i) });
-    }
+  it("keeps only the newest log lines, each with its own key", () => {
+    const lines = Array.from({ length: LOG_LIMIT + 5 }, (_, i) => ({
+      stream: "Stdout" as const,
+      text: String(i),
+    }));
+    useRunStore.getState().receiveLogs(PROJECT_PATH, lines);
     const logs = useRunStore.getState().runs[PROJECT_PATH]?.logs ?? [];
     expect(logs).toHaveLength(LOG_LIMIT);
     expect(logs[0]?.text).toBe("5");
+    expect(new Set(logs.map((l) => l.seq)).size).toBe(LOG_LIMIT);
+  });
+
+  it("keeps a newer state that arrived before the start command answered", async () => {
+    await useRunStore.getState().listen();
+    tauriMock.handle("start_run", () => {
+      // The shell runs the release before it replies: svn is missing, so it fails at once.
+      tauriMock.emit("run-state", {
+        project_path: PROJECT_PATH,
+        state: runState("Failed", "Detect"),
+      });
+      return runState("Idle", "Detect");
+    });
+    await useRunStore.getState().start(PROJECT_PATH, false);
+    expect(useRunStore.getState().runs[PROJECT_PATH]?.state?.phase).toBe("Failed");
+  });
+
+  it("sends one start for a double click and keeps the old log until it is accepted", async () => {
+    useRunStore.getState().receiveLogs(PROJECT_PATH, [{ stream: "Stdout", text: "old run" }]);
+    let answer: (state: unknown) => void = () => undefined;
+    tauriMock.handle("start_run", () => new Promise((resolve) => (answer = resolve)));
+    const first = useRunStore.getState().start(PROJECT_PATH, false);
+    const second = useRunStore.getState().start(PROJECT_PATH, false);
+    expect(useRunStore.getState().runs[PROJECT_PATH]?.pending).toBe(true);
+    expect(useRunStore.getState().runs[PROJECT_PATH]?.logs).toHaveLength(1);
+    answer(runState("Idle", "Detect"));
+    await Promise.all([first, second]);
+    expect(tauriMock.calls.filter((c) => c.command === "start_run")).toHaveLength(1);
+    const run = useRunStore.getState().runs[PROJECT_PATH];
+    expect(run?.pending).toBe(false);
+    expect(run?.logs).toHaveLength(0);
+    expect(run?.actionError).toBeNull();
+  });
+
+  it("keeps the old log when the start is refused", async () => {
+    useRunStore.getState().receiveLogs(PROJECT_PATH, [{ stream: "Stdout", text: "old run" }]);
+    tauriMock.reject("start_run", {
+      code: "RUN_ALREADY_ACTIVE",
+      message: "A release is already running for this plugin.",
+      fix: null,
+    });
+    await useRunStore.getState().start(PROJECT_PATH, false);
+    const run = useRunStore.getState().runs[PROJECT_PATH];
+    expect(run?.logs).toHaveLength(1);
+    expect(run?.actionError?.code).toBe("RUN_ALREADY_ACTIVE");
   });
 
   it("starts a run with camelCase arguments and stores the first state", async () => {

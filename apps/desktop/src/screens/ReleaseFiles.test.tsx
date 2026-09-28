@@ -32,7 +32,11 @@ function review(overrides: Partial<FileReview> = {}): FileReview {
 
 function open(state: RunState) {
   useProjectStore.setState({ projects: [summary()], selectedPath: PROJECT_PATH, loaded: true });
-  useRunStore.setState({ runs: { [PROJECT_PATH]: { state, logs: [], actionError: null } } });
+  useRunStore.setState({
+    runs: {
+      [PROJECT_PATH]: { state, logs: [], actionError: null, pending: false, building: false },
+    },
+  });
   tauriMock.handle("current_run", () => state);
   tauriMock.handle("project_history", () => []);
   tauriMock.handle("list_projects", () => [summary()]);

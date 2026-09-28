@@ -7,12 +7,19 @@ import { DRAFT_CONTEXT, PREVIEW, PROJECT_PATH, runState, summary } from "../test
 import { tauriMock } from "../test/tauriMock";
 import { ReleaseScreen } from "./ReleaseScreen";
 
-function open(state = runState("AwaitingApproval", "Draft", { draft_context: DRAFT_CONTEXT })) {
-  useProjectStore.setState({ projects: [summary()], selectedPath: PROJECT_PATH, loaded: true });
-  useRunStore.setState({ runs: { [PROJECT_PATH]: { state, logs: [], actionError: null } } });
+function open(
+  state = runState("AwaitingApproval", "Draft", { draft_context: DRAFT_CONTEXT }),
+  project = summary(),
+) {
+  useProjectStore.setState({ projects: [project], selectedPath: PROJECT_PATH, loaded: true });
+  useRunStore.setState({
+    runs: {
+      [PROJECT_PATH]: { state, logs: [], actionError: null, pending: false, building: false },
+    },
+  });
   tauriMock.handle("current_run", () => state);
   tauriMock.handle("project_history", () => []);
-  tauriMock.handle("list_projects", () => [summary()]);
+  tauriMock.handle("list_projects", () => [project]);
   tauriMock.handle("provider_adapters", () => []);
   tauriMock.handle("list_providers", () => ({ schema: 1, providers: [], fallback: [] }));
   return render(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
@@ -104,7 +111,98 @@ describe("ReleaseScreen", () => {
       useRunStore.getState().receiveState(PROJECT_PATH, { ...published, notices: ["again"] });
     });
     view.rerender(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
+    // Leaving the screen and coming back does not open it again.
+    view.unmount();
+    render(<ReleaseScreen onOpenProviders={vi.fn()} onOpenHelp={vi.fn()} />);
+    await screen.findByText("r13");
     expect(tauriMock.opened).toEqual(["https://wordpress.org/plugins/demo/"]);
+  });
+
+  it("fills the commit messages when the preview arrives after the step opened", async () => {
+    open(runState("Previewing", "Preview", { draft: DRAFT_CONTEXT.prefill }));
+    expect(await screen.findByText("Demo Plugin")).toBeTruthy();
+    act(() => {
+      useRunStore.getState().receiveState(
+        PROJECT_PATH,
+        runState("AwaitingPublish", "Publish", {
+          preview: PREVIEW,
+          draft: DRAFT_CONTEXT.prefill,
+        }),
+      );
+    });
+    expect((await screen.findByLabelText<HTMLInputElement>("Trunk commit message")).value).toBe(
+      "Release 1.0.1",
+    );
+    expect(screen.getByLabelText<HTMLInputElement>("Tag commit message").value).toBe("Tag 1.0.1");
+  });
+
+  it("hides Cancel while publishing", async () => {
+    open(runState("Publishing", "Publish", { preview: PREVIEW, draft: DRAFT_CONTEXT.prefill }));
+    expect(await screen.findByText("Demo Plugin")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("does not start a release while a package is being built", async () => {
+    open(runState("DryRunComplete", null));
+    act(() => {
+      useRunStore.getState().setBuilding(PROJECT_PATH, true);
+    });
+    expect(
+      (await screen.findByRole<HTMLButtonElement>("button", { name: "Release" })).disabled,
+    ).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Update assets" }).disabled).toBe(
+      true,
+    );
+  });
+
+  it("shows Starting and ignores a second click until the start answers", async () => {
+    const user = userEvent.setup();
+    open(runState("DryRunComplete", null));
+    let answer: (state: unknown) => void = () => undefined;
+    tauriMock.handle("start_run", () => new Promise((resolve) => (answer = resolve)));
+    await user.click(screen.getByRole("button", { name: "Release" }));
+    const starting = await screen.findByRole<HTMLButtonElement>("button", { name: "Starting…" });
+    expect(starting.disabled).toBe(true);
+    await user.click(starting);
+    expect(tauriMock.calls.filter((c) => c.command === "start_run")).toHaveLength(1);
+    await act(async () => {
+      answer(runState("Idle", "Detect"));
+      await Promise.resolve();
+    });
+  });
+
+  it("asks before discarding an unfinished release", async () => {
+    const user = userEvent.setup();
+    const interrupted = summary({
+      unfinished: {
+        id: "20260917-090000",
+        slug: "demo",
+        project_path: PROJECT_PATH,
+        version: "1.0.1",
+        main_file: "demo.php",
+        dry_run: false,
+        started: "2026-09-17T09:00:00Z",
+        finished: null,
+        steps: [],
+        revisions: { trunk: null, tag: null, assets: null },
+        outcome: null,
+        diffs: [],
+        tag_message: null,
+        verification: null,
+        snapshot: null,
+        discarded: false,
+        assets_only: false,
+      },
+    });
+    open(runState("Failed", "Build"), interrupted);
+    await user.click(await screen.findByRole("button", { name: "Discard" }));
+    const dialog = screen.getByRole("dialog", { name: "Discard the unfinished release" });
+    expect(tauriMock.calls.some((c) => c.command === "discard_run")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "Discard" }));
+    expect(tauriMock.calls.find((c) => c.command === "discard_run")?.args).toEqual({
+      path: PROJECT_PATH,
+      runId: "20260917-090000",
+    });
   });
 
   it("starts a dry run when the toggle is on", async () => {

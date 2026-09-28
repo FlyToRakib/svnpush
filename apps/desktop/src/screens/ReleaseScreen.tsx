@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { Checklist } from "../components/Checklist";
 import { AssetsCard } from "../components/AssetsCard";
 import { ErrorNotice } from "../components/ErrorNotice";
@@ -20,7 +21,8 @@ import { useProjectStore } from "../store/projectStore";
 import { isActive, useRunStore } from "../store/runStore";
 import { S } from "../strings";
 
-const NO_LOGS: never[] = [];
+/** Runs whose plugin page was already opened, kept across visits to this screen. */
+const openedPages = new Set<string>();
 
 interface ReleaseScreenProps {
   onOpenProviders: () => void;
@@ -32,10 +34,23 @@ interface ReleaseScreenProps {
  * releasing, the seven release steps, then the project's settings and history.
  */
 export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProps) {
-  const { projects, selectedPath, load: loadProjects, update, remove, select } = useProjectStore();
+  const { projects, selectedPath, loadProjects, update, remove, select } = useProjectStore(
+    useShallow((s) => ({
+      projects: s.projects,
+      selectedPath: s.selectedPath,
+      loadProjects: s.load,
+      update: s.update,
+      remove: s.remove,
+      select: s.select,
+    })),
+  );
   const summary = projects.find((p) => p.project.path === selectedPath);
   const path = summary?.project.path ?? "";
-  const run = useRunStore((s) => s.runs[path]);
+  // Field by field, so a log line (only the drawer shows those) does not re-render the page.
+  const state = useRunStore((s) => s.runs[path]?.state ?? null);
+  const actionError = useRunStore((s) => s.runs[path]?.actionError ?? null);
+  const pending = useRunStore((s) => s.runs[path]?.pending ?? false);
+  const building = useRunStore((s) => s.runs[path]?.building ?? false);
   const runs = {
     load: useRunStore((s) => s.load),
     start: useRunStore((s) => s.start),
@@ -53,13 +68,12 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
   const [removing, setRemoving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [localError, setLocalError] = useState<ErrorView | null>(null);
-  const opened = useRef<string | null>(null);
+  const [discarding, setDiscarding] = useState(false);
   const stepsRef = useRef<HTMLElement>(null);
   // The checks are open between releases and folded during one, unless the
   // developer toggled them while in that same state.
   const [beforeToggle, setBeforeToggle] = useState<{ active: boolean; open: boolean } | null>(null);
 
-  const state = run?.state ?? null;
   const active = isActive(state);
   const showBefore = beforeToggle?.active === active ? beforeToggle.open : !active;
   const setBeforeOpen = (open: boolean) => {
@@ -96,8 +110,8 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
 
   // Open the plugin page once per successful publish, when the project asks for it.
   useEffect(() => {
-    if (runId && publishResult?.open_plugin_page && opened.current !== runId) {
-      opened.current = runId;
+    if (runId && publishResult?.open_plugin_page && !openedPages.has(runId)) {
+      openedPages.add(runId);
       void openExternal(publishResult.plugin_url);
     }
   }, [runId, publishResult]);
@@ -118,6 +132,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
 
   const { project } = summary;
   const unfinished = !active ? summary.unfinished : null;
+  const cannotStart = summary.locked || Boolean(unfinished) || pending || building;
 
   const resetWorkingCopy = async () => {
     try {
@@ -137,15 +152,18 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         actions={
           <div className="release__actions">
             {active ? (
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => {
-                  void runs.cancel(path);
-                }}
-              >
-                {S.release.cancel}
-              </button>
+              // Stopping mid-publish could leave trunk committed without its tag.
+              state?.phase !== "Publishing" && (
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  onClick={() => {
+                    void runs.cancel(path);
+                  }}
+                >
+                  {S.release.cancel}
+                </button>
+              )
             ) : (
               <>
                 <label className="checkbox" title={S.release.dryRunHint}>
@@ -161,19 +179,19 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
                 <button
                   type="button"
                   className="btn btn--primary"
-                  disabled={summary.locked || Boolean(unfinished)}
+                  disabled={cannotStart}
                   onClick={() => {
                     setNotice(null);
                     void runs.start(path, dryRun);
                   }}
                 >
-                  {dryRun ? S.release.dryRun : S.release.release}
+                  {pending ? S.release.starting : dryRun ? S.release.dryRun : S.release.release}
                 </button>
                 <button
                   type="button"
                   className="btn"
                   title={S.release.assetsHint}
-                  disabled={summary.locked || Boolean(unfinished)}
+                  disabled={cannotStart}
                   onClick={() => {
                     setNotice(null);
                     void runs.start(path, dryRun, true);
@@ -205,16 +223,16 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
       {unfinished && (
         <UnfinishedBanner
           journal={unfinished}
-          disabled={active}
+          disabled={active || pending || building}
           onResume={() => {
             void runs.resume(path, unfinished.id).then(loadProjects);
           }}
           onDiscard={() => {
-            void runs.discard(path, unfinished.id).then(loadProjects);
+            setDiscarding(true);
           }}
         />
       )}
-      {run?.actionError && <ErrorNotice error={run.actionError} />}
+      {actionError && <ErrorNotice error={actionError} />}
       {localError && <ErrorNotice error={localError} />}
       {state?.error && <ErrorNotice error={state.error} />}
       {(state?.error?.code === "TOOLS_SVN_UNAVAILABLE" ||
@@ -283,7 +301,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
             <PackageBuildCard
               projectPath={path}
               currentVersion={summary.version}
-              disabled={active}
+              disabled={active || pending}
             />
           </div>
         )}
@@ -295,6 +313,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         </h2>
         {state ? (
           <Checklist
+            key={state.id}
             state={state}
             disabled={!active}
             onApprove={(draft) => {
@@ -332,7 +351,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         <PastReleases journals={history} />
       </section>
 
-      <LogDrawer logs={run?.logs ?? NO_LOGS} />
+      <LogDrawer projectPath={path} />
 
       <Modal
         open={removing}
@@ -356,9 +375,14 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
               className="btn btn--danger"
               onClick={() => {
                 setRemoving(false);
-                void remove(path).then(() => {
-                  select(null);
-                });
+                remove(path).then(
+                  () => {
+                    select(null);
+                  },
+                  (e: unknown) => {
+                    setLocalError(toErrorView(e));
+                  },
+                );
               }}
             >
               {S.common.remove}
@@ -367,6 +391,41 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         }
       >
         <p>{S.projectSettings.removeBody}</p>
+      </Modal>
+
+      <Modal
+        open={discarding}
+        title={S.release.discardTitle}
+        onClose={() => {
+          setDiscarding(false);
+        }}
+        actions={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setDiscarding(false);
+              }}
+            >
+              {S.common.cancel}
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                setDiscarding(false);
+                if (unfinished) {
+                  void runs.discard(path, unfinished.id).then(loadProjects);
+                }
+              }}
+            >
+              {S.release.discard}
+            </button>
+          </>
+        }
+      >
+        <p>{S.release.discardBody}</p>
       </Modal>
     </div>
   );

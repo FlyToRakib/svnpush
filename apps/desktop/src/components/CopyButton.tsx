@@ -2,16 +2,21 @@ import { useState } from "react";
 import { S } from "../strings";
 
 interface CopyButtonProps {
-  text: string;
+  /** The text, or a function that builds it when clicked (for long text). */
+  text: string | (() => string);
   label: string;
 }
 
-/** Copies text to the clipboard and says so. */
+/** Copies text to the clipboard and says whether it worked. */
 export function CopyButton({ text, label }: CopyButtonProps) {
-  const [copied, setCopied] = useState(false);
+  const [result, setResult] = useState<"copied" | "failed" | null>(null);
   const copy = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(typeof text === "function" ? text() : text);
+      setResult("copied");
+    } catch {
+      setResult("failed");
+    }
   };
   return (
     <button
@@ -21,10 +26,10 @@ export function CopyButton({ text, label }: CopyButtonProps) {
         void copy();
       }}
       onBlur={() => {
-        setCopied(false);
+        setResult(null);
       }}
     >
-      {copied ? S.common.copied : label}
+      {result === "copied" ? S.common.copied : result === "failed" ? S.common.copyFailed : label}
     </button>
   );
 }

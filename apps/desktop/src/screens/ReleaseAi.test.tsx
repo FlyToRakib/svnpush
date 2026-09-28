@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiTask } from "../ipc/bindings/AiTask";
@@ -44,7 +44,11 @@ function drafting(ai: Partial<AiTask>, extra: Partial<NonNullable<RunState["draf
 
 function open(state: RunState, onOpenProviders = vi.fn()) {
   useProjectStore.setState({ projects: [summary()], selectedPath: PROJECT_PATH, loaded: true });
-  useRunStore.setState({ runs: { [PROJECT_PATH]: { state, logs: [], actionError: null } } });
+  useRunStore.setState({
+    runs: {
+      [PROJECT_PATH]: { state, logs: [], actionError: null, pending: false, building: false },
+    },
+  });
   tauriMock.handle("current_run", () => state);
   tauriMock.handle("project_history", () => []);
   tauriMock.handle("list_projects", () => [summary()]);
@@ -195,5 +199,80 @@ describe("Release AI", () => {
     await user.click(apply);
     await user.click(screen.getByRole("button", { name: "Stop the release" }));
     expect(decisions()).toEqual([{ kind: "ApplyFixes", fixes: [0] }, { kind: "Stop" }]);
+  });
+
+  it("clears ticked fixes when a new explanation arrives", async () => {
+    const user = userEvent.setup();
+    const fix = (check_id: string, replacement: string) => ({
+      check_id,
+      path: "readme.txt",
+      original: "long",
+      replacement,
+      diff: `--- a/readme.txt\n+++ b/readme.txt\n@@ -1 +1 @@\n-long\n+${replacement}\n`,
+      problem: null,
+    });
+    const explained = (fixes: ReturnType<typeof fix>[]) =>
+      runState("AwaitingFixes", "Verify", {
+        explanation: { task: task({ status: "Done", provider: LOCAL }), text: "Why.", fixes },
+      });
+    open(explained([fix("V07", "short"), fix("V08", "other")]));
+    await user.click((await screen.findAllByRole("checkbox", { name: /Fixes V/ }))[1] as Element);
+    act(() => {
+      useRunStore
+        .getState()
+        .receiveState(PROJECT_PATH, explained([fix("V02", "new"), fix("V03", "newer")]));
+    });
+    const boxes = await screen.findAllByRole("checkbox", { name: /Fixes V0[23]/ });
+    expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([false, false]);
+  });
+
+  it("keeps what you typed when the AI draft arrives, and offers it instead", async () => {
+    const user = userEvent.setup();
+    open(drafting({}));
+    const changelog = await screen.findByLabelText("Changelog entry");
+    await user.clear(changelog);
+    await user.type(changelog, "* My own words");
+    const draft = {
+      ...DRAFT_CONTEXT.prefill,
+      changelog_markdown: "* From the AI",
+      provider: LOCAL,
+    };
+    act(() => {
+      useRunStore
+        .getState()
+        .receiveState(
+          PROJECT_PATH,
+          drafting({ status: "Done", provider: LOCAL }, { draft, generation: 1 }),
+        );
+    });
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Changelog entry").value).toBe(
+      "* My own words",
+    );
+    await user.click(screen.getByRole("button", { name: "Use the AI draft" }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Changelog entry").value).toBe(
+      "* From the AI",
+    );
+  });
+
+  it("fills an untouched form with the AI draft when it arrives", async () => {
+    open(drafting({}));
+    await screen.findByLabelText("Changelog entry");
+    const draft = {
+      ...DRAFT_CONTEXT.prefill,
+      changelog_markdown: "* From the AI",
+      provider: LOCAL,
+    };
+    act(() => {
+      useRunStore
+        .getState()
+        .receiveState(
+          PROJECT_PATH,
+          drafting({ status: "Done", provider: LOCAL }, { draft, generation: 1 }),
+        );
+    });
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Changelog entry").value).toBe(
+      "* From the AI",
+    );
+    expect(screen.queryByRole("button", { name: "Use the AI draft" })).toBeNull();
   });
 });

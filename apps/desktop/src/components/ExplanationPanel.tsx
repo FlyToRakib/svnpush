@@ -22,7 +22,17 @@ export function ExplanationPanel({
   onDecide,
   onOpenProviders,
 }: ExplanationPanelProps) {
-  const [selected, setSelected] = useState<number[]>([]);
+  // A choice belongs to one set of fixes: a new explanation starts with none ticked,
+  // so an index never points at a different fix than the one you saw.
+  const fixesKey = JSON.stringify(explanation.fixes);
+  const [choice, setChoice] = useState<{ key: string; indices: number[] }>({
+    key: fixesKey,
+    indices: [],
+  });
+  const selected = choice.key === fixesKey ? choice.indices : [];
+  const setSelected = (indices: number[]) => {
+    setChoice({ key: fixesKey, indices });
+  };
   const applicable = explanation.fixes.filter((f) => f.problem === null).length;
 
   return (
