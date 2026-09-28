@@ -195,6 +195,15 @@ Old notice.
     }
 
     #[test]
+    fn replaces_an_entry_with_its_sub_headings() {
+        let text = SAMPLE
+            .replace("= 1.1.0 =\n* Old.", "= 1.1.0 =\n#### Added\n* Old.\n\n= Fixed =\n* Bug.");
+        assert_eq!(parse(&text).changelog[0].body, "#### Added\n* Old.\n\n= Fixed =\n* Bug.");
+        let out = upsert_changelog_entry(&text, "1.1.0", "* Rewritten.");
+        assert_eq!(out, SAMPLE.replace("* Old.", "* Rewritten."));
+    }
+
+    #[test]
     fn sets_the_last_repeated_header_and_short_forms() {
         let text = "=== P ===\nStable tag: 1.0\nTested: 6.5\nStable tag: 1.0\n";
         let out = set_header(text, "Stable tag", "1.1").unwrap();

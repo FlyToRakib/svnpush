@@ -214,16 +214,25 @@ impl<'a> Layout<'a> {
         self.sections.iter().find(|s| section_key(s.title) == section_key(title))
     }
 
+    /// The entries of `section`. In the Changelog, a heading that names no
+    /// version after an entry (`#### Added`, `= Fixed =`) is part of that
+    /// entry; WordPress.org shows the section as one text. In the Upgrade
+    /// Notice every heading starts an entry, as WordPress.org splits it.
     pub fn entries(&self, section: &SectionSpan<'a>) -> Vec<EntrySpan<'a>> {
+        let changelog = section_key(section.title) == "changelog";
         let mut entries: Vec<EntrySpan<'a>> = Vec::new();
         for index in section.title_line + 1..section.end_line {
             if let Some(title) = entry_title(self.lines[index].content) {
+                let version = version::extract_leading(title);
+                if changelog && version.is_none() && !entries.is_empty() {
+                    continue;
+                }
                 if let Some(previous) = entries.last_mut() {
                     previous.end_line = index;
                 }
                 entries.push(EntrySpan {
                     title,
-                    version: version::extract_leading(title),
+                    version,
                     title_line: index,
                     end_line: section.end_line,
                 });
