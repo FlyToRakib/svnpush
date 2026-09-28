@@ -20,7 +20,7 @@ use crate::ai::router::{self, Ask, RouteEvent, Router};
 use crate::ai::schemas::{self, DraftAnswer, FileSummary};
 use crate::ai::task::{self, Answer, JSON_MAX_TOKENS, TaskError};
 use crate::detect::PluginFacts;
-use crate::project::{AiChoice, AppPaths};
+use crate::project::{AiChoice, AppPaths, ConfigError};
 use crate::readme::ChangelogEntry;
 use crate::settings;
 use crate::vault::{self, CredentialStore};
@@ -135,6 +135,16 @@ pub(super) fn settle_version(
         next.clone(),
         Some(format!("The AI suggested \"{suggested}\", which {reason}. Using {next} instead.")),
     )
+}
+
+/// Adds `provider_id` to the accepted privacy notices. Settings that cannot
+/// be read are left alone: saving defaults over them would lose the rest.
+fn remember_privacy(paths: &AppPaths, provider_id: &str) -> Result<(), ConfigError> {
+    let mut app = settings::load(paths)?;
+    if !app.privacy_notice_seen.iter().any(|id| id == provider_id) {
+        app.privacy_notice_seen.push(provider_id.to_owned());
+    }
+    settings::save(paths, &app)
 }
 
 fn draft_task(state: &mut RunState) -> Option<&mut AiTask> {
@@ -265,11 +275,7 @@ impl Run {
     }
 
     pub(super) fn accept_privacy(&mut self, provider_id: &str) {
-        let mut app = settings::load(&self.inputs.paths).unwrap_or_default();
-        if !app.privacy_notice_seen.iter().any(|id| id == provider_id) {
-            app.privacy_notice_seen.push(provider_id.to_owned());
-        }
-        if let Err(e) = settings::save(&self.inputs.paths, &app) {
+        if let Err(e) = remember_privacy(&self.inputs.paths, provider_id) {
             self.state.notices.push(format!("Could not remember the accepted privacy notice: {e}"));
         }
     }
@@ -495,5 +501,19 @@ mod tests {
         assert_eq!(settle_version("1.1", Some("1.2.0"), "x").0, "1.2.1");
         assert_eq!(settle_version("soon", None, "1.0.0").0, "1.0.0");
         assert_eq!(settle_version(" 2.0 ", None, "1.0.0"), ("2.0".to_owned(), None));
+    }
+
+    #[test]
+    fn accepting_a_notice_never_replaces_unreadable_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::new(dir.path());
+        remember_privacy(&paths, "prov_a").unwrap();
+        remember_privacy(&paths, "prov_a").unwrap();
+        assert_eq!(settings::load(&paths).unwrap().privacy_notice_seen, ["prov_a"]);
+
+        let broken = "{ \"svn_path\": \"C:/svn/bin/svn.exe\", ";
+        std::fs::write(paths.settings_file(), broken).unwrap();
+        assert!(remember_privacy(&paths, "prov_b").is_err());
+        assert_eq!(std::fs::read_to_string(paths.settings_file()).unwrap(), broken);
     }
 }
