@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DraftProvider } from "../ipc/bindings/DraftProvider";
 import { S } from "../strings";
 
@@ -13,6 +13,19 @@ interface ProviderChangeProps {
 export function ProviderChange({ choices, current, disabled, onChoose }: ProviderChangeProps) {
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState(current?.id ?? choices[0]?.id ?? "");
+  const change = useRef<HTMLButtonElement>(null);
+  const picker = useRef<HTMLSelectElement>(null);
+  const wasOpen = useRef(false);
+
+  // The picker replaces the Change link: take focus to it, and back when it closes.
+  useEffect(() => {
+    if (open) {
+      picker.current?.focus();
+    } else if (wasOpen.current) {
+      change.current?.focus();
+    }
+    wasOpen.current = open;
+  }, [open]);
 
   if (choices.length === 0) {
     return null;
@@ -20,6 +33,7 @@ export function ProviderChange({ choices, current, disabled, onChoose }: Provide
   if (!open) {
     return (
       <button
+        ref={change}
         type="button"
         className="btn btn--link"
         disabled={disabled}
@@ -34,6 +48,7 @@ export function ProviderChange({ choices, current, disabled, onChoose }: Provide
   return (
     <span className="row">
       <select
+        ref={picker}
         className="input input--short"
         aria-label={S.ai.changeLabel}
         value={chosen}

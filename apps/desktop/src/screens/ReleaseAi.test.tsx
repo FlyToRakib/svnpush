@@ -147,6 +147,18 @@ describe("Release AI", () => {
     expect(decisions()).toEqual([{ kind: "Generate", provider_id: "prov_local" }]);
   });
 
+  it("moves focus to the provider list on Change and back on Cancel", async () => {
+    const user = userEvent.setup();
+    open(drafting({ status: "Failed", error: null }));
+    await user.click(await screen.findByRole("button", { name: "Change" }));
+    const picker = screen.getByLabelText("AI provider for this run");
+    expect(document.activeElement).toBe(picker);
+    await user.click(
+      within(picker.parentElement as HTMLElement).getByRole("button", { name: "Cancel" }),
+    );
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Change" }));
+  });
+
   it("offers Providers and writing by hand when no provider is configured", async () => {
     const user = userEvent.setup();
     const openProviders = open(
