@@ -7,6 +7,12 @@ use crate::readme::ChangelogEntry;
 pub const DIFF_BUDGET_CHARS: usize = 60_000;
 /// Characters of one file's diff sent to `summarise_file`.
 pub const FILE_DIFF_BUDGET_CHARS: usize = 20_000;
+/// Characters of commit subjects in one `draft_release` prompt.
+pub const COMMITS_BUDGET_CHARS: usize = 8_000;
+/// Characters of the changed-file list in one `draft_release` prompt.
+pub const STAT_BUDGET_CHARS: usize = 12_000;
+/// Characters of each existing changelog entry shown for style.
+pub const ENTRY_BUDGET_CHARS: usize = 2_000;
 
 /// A system and a user prompt.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,7 +55,8 @@ Reply with a single JSON object and nothing else, with exactly these string fiel
 {\"version\": \"\", \"reason\": \"\", \"changelog_markdown\": \"\", \"upgrade_notice\": \"\", \"summary\": \"\"}. \
 changelog_markdown is the body of the entry only, without the = version = heading.";
 
-/// The `draft_release` prompt.
+/// The `draft_release` prompt. Every section has a budget, so the whole
+/// prompt stays under Revoye's 100,000-character limit.
 pub fn draft_release(material: &DraftMaterial<'_>) -> Prompt {
     let mut user = vec![
         format!("Plugin: {} (slug {})", material.name, material.slug),
@@ -63,7 +70,7 @@ pub fn draft_release(material: &DraftMaterial<'_>) -> Prompt {
             .recent_entries
             .iter()
             .take(3)
-            .map(|e| format!("= {} =\n{}", e.title, e.body))
+            .map(|e| format!("= {} =\n{}", e.title, truncate_chars(&e.body, ENTRY_BUDGET_CHARS)))
             .collect();
         user.push(format!(
             "Existing changelog entries, newest first, for style:\n{}",
@@ -71,16 +78,22 @@ pub fn draft_release(material: &DraftMaterial<'_>) -> Prompt {
         ));
     }
     if !material.commits.is_empty() {
-        let commits: Vec<String> = material.commits.iter().map(|c| format!("- {c}")).collect();
-        user.push(format!("Commit subjects since the previous release:\n{}", commits.join("\n")));
+        let commits = material.commits.iter().map(|c| format!("- {c}"));
+        user.push(format!(
+            "Commit subjects since the previous release:\n{}",
+            cap_lines(commits, COMMITS_BUDGET_CHARS)
+        ));
     }
-    user.push(format!("Changed files:\n{}", material.stat));
+    user.push(format!(
+        "Changed files:\n{}",
+        cap_lines(material.stat.lines().map(str::to_owned), STAT_BUDGET_CHARS)
+    ));
     let label = if material.from_summaries {
         "Summaries of each file's changes (the full diff was too large)"
     } else {
         "Diff"
     };
-    user.push(format!("{label}:\n{}", material.changes));
+    user.push(format!("{label}:\n{}", truncate_chars(material.changes, DIFF_BUDGET_CHARS)));
     Prompt { system: DRAFT_SYSTEM.to_owned(), user: user.join("\n\n") }
 }
 
@@ -129,6 +142,26 @@ pub fn explain_failures(checks: &[FailedCheck<'_>], excerpts: &[(String, String)
         user.push(format!("Excerpt of {path}:\n{}", truncate_chars(text, FILE_DIFF_BUDGET_CHARS)));
     }
     Prompt { system: EXPLAIN_SYSTEM.to_owned(), user: user.join("\n\n") }
+}
+
+/// Whole lines up to `max` characters, then a count of the lines left out.
+fn cap_lines(lines: impl Iterator<Item = String>, max: usize) -> String {
+    let mut kept: Vec<String> = Vec::new();
+    let mut used = 0;
+    let mut left_out = 0;
+    for line in lines {
+        let size = line.chars().count() + 1;
+        if left_out == 0 && used + size <= max {
+            used += size;
+            kept.push(line);
+        } else {
+            left_out += 1;
+        }
+    }
+    if left_out > 0 {
+        kept.push(format!("[and {left_out} more not sent]"));
+    }
+    kept.join("\n")
 }
 
 /// At most `max` characters, marked when cut.
@@ -205,6 +238,28 @@ mod tests {
         assert!(prompt.user.contains("Summaries of each file's changes"));
         let long = "x".repeat(FILE_DIFF_BUDGET_CHARS + 10);
         assert!(summarise_file("a.php", &long).user.ends_with("[cut: the rest was not sent]"));
+    }
+
+    #[test]
+    fn every_section_is_budgeted() {
+        let entries = [entry("1.0.0", &"e".repeat(50_000))];
+        let commits: Vec<String> = (0..5_000).map(|i| format!("Commit number {i}")).collect();
+        let stat: Vec<String> = (0..5_000).map(|i| format!("modified: inc/file-{i}.php")).collect();
+        let prompt = draft_release(&DraftMaterial {
+            name: "Demo",
+            slug: "demo",
+            previous: Some("1.0.0"),
+            recent_entries: &entries,
+            commits: &commits,
+            stat: &stat.join("\n"),
+            changes: &"d".repeat(200_000),
+            from_summaries: true,
+        });
+        let total = prompt.system.chars().count() + prompt.user.chars().count();
+        assert!(total < 95_000, "{total}");
+        assert!(prompt.user.contains("- Commit number 0\n"));
+        assert!(prompt.user.contains("more not sent]"));
+        assert!(prompt.user.contains("modified: inc/file-0.php\n"));
     }
 
     #[test]

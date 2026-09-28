@@ -25,12 +25,19 @@ pub const DEFAULT_MAX_TOKENS: u32 = 8_192;
 pub struct OpenAiCompatible {
     meta: AdapterMeta,
     token_field: TokenField,
+    output_cap: Option<u32>,
 }
 
 impl OpenAiCompatible {
     /// A factory instance.
     pub const fn new(meta: AdapterMeta, token_field: TokenField) -> Self {
-        Self { meta, token_field }
+        Self { meta, token_field, output_cap: None }
+    }
+
+    /// Caps the output ceiling for an API that rejects a larger one.
+    #[must_use]
+    pub const fn with_output_cap(self, cap: u32) -> Self {
+        Self { output_cap: Some(cap), ..self }
     }
 
     /// The stock request, reused by OpenRouter.
@@ -46,7 +53,8 @@ impl OpenAiCompatible {
             TokenField::MaxCompletionTokens => "max_completion_tokens",
             TokenField::MaxTokens => "max_tokens",
         };
-        body[field] = json!(req.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS));
+        let max_tokens = req.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS);
+        body[field] = json!(self.output_cap.map_or(max_tokens, |cap| max_tokens.min(cap)));
         if let Some(t) = req.temperature {
             body["temperature"] = json!(t);
         }
@@ -154,7 +162,7 @@ pub static OPENAI: OpenAiCompatible = OpenAiCompatible::new(
     TokenField::MaxCompletionTokens,
 );
 
-/// DeepSeek.
+/// DeepSeek. `deepseek-chat` rejects more than 8,192 output tokens.
 pub static DEEPSEEK: OpenAiCompatible = OpenAiCompatible::new(
     meta(
         "deepseek",
@@ -167,9 +175,11 @@ pub static DEEPSEEK: OpenAiCompatible = OpenAiCompatible::new(
         "Default: deepseek-chat.",
     ),
     TokenField::MaxTokens,
-);
+)
+.with_output_cap(8_192);
 
-/// Qwen through DashScope's compatible mode.
+/// Qwen through DashScope's compatible mode. `qwen-plus` rejects more than
+/// 8,192 output tokens.
 pub static QWEN: OpenAiCompatible = OpenAiCompatible::new(
     meta(
         "qwen",
@@ -182,7 +192,8 @@ pub static QWEN: OpenAiCompatible = OpenAiCompatible::new(
         "Default: qwen-plus.",
     ),
     TokenField::MaxTokens,
-);
+)
+.with_output_cap(8_192);
 
 /// Perplexity.
 pub static PERPLEXITY: OpenAiCompatible = OpenAiCompatible::new(
