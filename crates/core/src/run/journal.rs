@@ -84,7 +84,8 @@ pub struct Revisions {
 pub enum InFlight {
     /// A commit of trunk and assets (or assets alone) with this message.
     Commit {
-        /// The plugin's last-changed revision before the commit, when known.
+        /// The plugin's last-changed revision before the commit. Always set
+        /// now; `None` only in journals written before it was required.
         #[ts(type = "number | null")]
         since: Option<u64>,
         /// The commit message, to recognise the commit in the log.

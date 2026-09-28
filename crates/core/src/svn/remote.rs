@@ -18,6 +18,9 @@ pub const VERIFY_ATTEMPTS: u32 = 3;
 /// Delay between verification attempts: three tries over thirty seconds.
 pub const VERIFY_DELAY: Duration = Duration::from_secs(10);
 
+/// How many log entries after `since` are searched for an unconfirmed commit.
+const FIND_COMMIT_LIMIT: u32 = 100;
+
 /// The result of checking a freshly created tag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "state", content = "reason")]
@@ -47,24 +50,26 @@ fn normalise(message: &str) -> String {
     message.replace("\r\n", "\n").trim().to_owned()
 }
 
-/// The revision and message of the first entry of `svn log --xml`.
-fn first_log_entry(xml: &str) -> Result<Option<(u64, String)>, SvnError> {
+/// The revision and message of every entry of `svn log --xml`, in its order.
+fn log_entries(xml: &str) -> Result<Vec<(u64, String)>, SvnError> {
     let doc =
         roxmltree::Document::parse(xml).map_err(|e| SvnError::Parse { detail: e.to_string() })?;
-    let Some(entry) = doc.descendants().find(|n| n.has_tag_name("logentry")) else {
-        return Ok(None);
-    };
-    let revision = entry
-        .attribute("revision")
-        .and_then(|r| r.parse().ok())
-        .ok_or_else(|| SvnError::Parse { detail: "log entry without a revision".to_owned() })?;
-    let message = entry
-        .children()
-        .find(|c| c.has_tag_name("msg"))
-        .and_then(|m| m.text())
-        .unwrap_or_default()
-        .to_owned();
-    Ok(Some((revision, message)))
+    doc.descendants()
+        .filter(|n| n.has_tag_name("logentry"))
+        .map(|entry| {
+            let revision =
+                entry.attribute("revision").and_then(|r| r.parse().ok()).ok_or_else(|| {
+                    SvnError::Parse { detail: "log entry without a revision".to_owned() }
+                })?;
+            let message = entry
+                .children()
+                .find(|c| c.has_tag_name("msg"))
+                .and_then(|m| m.text())
+                .unwrap_or_default()
+                .to_owned();
+            Ok((revision, message))
+        })
+        .collect()
 }
 
 /// Entry names in `svn list --xml` output; folders end with `/`.
@@ -127,21 +132,36 @@ impl Svn<'_> {
     }
 
     /// The revision of a commit with `message` under `url`, newer than
-    /// `since` when that is known: whether a commit that reported an error,
-    /// or was interrupted, reached the server. Reads `svn log --xml`, which
-    /// does not depend on the language of `svn`'s messages.
+    /// `since` (the plugin's last-changed revision before the commit):
+    /// whether a commit that reported an error, or was interrupted, reached
+    /// the server. Every entry after `since` is searched, so a later commit
+    /// does not hide it. Reads `svn log --xml`, which does not depend on the
+    /// language of `svn`'s messages.
     pub async fn find_commit(
         &self,
         url: &str,
-        since: Option<u64>,
+        since: u64,
         message: &str,
         credentials: Option<&Credentials>,
     ) -> Result<Option<u64>, SvnError> {
-        let args = vec!["log".into(), "--xml".into(), "--limit".into(), "1".into(), url.into()];
+        // The range includes `since`, which always exists: starting at
+        // `since + 1` fails with E160006 when nothing is newer.
+        let args = vec![
+            "log".into(),
+            "--xml".into(),
+            "-r".into(),
+            format!("HEAD:{since}").into(),
+            "--limit".into(),
+            FIND_COMMIT_LIMIT.to_string().into(),
+            url.into(),
+        ];
         let output = self.network(args, credentials, false).await?;
-        let Some((revision, found)) = first_log_entry(&output.stdout)? else { return Ok(None) };
-        let ours = normalise(&found) == normalise(message) && since.is_none_or(|s| revision > s);
-        Ok(ours.then_some(revision))
+        let wanted = normalise(message);
+        Ok(log_entries(&output.stdout)?
+            .into_iter()
+            .filter(|(revision, found)| *revision > since && normalise(found) == wanted)
+            .map(|(revision, _)| revision)
+            .min())
     }
 
     /// Commits `trunk/` and `assets/` with `message`. `None` when nothing changed.
@@ -153,15 +173,19 @@ impl Svn<'_> {
     ) -> Result<Option<u64>, SvnError> {
         let folders: Vec<PathBuf> =
             DEEP_FOLDERS.iter().map(|f| wc.join(f)).filter(|p| p.is_dir()).collect();
-        self.commit_paths(&folders, message, credentials).await
+        let url = self.working_copy_url(wc).await?;
+        let since = self.last_changed_revision(&url, Some(credentials)).await?.unwrap_or(0);
+        self.commit_paths(&folders, message, since, credentials).await
     }
 
     /// Commits only the given working-copy folders (an assets-only release).
+    /// `since` is the plugin's last-changed revision before the commit.
     /// Cancel does not interrupt a commit once it has started.
     pub async fn commit_paths(
         &self,
         paths: &[PathBuf],
         message: &str,
+        since: u64,
         credentials: &Credentials,
     ) -> Result<Option<u64>, SvnError> {
         let file = MessageFile::write(message)?;
@@ -179,7 +203,7 @@ impl Svn<'_> {
         let no_revision = || SvnError::Parse { detail: "no revision in commit output".to_owned() };
         let root = paths.first().and_then(|p| p.parent()).ok_or_else(no_revision)?;
         let url = self.working_copy_url(root).await?;
-        self.find_commit(&url, None, message, Some(credentials))
+        self.find_commit(&url, since, message, Some(credentials))
             .await?
             .map(Some)
             .ok_or_else(no_revision)
@@ -323,12 +347,13 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_first_log_entry() {
-        let xml = "<?xml version=\"1.0\"?>\n<log>\n<logentry revision=\"7\">\n<author>a</author>\n<msg>Release 1.0.1\n</msg>\n</logentry>\n</log>";
-        let (revision, message) = first_log_entry(xml).unwrap().unwrap();
-        assert_eq!(revision, 7);
-        assert_eq!(normalise(&message), normalise("Release 1.0.1\r\n"));
-        assert!(first_log_entry("<log></log>").unwrap().is_none());
+    fn reads_every_log_entry() {
+        let xml = "<?xml version=\"1.0\"?>\n<log>\n<logentry revision=\"8\">\n<msg>Other</msg>\n</logentry>\n<logentry revision=\"7\">\n<author>a</author>\n<msg>Release 1.0.1\n</msg>\n</logentry>\n</log>";
+        let entries = log_entries(xml).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[1].0, 7);
+        assert_eq!(normalise(&entries[1].1), normalise("Release 1.0.1\r\n"));
+        assert!(log_entries("<log></log>").unwrap().is_empty());
     }
 
     #[test]

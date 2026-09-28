@@ -306,15 +306,64 @@ async fn at_signs_and_non_ascii_names_and_messages_survive() {
     let svn = client(&env);
     let message = "Release 1.0.0 — für 日本";
     let rev = svn.commit(&wc, message, &credentials()).await.unwrap().unwrap();
-    assert_eq!(svn.find_commit(&env.url, Some(rev - 1), message, None).await.unwrap(), Some(rev));
-    assert_eq!(svn.find_commit(&env.url, Some(rev), message, None).await.unwrap(), None);
+    assert_eq!(svn.find_commit(&env.url, rev - 1, message, None).await.unwrap(), Some(rev));
+    assert_eq!(svn.find_commit(&env.url, rev, message, None).await.unwrap(), None);
     let listed = svn.list(&format!("{}/trunk/img", env.url), None).await.unwrap();
     assert_eq!(listed, ["café.php", "logo@2x.png", "日本.php"]);
 
     std::fs::remove_file(plugin.join("img/logo@2x.png")).unwrap();
     let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
     assert_eq!(trunk.deleted, ["img/logo@2x.png"]);
-    svn.commit(&wc, "Remove the logo", &credentials()).await.unwrap().unwrap();
+    let later = svn.commit(&wc, "Remove the logo", &credentials()).await.unwrap().unwrap();
+    // A later commit does not hide the one being looked for.
+    assert_eq!(svn.find_commit(&env.url, rev - 1, message, None).await.unwrap(), Some(rev));
+    assert_eq!(svn.find_commit(&env.url, later, message, None).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn names_starting_with_a_dash_are_not_read_as_options() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::write(plugin.join("-x.png"), [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert_eq!(trunk.added, ["-x.png", "minimal.php", "readme.txt"]);
+    let wc = env.root.join("wc/minimal");
+    assert_eq!(propget(&wc.join("trunk/-x.png")), "image/png");
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::remove_file(plugin.join("-x.png")).unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.1").await;
+    assert_eq!(trunk.deleted, ["-x.png"]);
+}
+
+#[tokio::test]
+async fn a_released_non_ascii_file_is_deleted_or_named_in_a_clear_error() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::create_dir_all(plugin.join("img")).unwrap();
+    std::fs::write(plugin.join("img/日本.png"), [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::remove_dir_all(plugin.join("img")).unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let listing = package::list(&plugin, &Exclusions::load(&plugin, &[]).unwrap()).unwrap();
+    let built = package::build(&listing, &env.root.join("builds"), "minimal", "1.0.1").unwrap();
+    let sources = svn::source_files(Path::new(&built.root), &built.files);
+    let trunk = env.root.join("wc/minimal/trunk");
+    let result = client(&env).mirror(&sources, &trunk).await;
+    if cfg!(windows) {
+        // svn reads arguments in the ANSI code page: `日本.png` would reach
+        // it as `??.png` (E125001), so the mirror stops before deleting.
+        let error = result.unwrap_err();
+        assert_eq!(svnpush_core::error::Coded::code(&error), "SVN_CANNOT_DELETE");
+        let fix = svnpush_core::error::Coded::fix(&error).unwrap();
+        assert!(fix.contains("/trunk/img/%E6%97%A5%E6%9C%AC.png"), "{fix}");
+        assert!(error.to_string().contains("trunk/img/日本.png"));
+    } else {
+        assert_eq!(result.unwrap().deleted, ["img/", "img/日本.png"]);
+    }
 }
 
 #[tokio::test]

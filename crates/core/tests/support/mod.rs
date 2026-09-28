@@ -51,10 +51,17 @@ impl RunObserver for Watcher {
 }
 
 pub struct Env {
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
     pub paths: AppPaths,
     pub project: Project,
     pub vault: Arc<MemoryVault>,
+}
+
+impl Env {
+    /// The repository's folder on disk, for hooks.
+    pub fn repo(&self) -> PathBuf {
+        self.dir.path().join("repo")
+    }
 }
 
 pub fn run_cmd(program: &str, args: &[&str]) {
@@ -97,7 +104,7 @@ pub fn env() -> Env {
             created: "2026-09-17T00:00:00Z".into(),
         },
         vault,
-        _dir: dir,
+        dir,
     }
 }
 

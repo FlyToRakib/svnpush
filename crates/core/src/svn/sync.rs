@@ -157,6 +157,18 @@ fn addressable(rel: &str) -> bool {
     !cfg!(windows) || rel.is_ascii()
 }
 
+/// `rel` percent-encoded for a URL, keeping `/`.
+fn encode_path(rel: &str) -> String {
+    rel.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                char::from(b).to_string()
+            }
+            other => format!("%{other:02X}"),
+        })
+        .collect()
+}
+
 fn copy(from: &Path, to: &Path) -> Result<(), SvnError> {
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent).map_err(|e| io_error("create", parent, e))?;
@@ -216,6 +228,7 @@ impl Svn<'_> {
                 }
             }
         }
+        self.check_deletable(target, renamed.iter().chain(&to_delete)).await?;
         if !renamed.is_empty() {
             for folder in &renamed {
                 self.reporter.info(&format!("Case-only folder rename: {folder}/."));
@@ -250,6 +263,7 @@ impl Svn<'_> {
 
         let emptied = empty_folders(target);
         if !emptied.is_empty() {
+            self.check_deletable(target, &emptied).await?;
             delta.deleted.extend(emptied.iter().map(|f| format!("{f}/")));
             self.batched(&["delete", "--force"], target, &emptied).await?;
         }
@@ -295,6 +309,23 @@ impl Svn<'_> {
         Ok(())
     }
 
+    /// Fails before any `svn delete` when a path to delete cannot be passed
+    /// to `svn` (see `addressable`); unlike an add, a delete has no
+    /// folder-level form, so the error names the server URL to delete.
+    async fn check_deletable(
+        &self,
+        target: &Path,
+        rels: impl IntoIterator<Item = &String>,
+    ) -> Result<(), SvnError> {
+        let Some(rel) = rels.into_iter().find(|rel| !addressable(rel)) else { return Ok(()) };
+        let base = self.working_copy_url(target).await.unwrap_or_default();
+        let folder = target.file_name().map(|n| n.to_string_lossy().into_owned());
+        Err(SvnError::CannotDelete {
+            path: folder.map_or_else(|| rel.clone(), |f| format!("{f}/{rel}")),
+            url: format!("{}/{}", base.trim_end_matches('/'), encode_path(rel)),
+        })
+    }
+
     /// Sets `svn:mime-type` on added and modified binaries.
     async fn mark_binaries(&self, target: &Path, delta: &Delta) -> Result<(), SvnError> {
         let mut by_mime: BTreeMap<&str, Vec<String>> = BTreeMap::new();
@@ -325,6 +356,12 @@ mod tests {
         assert_eq!(mime_type("fonts/a.woff2"), Some("font/woff2"));
         assert_eq!(mime_type("readme.txt"), None);
         assert_eq!(mime_type("Makefile"), None);
+    }
+
+    #[test]
+    fn paths_are_percent_encoded_for_urls() {
+        assert_eq!(encode_path("img/日本.png"), "img/%E6%97%A5%E6%9C%AC.png");
+        assert_eq!(encode_path("a b@2x.png"), "a%20b%402x.png");
     }
 
     #[test]

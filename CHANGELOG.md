@@ -4,11 +4,17 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Saving a provider while a release uses AI no longer loses that request's count or a "needs attention" mark.
+- When a project's .svnpush.json sets a different SVN URL, the Projects list shows its unfinished release (with Resume) and whether it is locked, and old snapshots are cleaned up.
+- A file whose name starts with a dash (-logo.png) no longer stops a release when it is an image or when it is removed.
+- On Windows, removing a released file whose name has characters outside your system language now stops the preview with a clear message and the exact command to delete it on WordPress.org, instead of a Subversion error about a file named ??.
+- Resume no longer takes over a tag of the same version that the interrupted release did not create; it says the tag already exists.
+- Publishing no longer mistakes an older commit for this release's, or misses this release's commit when someone committed after it. If SVNpush cannot read the plugin's current revision, it stops before committing, and after an unclear commit error it keeps your files and offers Resume instead of rolling back.
 - Working copies and built packages are kept in the local app data folder, so a roaming Windows profile no longer syncs them. They are recreated on the next release.
 - Build package refuses a plugin header version that is not a valid version, instead of using it as a folder name.
 - Closing the window while a release runs now asks first, because closing stops the release halfway. Install update waits until no release is running.
 - Opening SVNpush a second time brings the open window to the front instead of starting a second copy that could overwrite your projects, accounts and providers.
-- Reset working copy is refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
+- Reset working copy and Discard are refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
 - A release running in this window no longer shows as unfinished or locked in the Projects list.
 - Testing an SVN account makes one small request instead of listing every plugin on WordPress.org.
 - If SVNpush cannot start, it says why in a message box instead of closing silently.

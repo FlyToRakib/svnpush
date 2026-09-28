@@ -195,7 +195,9 @@ local changes are rolled back.
 2. The staged tree is mirrored into `trunk/`, and the assets folder into
    `assets/`: new files are added, changed files overwritten, and removed
    files deleted. Files an interrupted run left in the working copy are
-   removed first, and a folder renamed only in case is replaced.
+   removed first, and a folder renamed only in case is replaced. On
+   Windows, a file to delete whose name is not ASCII stops the preview with
+   `SVN_CANNOT_DELETE`, which names its server URL to delete by hand.
 3. Added, modified and deleted lists for trunk and assets are shown, with a
    diff per file (2 MB in total), the tag URL and the default commit
    messages.
@@ -213,8 +215,10 @@ on screen.
 3. `svn commit` of trunk and assets. The journal marks the commit as in
    flight before it starts, and records the revision immediately after. The
    message travels in a UTF-8 file. Once started, a commit is not
-   interrupted by Cancel; Cancel takes effect after it. If `svn` reports an
-   error, the plugin's newest log entry decides whether the commit landed.
+   interrupted by Cancel; Cancel takes effect after it. The plugin's
+   last-changed revision is read first, and the commit does not start
+   without it. If `svn` reports an error, the plugin's log entries after
+   that revision decide whether the commit landed.
 4. A server-side `svn copy` of trunk at that revision to `tags/<version>`,
    marked in flight the same way. An existing tag is refused rather than
    nested.
@@ -233,10 +237,12 @@ on screen.
 - **After the trunk commit**, nothing on the server is undone. The journal
   records the trunk revision, and the project page offers **Resume: create
   tag**, which retries only the tag copy and its verification. A tag that
-  already exists (created before the interruption) is recorded and verified
-  instead of refused.
+  already exists is recorded and verified when this run's copy had started
+  (it was created before the interruption); otherwise it is refused with
+  `SVN_TAG_EXISTS`.
 - **When it is not known whether a commit or copy landed** (the app closed
-  during it, or the server could not be asked after an error), nothing is
+  during it, or `svn` reported an error other than a refusal before
+  writing and the server does not show the write yet), nothing is
   rolled back. Resume asks the server: a landed commit is recorded and the
   tag created; a commit that never landed is rolled back and the run ends
   with `RESUME_NOT_COMMITTED`. Discard asks too, and keeps your files when
