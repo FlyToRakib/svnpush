@@ -26,18 +26,29 @@ pub struct OpenAiCompatible {
     meta: AdapterMeta,
     token_field: TokenField,
     output_cap: Option<u32>,
+    renamed: &'static [(&'static str, &'static str)],
 }
 
 impl OpenAiCompatible {
     /// A factory instance.
     pub const fn new(meta: AdapterMeta, token_field: TokenField) -> Self {
-        Self { meta, token_field, output_cap: None }
+        Self { meta, token_field, output_cap: None, renamed: &[] }
     }
 
     /// Caps the output ceiling for an API that rejects a larger one.
     #[must_use]
     pub const fn with_output_cap(self, cap: u32) -> Self {
         Self { output_cap: Some(cap), ..self }
+    }
+
+    /// Sends the replacement for a model id the provider has retired, so a
+    /// record saved with the old id keeps working.
+    #[must_use]
+    pub const fn with_renamed_models(
+        self,
+        renamed: &'static [(&'static str, &'static str)],
+    ) -> Self {
+        Self { renamed, ..self }
     }
 
     /// The stock request, reused by OpenRouter.
@@ -48,7 +59,12 @@ impl OpenAiCompatible {
         }
         messages
             .extend(req.messages.iter().map(|m| json!({ "role": m.role, "content": m.content })));
-        let mut body = json!({ "model": req.model, "messages": messages });
+        let model = self
+            .renamed
+            .iter()
+            .find(|(old, _)| *old == req.model)
+            .map_or(req.model, |(_, new)| new);
+        let mut body = json!({ "model": model, "messages": messages });
         let field = match self.token_field {
             TokenField::MaxCompletionTokens => "max_completion_tokens",
             TokenField::MaxTokens => "max_tokens",
@@ -162,21 +178,25 @@ pub static OPENAI: OpenAiCompatible = OpenAiCompatible::new(
     TokenField::MaxCompletionTokens,
 );
 
-/// DeepSeek. `deepseek-chat` rejects more than 8,192 output tokens.
+/// DeepSeek. `deepseek-chat` and `deepseek-reasoner` stopped resolving on
+/// 2026-07-24; saved records that name them are sent `deepseek-flash`.
 pub static DEEPSEEK: OpenAiCompatible = OpenAiCompatible::new(
     meta(
         "deepseek",
         "DeepSeek",
         "https://api.deepseek.com/v1",
-        "deepseek-chat",
+        "deepseek-flash",
         false,
         "sk-…",
         "Requests are billed to your DeepSeek account.",
-        "Default: deepseek-chat.",
+        "Default: deepseek-flash.",
     ),
     TokenField::MaxTokens,
 )
-.with_output_cap(8_192);
+.with_renamed_models(&[
+    ("deepseek-chat", "deepseek-flash"),
+    ("deepseek-reasoner", "deepseek-flash"),
+]);
 
 /// Qwen through DashScope's compatible mode. `qwen-plus` rejects more than
 /// 8,192 output tokens.

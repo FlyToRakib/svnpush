@@ -12,6 +12,7 @@ All notable changes to SVNpush are listed here, newest first.
 - If SVNpush cannot start, it says why in a message box instead of closing silently.
 - The Projects list, the file check, Build package and the Vault no longer freeze the app while they read the disk or the keychain.
 - The window background follows the system theme from the first moment, with no white flash in dark mode.
+- DeepSeek works again: its old model names were retired on 2026-07-24, so SVNpush now uses deepseek-flash, including for providers saved with deepseek-chat or deepseek-reasoner.
 - Providers: a base URL that sends an API key must use https://; plain http:// works only for localhost. Changing a provider's type or host asks for its key again, so a stored key never goes to a new address.
 - AI fallback only uses providers whose data notice you have accepted.
 - Regenerate, or Generate after Stop or a failure, now asks Revoye for a new answer instead of returning the previous job.

@@ -640,7 +640,7 @@ Registered adapters, in this order after Revoye:
 | `claude` | Anthropic Claude | Messages API `/v1/messages` | current Sonnet-class id | `x-api-key` + `anthropic-version`; JSON via `output_config.format.json_schema`; no sampling params sent. |
 | `openai` | OpenAI | `/chat/completions` | current GPT id | via the OpenAI-compatible factory; JSON via `response_format: json_object`. |
 | `openrouter` | OpenRouter | `/chat/completions` | `anthropic/claude-sonnet-5` | Factory plus attribution headers `HTTP-Referer` and `X-OpenRouter-Title`, 200-with-error handling, live `GET /models` catalogue. |
-| `deepseek` | DeepSeek | `/chat/completions` | `deepseek-chat` | Factory. |
+| `deepseek` | DeepSeek | `/chat/completions` | `deepseek-flash` | Factory. The retired `deepseek-chat` and `deepseek-reasoner` are sent as `deepseek-flash`. |
 | `qwen` | Qwen (DashScope) | `/chat/completions` | `qwen-plus` | Factory. |
 | `perplexity` | Perplexity | `/chat/completions` | `sonar-pro` | Factory. |
 | `openai_compatible` | OpenAI-compatible | `/chat/completions` | free text | Factory; base URL required. |

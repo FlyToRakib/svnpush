@@ -305,10 +305,14 @@ fn openai_family_requests_differ_only_where_they_must() {
     let deepseek = adapter("deepseek").build_request(&req).unwrap();
     assert_eq!(deepseek.url, "https://api.deepseek.com/v1/chat/completions");
     assert_eq!(deepseek.body.unwrap()["max_tokens"], 2000);
+    let mut retired = req;
+    retired.model = "deepseek-chat";
+    let body = adapter("deepseek").build_request(&retired).unwrap().body.unwrap();
+    assert_eq!(body["model"], "deepseek-flash");
     let mut large = req;
     large.max_tokens = Some(16_000);
     for (kind, field, sent) in [
-        ("deepseek", "max_tokens", 8_192),
+        ("deepseek", "max_tokens", 16_000),
         ("qwen", "max_tokens", 8_192),
         ("openai", "max_completion_tokens", 16_000),
     ] {
