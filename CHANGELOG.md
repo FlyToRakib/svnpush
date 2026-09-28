@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Pre-release versions are now ordered the way WordPress.org and PHP order them: 1.0-beta10 is newer than 1.0-beta9, and 1.0-RC1 is newer than 1.0-beta2.
 - Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.
