@@ -165,12 +165,17 @@ impl<'a> Layout<'a> {
             }
         }
 
-        // Blank lines inside the block are skipped; an unknown header after a
-        // blank line, or any other line, starts the short description.
+        // Blank lines before the block are skipped. Inside it, empty lines are
+        // skipped; an unknown header after one, or any other line (a line of
+        // spaces too, as class-parser.php tests `empty( $line )`), starts the
+        // short description.
+        while i < count && is_blank(i) {
+            i += 1;
+        }
         let mut headers = Vec::new();
         let mut after_blank = false;
         while i < count {
-            if is_blank(i) {
+            if lines[i].content.trim_start_matches(BOM).is_empty() {
                 after_blank = true;
                 i += 1;
                 continue;
@@ -392,6 +397,21 @@ Recommended.
         assert_eq!(readme.header("Stable tag").unwrap().value, "1.0");
         assert!(readme.header("Donate").is_none());
         assert_eq!(readme.short_description, "Donate: no Short.");
+    }
+
+    #[test]
+    fn the_header_block_ends_where_class_parser_ends_it() {
+        // Blank lines before the first header do not count as a gap, so an
+        // unknown first header is skipped rather than ending the block.
+        let text = "=== P ===\n\nPlugin URI: https://example.org\nStable tag: 1.0\n\nShort.\n";
+        let readme = parse(text);
+        assert_eq!(readme.header("Stable tag").unwrap().value, "1.0");
+        assert_eq!(readme.short_description, "Short.");
+        // A line of spaces is not empty: it ends the block.
+        let text = "=== P ===\nContributors: a\n  \nStable tag: 1.0\n\nShort.\n";
+        let readme = parse(text);
+        assert!(readme.header("Stable tag").is_none());
+        assert_eq!(readme.short_description, "Stable tag: 1.0 Short.");
     }
 
     #[test]
