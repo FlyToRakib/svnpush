@@ -259,3 +259,71 @@ async fn discard_keeps_the_files_of_a_commit_that_landed() {
     assert_eq!(journal.revisions.trunk, landed);
     assert!(journal.discarded && journal.in_flight.is_none());
 }
+
+/// Installs a pre-commit hook that rejects every commit. svn reports it
+/// only after the commit was sent, as it would a lost connection.
+fn reject_commits(env: &support::Env) {
+    let hooks = env.repo().join("hooks");
+    if cfg!(windows) {
+        std::fs::write(hooks.join("pre-commit.bat"), "@exit 1\r\n").unwrap();
+    } else {
+        let hook = hooks.join("pre-commit");
+        std::fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+        run_cmd("chmod", &["+x", hook.to_str().unwrap()]);
+    }
+}
+
+#[tokio::test]
+async fn a_commit_error_after_sending_keeps_the_in_flight_marker() {
+    let env = env();
+    let before = read(&env.project.path, "readme.txt");
+    let mut driver = start(&env, false).await;
+    driver.approve_prefill().await;
+    let preview = driver.until(Phase::AwaitingPublish).await.preview.unwrap();
+    let edited = read(&env.project.path, "readme.txt");
+    reject_commits(&env);
+    driver
+        .decisions
+        .send(Decision::Publish {
+            trunk_message: preview.trunk_message,
+            tag_message: preview.tag_message,
+        })
+        .await
+        .unwrap();
+    let (state, journal) = driver.task.await.unwrap();
+
+    // The log does not show the commit, but the error is not one that
+    // refuses before writing: nothing is rolled back and Resume is offered.
+    assert_eq!(state.phase, Phase::Failed);
+    assert!(matches!(journal.in_flight, Some(InFlight::Commit { since: Some(_), .. })));
+    assert!(journal.needs_tag());
+    assert_eq!(read(&env.project.path, "readme.txt"), edited);
+
+    // Resume checks again, finds nothing and rolls back.
+    let observer = Arc::new(NullObserver);
+    let (state, journal) =
+        run::resume_tag(inputs(&env, false).await, observer, CancellationToken::new(), journal)
+            .await;
+    assert_eq!(state.error.unwrap().code, "RESUME_NOT_COMMITTED");
+    assert!(!journal.needs_tag());
+    assert_eq!(read(&env.project.path, "readme.txt"), before);
+}
+
+#[tokio::test]
+async fn resume_does_not_guess_without_the_starting_revision() {
+    let env = env();
+    let mut journal = stopped_before_the_commit(&env).await;
+    let svn = Svn::new("svn", &NullReporter, CancellationToken::new());
+    // A commit with the same message must not be taken for this run's.
+    svn.commit(&env.paths.working_copy("minimal"), "Release 1.0.0", &creds()).await.unwrap();
+    journal.in_flight = Some(InFlight::Commit { since: None, message: "Release 1.0.0".into() });
+    journal.save(&env.paths).unwrap();
+
+    let observer = Arc::new(NullObserver);
+    let (state, journal) =
+        run::resume_tag(inputs(&env, false).await, observer, CancellationToken::new(), journal)
+            .await;
+    assert_eq!(state.error.unwrap().code, "RESUME_COMMIT_UNKNOWN");
+    assert!(journal.revisions.trunk.is_none() && journal.in_flight.is_some());
+    assert!(svn.list_tags(&env.project.svn_url, None).await.unwrap().is_empty());
+}

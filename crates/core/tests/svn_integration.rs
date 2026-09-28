@@ -306,15 +306,18 @@ async fn at_signs_and_non_ascii_names_and_messages_survive() {
     let svn = client(&env);
     let message = "Release 1.0.0 — für 日本";
     let rev = svn.commit(&wc, message, &credentials()).await.unwrap().unwrap();
-    assert_eq!(svn.find_commit(&env.url, Some(rev - 1), message, None).await.unwrap(), Some(rev));
-    assert_eq!(svn.find_commit(&env.url, Some(rev), message, None).await.unwrap(), None);
+    assert_eq!(svn.find_commit(&env.url, rev - 1, message, None).await.unwrap(), Some(rev));
+    assert_eq!(svn.find_commit(&env.url, rev, message, None).await.unwrap(), None);
     let listed = svn.list(&format!("{}/trunk/img", env.url), None).await.unwrap();
     assert_eq!(listed, ["café.php", "logo@2x.png", "日本.php"]);
 
     std::fs::remove_file(plugin.join("img/logo@2x.png")).unwrap();
     let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
     assert_eq!(trunk.deleted, ["img/logo@2x.png"]);
-    svn.commit(&wc, "Remove the logo", &credentials()).await.unwrap().unwrap();
+    let later = svn.commit(&wc, "Remove the logo", &credentials()).await.unwrap().unwrap();
+    // A later commit does not hide the one being looked for.
+    assert_eq!(svn.find_commit(&env.url, rev - 1, message, None).await.unwrap(), Some(rev));
+    assert_eq!(svn.find_commit(&env.url, later, message, None).await.unwrap(), None);
 }
 
 #[tokio::test]

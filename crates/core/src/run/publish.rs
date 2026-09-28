@@ -105,13 +105,14 @@ impl Run {
                     svn_client(&self.inputs, self.observer.as_ref(), &CancellationToken::new());
                 match landed_tag(&fresh, &url, &version, &error, &creds).await {
                     Ok(Some(tag)) => tag,
-                    Ok(None) => {
+                    Ok(None) if error.refused_before_write() => {
                         self.journal.in_flight = None;
                         self.save_journal();
                         return Err(error.into());
                     }
-                    // Unknown: the marker stays, so nothing is rolled back.
-                    Err(_) => return Err(error.into()),
+                    // Unknown (the tag may not be visible yet): the marker
+                    // stays, so Resume checks again.
+                    Ok(None) | Err(_) => return Err(error.into()),
                 }
             }
         };
@@ -155,8 +156,11 @@ impl Run {
     }
 
     /// Commits `folders`, journalling the commit as in flight first. When
-    /// `svn` reports an error, the server's log decides whether it landed;
-    /// when that cannot be checked, the marker stays and nothing is rolled back.
+    /// `svn` reports an error, the server's log decides whether it landed.
+    /// The marker is cleared only when `svn` refused before writing
+    /// anything; otherwise it stays (the commit may not be visible yet, or
+    /// the log could not be read), so nothing is rolled back and Resume
+    /// checks again.
     pub(super) async fn commit_journalled(
         &mut self,
         folders: &[PathBuf],
@@ -167,11 +171,19 @@ impl Run {
             return Err(RunFailure::cancelled());
         }
         let url = self.inputs.project.svn_url.clone();
-        let since = self.svn().last_changed_revision(&url, Some(creds)).await.ok().flatten();
-        self.journal.in_flight = Some(InFlight::Commit { since, message: message.to_owned() });
+        // Without the revision the commit could not be told apart from an
+        // older one with the same message, so a failure here stops the run
+        // before anything is written. A plugin not on the server yet has no
+        // commits to confuse it with.
+        let since = self.svn().last_changed_revision(&url, Some(creds)).await?.unwrap_or(0);
+        if self.cancel.is_cancelled() {
+            return Err(RunFailure::cancelled());
+        }
+        self.journal.in_flight =
+            Some(InFlight::Commit { since: Some(since), message: message.to_owned() });
         self.save_journal();
 
-        let result = self.svn().commit_paths(folders, message, creds).await;
+        let result = self.svn().commit_paths(folders, message, since, creds).await;
         let revision = match result {
             Ok(revision) => revision,
             Err(error) => {
@@ -184,12 +196,13 @@ impl Run {
                         ));
                         Some(revision)
                     }
-                    Ok(None) => {
+                    Ok(None) if error.refused_before_write() => {
                         self.journal.in_flight = None;
                         self.save_journal();
                         return Err(error.into());
                     }
-                    Err(_) => return Err(error.into()),
+                    // Unknown: replication lag can hide a commit that landed.
+                    Ok(None) | Err(_) => return Err(error.into()),
                 }
             }
         };
@@ -302,6 +315,15 @@ async fn confirm_commit(
         (journal.commit_unconfirmed(), journal.in_flight.clone())
     else {
         return Ok(());
+    };
+    // Only journals written before the revision was required lack it; the
+    // message alone could match an older commit, so nothing is assumed.
+    let Some(since) = since else {
+        return Err(RunFailure::new(
+            "RESUME_COMMIT_UNKNOWN",
+            "SVNpush cannot tell whether the trunk commit reached the server.",
+            Some("Check the plugin's SVN log. If the commit is there, create the tag yourself; if not, Discard and release again.".to_owned()),
+        ));
     };
     let url = &inputs.project.svn_url;
     if let Some(revision) = svn.find_commit(url, since, &message, Some(creds)).await? {
@@ -440,7 +462,9 @@ pub async fn discard(
     mut journal: RunJournal,
 ) -> Result<RunJournal, ErrorView> {
     let _lock = ProjectLock::acquire(&inputs.paths.runs(&journal.slug)).map_err(|f| f.error)?;
-    if let (true, false, Some(InFlight::Commit { since, message })) =
+    // A journal without the starting revision cannot be checked (see
+    // `confirm_commit`); discarding it rolls back as asked.
+    if let (true, false, Some(InFlight::Commit { since: Some(since), message })) =
         (journal.commit_unconfirmed(), journal.assets_only, journal.in_flight.clone())
     {
         let svn = svn_client(inputs, observer, &CancellationToken::new());

@@ -143,6 +143,24 @@ impl Coded for SvnError {
     }
 }
 
+impl SvnError {
+    /// Whether `svn` refused before sending anything to the server: a
+    /// rejected account, an out-of-date or broken working copy, or a path it
+    /// cannot use, or a tag that already exists. Any other failure of a
+    /// commit or copy may have landed.
+    pub fn refused_before_write(&self) -> bool {
+        matches!(
+            self,
+            Self::CredentialsRejected { .. }
+                | Self::Forbidden { .. }
+                | Self::OutOfDate { .. }
+                | Self::WorkingCopy { .. }
+                | Self::InvalidPath { .. }
+                | Self::TagExists { .. }
+        )
+    }
+}
+
 pub(crate) fn io_error(action: &'static str, path: &Path, source: std::io::Error) -> SvnError {
     SvnError::Io { action, path: path.display().to_string(), source }
 }
