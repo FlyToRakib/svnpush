@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- On Windows, removing a released file whose name has characters outside your system language now stops the preview with a clear message and the exact command to delete it on WordPress.org, instead of a Subversion error about a file named ??.
 - Resume no longer takes over a tag of the same version that the interrupted release did not create; it says the tag already exists.
 - Publishing no longer mistakes an older commit for this release's, or misses this release's commit when someone committed after it. If SVNpush cannot read the plugin's current revision, it stops before committing, and after an unclear commit error it keeps your files and offers Resume instead of rolling back.
 - Working copies and built packages are kept in the local app data folder, so a roaming Windows profile no longer syncs them. They are recreated on the next release.

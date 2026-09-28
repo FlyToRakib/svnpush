@@ -81,6 +81,12 @@ pub enum SvnError {
     /// `svn` refused a local path as a target (E200009).
     #[error("svn could not use a path: {detail}")]
     InvalidPath { detail: String },
+    /// A file or folder to delete has a name `svn` on Windows cannot take
+    /// as an argument (characters outside the ANSI code page).
+    #[error(
+        "Subversion on Windows cannot delete {path}: its name has characters outside the system language"
+    )]
+    CannotDelete { path: String, url: String },
     /// `tags/<version>` already exists.
     #[error("tags/{version} already exists on the server")]
     TagExists { version: String },
@@ -111,6 +117,7 @@ impl Coded for SvnError {
             Self::WorkingCopy { .. } => "SVN_WORKING_COPY",
             Self::NotFound { .. } => "SVN_NOT_FOUND",
             Self::InvalidPath { .. } => "SVN_INVALID_PATH",
+            Self::CannotDelete { .. } => "SVN_CANNOT_DELETE",
             Self::TagExists { .. } => "SVN_TAG_EXISTS",
             Self::Failed { .. } => "SVN_FAILED",
             Self::Cancelled => "CANCELLED",
@@ -136,6 +143,10 @@ impl Coded for SvnError {
             Self::InvalidPath { .. } => Some(
                 "Rename the file named in the log (Subversion on Windows cannot handle some characters), or leave it out in .distignore.".to_owned(),
             ),
+            // A URL can carry any name, percent-encoded.
+            Self::CannotDelete { url, .. } => Some(format!(
+                "Delete it on the server yourself, then release again: run svn delete -m \"Remove an old file\" {url} or use the Repository Browser of TortoiseSVN."
+            )),
             Self::TagExists { .. } => Some("Release a new version number.".to_owned()),
             Self::Process(_) => Some(crate::tools::svn_install_instructions().to_owned()),
             Self::Failed { .. } | Self::Cancelled | Self::Io { .. } | Self::Parse { .. } => None,

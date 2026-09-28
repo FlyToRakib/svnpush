@@ -321,6 +321,35 @@ async fn at_signs_and_non_ascii_names_and_messages_survive() {
 }
 
 #[tokio::test]
+async fn a_released_non_ascii_file_is_deleted_or_named_in_a_clear_error() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::create_dir_all(plugin.join("img")).unwrap();
+    std::fs::write(plugin.join("img/日本.png"), [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::remove_dir_all(plugin.join("img")).unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let listing = package::list(&plugin, &Exclusions::load(&plugin, &[]).unwrap()).unwrap();
+    let built = package::build(&listing, &env.root.join("builds"), "minimal", "1.0.1").unwrap();
+    let sources = svn::source_files(Path::new(&built.root), &built.files);
+    let trunk = env.root.join("wc/minimal/trunk");
+    let result = client(&env).mirror(&sources, &trunk).await;
+    if cfg!(windows) {
+        // svn reads arguments in the ANSI code page: `日本.png` would reach
+        // it as `??.png` (E125001), so the mirror stops before deleting.
+        let error = result.unwrap_err();
+        assert_eq!(svnpush_core::error::Coded::code(&error), "SVN_CANNOT_DELETE");
+        let fix = svnpush_core::error::Coded::fix(&error).unwrap();
+        assert!(fix.contains("/trunk/img/%E6%97%A5%E6%9C%AC.png"), "{fix}");
+        assert!(error.to_string().contains("trunk/img/日本.png"));
+    } else {
+        assert_eq!(result.unwrap().deleted, ["img/", "img/日本.png"]);
+    }
+}
+
+#[tokio::test]
 async fn a_case_only_folder_rename_replaces_the_folder() {
     let env = env("minimal");
     let plugin = fixture_copy(&env, "minimal");
