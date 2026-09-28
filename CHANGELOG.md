@@ -39,6 +39,7 @@ All notable changes to SVNpush are listed here, newest first.
 - Rewriting an existing changelog entry keeps the blank line under its title.
 - Files that end lines with a lone carriage return (old Mac style) are now read line by line, as WordPress reads them, and edits keep that line ending.
 - Pre-release versions are now ordered the way WordPress.org and PHP order them: 1.0-beta10 is newer than 1.0-beta9, and 1.0-RC1 is newer than 1.0-beta2.
+- Changed files with non-ASCII names are listed correctly in the change set and the AI draft.
 - A .svnpush.json in the plugin repository can no longer set the pre-build command or point the package or assets folder outside the plugin; the command you set in Project settings is the one that runs.
 - Publishing is safe against interruptions: if a commit or tag reaches WordPress.org but SVNpush stops or sees an error, Resume finds it on the server and finishes the release instead of rolling back or failing with "tag already exists". Cancel no longer interrupts a commit already on its way.
 - Cancelling a release no longer overwrites changes you made to your plugin files while it ran.

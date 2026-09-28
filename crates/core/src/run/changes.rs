@@ -4,7 +4,7 @@
 //! uncommitted edits count, because they are what will ship). Otherwise the
 //! package root is compared file by file with the trunk working copy.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -80,18 +80,23 @@ fn kind_from_status(status: &str) -> Option<ChangeKind> {
     }
 }
 
-/// Parses `git diff --name-status` output.
+/// Parses `git diff --name-status -z` output: a status, then one path (two
+/// for a rename or copy, the new one last), each ending in NUL. Paths are
+/// raw, never quoted, so non-ASCII names arrive intact.
 pub fn parse_name_status(output: &str) -> Vec<ChangedFile> {
-    output
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.split('\t');
-            let status = fields.next()?;
-            let kind = kind_from_status(status)?;
-            let path = fields.next_back()?.to_owned();
-            Some(ChangedFile { path, kind })
-        })
-        .collect()
+    let mut fields = output.split('\0').filter(|f| !f.is_empty());
+    let mut files = Vec::new();
+    while let Some(status) = fields.next() {
+        let renamed = status.starts_with(['R', 'C']);
+        let Some(mut path) = fields.next() else { break };
+        if renamed {
+            path = fields.next().unwrap_or(path);
+        }
+        if let Some(kind) = kind_from_status(status) {
+            files.push(ChangedFile { path: path.to_owned(), kind });
+        }
+    }
+    files
 }
 
 /// The change set from git, or `None` when there is no tag to compare with.
@@ -99,17 +104,17 @@ pub async fn from_git(git: &Git<'_>, facts: &GitFacts) -> Result<Option<ChangeSe
     let Some(tag) = &facts.last_tag else { return Ok(None) };
     // `--relative` keeps paths relative to the plugin folder when it sits inside a larger repository.
     let Some(output) =
-        git.output(&["diff", "--relative", "--name-status", "-M", tag, "--", "."]).await?
+        git.output(&["diff", "--relative", "--name-status", "-z", "-M", tag, "--", "."]).await?
     else {
         return Ok(None);
     };
     let mut files = parse_name_status(&output);
     if let Some(untracked) =
-        git.output(&["ls-files", "--others", "--exclude-standard", "--", "."]).await?
+        git.output(&["ls-files", "-z", "--others", "--exclude-standard", "--", "."]).await?
     {
         files.extend(
             untracked
-                .lines()
+                .split('\0')
                 .filter(|l| !l.is_empty())
                 .map(|path| ChangedFile { path: path.to_owned(), kind: ChangeKind::Added }),
         );
@@ -160,8 +165,9 @@ pub fn from_trunk(
             Some(_) => {}
         }
     }
+    let listed: HashSet<&str> = listing.files.iter().map(|f| f.rel.as_str()).collect();
     for rel in trunk.keys() {
-        if !listing.files.iter().any(|f| &f.rel == rel) {
+        if !listed.contains(rel.as_str()) {
             files.push(ChangedFile { path: rel.clone(), kind: ChangeKind::Deleted });
         }
     }
@@ -175,9 +181,10 @@ mod tests {
 
     #[test]
     fn parses_name_status_including_renames() {
-        let out = "M\tplugin.php\nA\tinc/new.php\nD\told.php\nR100\tfrom.php\tto.php\n";
+        let out = "M\0plugin.php\0A\0inc/café.php\0D\0old.php\0R100\0from.php\0to.php\0";
         let files = parse_name_status(out);
         assert_eq!(files.len(), 4);
+        assert_eq!(files[1].path, "inc/café.php");
         assert_eq!(files[3], ChangedFile { path: "to.php".into(), kind: ChangeKind::Modified });
         assert_eq!(files[2].kind, ChangeKind::Deleted);
     }
@@ -245,6 +252,28 @@ mod tests {
             crate::run::material::from_git(&runner, &plugin, &set, &filter).await.unwrap();
         let diffed: Vec<&str> = material.diffs.iter().map(|(p, _)| p.as_str()).collect();
         assert_eq!(diffed, ["demo.php", "new.php"]);
+    }
+
+    #[tokio::test]
+    async fn non_ascii_paths_arrive_unquoted() {
+        let repo = tempfile::tempdir().unwrap();
+        std::fs::write(repo.path().join("café.php"), "<?php\n").unwrap();
+        git(repo.path(), &["init", "-q"]);
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-q", "-m", "First"]);
+        git(repo.path(), &["tag", "v1.0.0"]);
+        std::fs::write(repo.path().join("café.php"), "<?php\n// changed\n").unwrap();
+        std::fs::write(repo.path().join("日本.php"), "<?php\n").unwrap();
+
+        let bin =
+            crate::tools::discover_git(None).await.path.map(std::path::PathBuf::from).unwrap();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let runner = Git::new(&bin, repo.path(), &crate::report::NullReporter, &cancel);
+        let facts = runner.facts().await.unwrap().unwrap();
+        let set = from_git(&runner, &facts).await.unwrap().unwrap();
+        let paths: Vec<(&str, ChangeKind)> =
+            set.files.iter().map(|f| (f.path.as_str(), f.kind)).collect();
+        assert_eq!(paths, [("café.php", ChangeKind::Modified), ("日本.php", ChangeKind::Added)]);
     }
 
     #[test]
