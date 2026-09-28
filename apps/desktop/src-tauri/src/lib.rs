@@ -115,7 +115,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let paths = AppPaths::new(&app.path().data_dir()?);
+            let paths =
+                AppPaths::with_local(&app.path().data_dir()?, &app.path().local_data_dir()?);
             app.manage(LogGuard(logging::init(&paths.logs())));
             tracing::info!(version = %app.package_info().version, "SVNpush started");
             let ai = AiClient::new()?;
