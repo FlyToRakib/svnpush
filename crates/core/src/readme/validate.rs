@@ -267,14 +267,38 @@ fn check_text(readme: &Readme, out: &mut Findings) {
     } else if short.chars().count() > SHORT_DESCRIPTION_CHARS {
         out.add(IssueLevel::Warning, "trimmed_short_description", format!("The Short Description is too long and will be cut off. A maximum of {SHORT_DESCRIPTION_CHARS} characters is supported."));
     }
+    // As in class-parser.php: Other Notes and every unknown section (under
+    // its title) are appended to the Description, which falls back to the
+    // short description, before the limits apply; the Upgrade Notice is
+    // not limited. Repeated sections add up.
+    let mut words: Vec<(String, usize)> = vec![("description".to_owned(), 0)];
+    let mut notes = 0;
     for section in &readme.sections {
         let key = section_key(&section.title);
+        let count = section.body.split_whitespace().count();
+        match key.as_str() {
+            "upgrade_notice" => {}
+            "description" | "installation" | "faq" | "screenshots" | "changelog" => {
+                match words.iter_mut().find(|(k, _)| *k == key) {
+                    Some((_, total)) => *total += count,
+                    None => words.push((key, count)),
+                }
+            }
+            "other_notes" => notes += count,
+            _ => notes += count + section.title.split_whitespace().count(),
+        }
+    }
+    if words[0].1 == 0 {
+        words[0].1 = short.split_whitespace().count();
+    }
+    words[0].1 += notes;
+    for (key, count) in words {
         let limit = if matches!(key.as_str(), "changelog" | "faq") {
             LONG_SECTION_WORDS
         } else {
             SECTION_WORDS
         };
-        if section.body.split_whitespace().count() > limit {
+        if count > limit {
             out.add(
                 IssueLevel::Warning,
                 &format!("trimmed_section_{key}"),
@@ -439,6 +463,19 @@ First release.
         let long =
             GOOD.replace("Hello Release replaces the admin footer text.", &"word ".repeat(2501));
         assert!(codes(&validate(&long, None)).contains(&"trimmed_section_description"));
+    }
+
+    #[test]
+    fn other_sections_count_toward_the_description_limit() {
+        // class-parser.php appends unknown sections to the Description
+        // before it applies the 2,500-word limit.
+        let text = GOOD.replace(
+            "Hello Release replaces the admin footer text.",
+            &format!("{}\n\n== Credits ==\n\n{}", "word ".repeat(2000), "word ".repeat(1000)),
+        );
+        assert!(codes(&validate(&text, None)).contains(&"trimmed_section_description"));
+        let notice = GOOD.replace("First release.\n", &format!("{}\n", "word ".repeat(3000)));
+        assert!(codes(&validate(&notice, None)).is_empty(), "the Upgrade Notice is not cut");
     }
 
     #[test]
