@@ -23,22 +23,23 @@ const HEADER: &str = "\
 # SVNpush created this file. Edit it, then commit it with your plugin.
 ";
 
-/// Whether PHP code or a `block.json` in the plugin refers to `folder/`.
-fn referenced(root: &Path, folder: &str) -> bool {
-    let needles = [
-        format!("'{folder}/"),
-        format!("\"{folder}/"),
-        format!("/{folder}/"),
-        format!("./{folder}/"),
-    ];
-    walkdir::WalkDir::new(root)
+/// The build folders that PHP code or a `block.json` in the plugin refers
+/// to (`build/`, `dist/`), found in one walk that reads each file once.
+fn referenced(root: &Path) -> Vec<&'static str> {
+    let needles: Vec<(&str, [String; 4])> = BUILT_FOLDERS
+        .iter()
+        .map(|f| (*f, [format!("'{f}/"), format!("\"{f}/"), format!("/{f}/"), format!("./{f}/")]))
+        .collect();
+    let mut found: Vec<&'static str> = Vec::new();
+    let files = walkdir::WalkDir::new(root)
         .max_depth(4)
         .into_iter()
         .filter_entry(|e| {
             let name = e.file_name().to_string_lossy();
             !(e.file_type().is_dir()
                 && e.depth() > 0
-                && (SKIPPED_DIRS.contains(&name.as_ref()) || (e.depth() == 1 && name == folder)))
+                && (SKIPPED_DIRS.contains(&name.as_ref())
+                    || (e.depth() == 1 && BUILT_FOLDERS.contains(&name.as_ref()))))
         })
         .flatten()
         .filter(|e| e.file_type().is_file())
@@ -46,23 +47,29 @@ fn referenced(root: &Path, folder: &str) -> bool {
             let name = e.file_name().to_string_lossy();
             name.ends_with(".php") || name == "block.json"
         })
-        .filter(|e| e.metadata().is_ok_and(|m| m.len() <= MAX_SCANNED_BYTES))
-        .any(|e| {
-            std::fs::read_to_string(e.path())
-                .is_ok_and(|text| needles.iter().any(|needle| text.contains(needle.as_str())))
-        })
+        .filter(|e| e.metadata().is_ok_and(|m| m.len() <= MAX_SCANNED_BYTES));
+    for entry in files {
+        let Ok(text) = std::fs::read_to_string(entry.path()) else { continue };
+        for (folder, patterns) in &needles {
+            if !found.contains(folder) && patterns.iter().any(|p| text.contains(p.as_str())) {
+                found.push(folder);
+            }
+        }
+        if found.len() == BUILT_FOLDERS.len() {
+            break;
+        }
+    }
+    found
 }
 
 /// The built-in rules for this plugin: the defaults, keeping any build
 /// folder the plugin's code loads.
 pub fn default_rules(root: &Path) -> Vec<&'static str> {
+    let kept = referenced(root);
     DEFAULT_EXCLUDES
         .iter()
         .copied()
-        .filter(|line| {
-            let folder = line.trim_start_matches('/');
-            !(line.starts_with('/') && BUILT_FOLDERS.contains(&folder) && referenced(root, folder))
-        })
+        .filter(|line| !(line.starts_with('/') && kept.contains(&line.trim_start_matches('/'))))
         .collect()
 }
 

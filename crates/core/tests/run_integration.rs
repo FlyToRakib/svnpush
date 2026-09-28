@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use support::{NullObserver, env, inputs, read, run_cmd, start};
 use svnpush_core::report::NullReporter;
+use svnpush_core::run::journal::InFlight;
 use svnpush_core::run::{self, Decision, Outcome, Phase, Run};
 use svnpush_core::secret::Secret;
 use svnpush_core::svn::Svn;
@@ -153,4 +154,108 @@ async fn resume_creates_the_tag_after_a_trunk_commit() {
     assert_eq!(state.phase, Phase::Verified, "{:?}", state.error);
     assert_eq!(journal.outcome, Some(Outcome::Complete));
     assert_eq!(svn.list_tags(&env.project.svn_url, None).await.unwrap(), ["1.0.0"]);
+}
+
+/// A run cancelled at the Publish confirmation, and a working copy holding
+/// the release (as if the commit were about to run).
+async fn stopped_before_the_commit(env: &support::Env) -> run::RunJournal {
+    let mut driver = start(env, false).await;
+    driver.approve_prefill().await;
+    driver.until(Phase::AwaitingPublish).await;
+    let edited = read(&env.project.path, "minimal.php");
+    let readme = read(&env.project.path, "readme.txt");
+    driver.cancel.cancel();
+    let (_, mut journal) = driver.task.await.unwrap();
+    let wc = env.paths.working_copy("minimal");
+    std::fs::write(wc.join("trunk/minimal.php"), edited).unwrap();
+    std::fs::write(wc.join("trunk/readme.txt"), readme).unwrap();
+    run_cmd("svn", &["add", "--force", wc.join("trunk").to_str().unwrap(), "-q"]);
+    journal.outcome = None;
+    journal
+}
+
+fn creds() -> svnpush_core::svn::Credentials {
+    svnpush_core::svn::Credentials { username: "tester".into(), password: Secret::new("pw") }
+}
+
+#[tokio::test]
+async fn resume_finds_a_commit_that_was_never_confirmed() {
+    let env = env();
+    let mut journal = stopped_before_the_commit(&env).await;
+    let svn = Svn::new("svn", &NullReporter, CancellationToken::new());
+    let since = svn.last_changed_revision(&env.project.svn_url, None).await.unwrap();
+    journal.in_flight = Some(InFlight::Commit { since, message: "Release 1.0.0".into() });
+    journal.save(&env.paths).unwrap();
+    // The commit lands, but the app stops before recording it.
+    let wc = env.paths.working_copy("minimal");
+    let landed = svn.commit(&wc, "Release 1.0.0", &creds()).await.unwrap();
+    assert!(journal.needs_tag());
+
+    let observer = Arc::new(NullObserver);
+    let (state, journal) =
+        run::resume_tag(inputs(&env, false).await, observer, CancellationToken::new(), journal)
+            .await;
+    assert_eq!(state.phase, Phase::Verified, "{:?}", state.error);
+    assert_eq!(journal.revisions.trunk, landed);
+    assert!(journal.in_flight.is_none());
+    assert_eq!(svn.list_tags(&env.project.svn_url, None).await.unwrap(), ["1.0.0"]);
+}
+
+#[tokio::test]
+async fn resume_records_a_tag_that_landed_unrecorded() {
+    let env = env();
+    let mut journal = stopped_before_the_commit(&env).await;
+    let svn = Svn::new("svn", &NullReporter, CancellationToken::new());
+    let wc = env.paths.working_copy("minimal");
+    let trunk = svn.commit(&wc, "Release 1.0.0", &creds()).await.unwrap();
+    let tag = svn.tag(&env.project.svn_url, "1.0.0", trunk, "Tag 1.0.0", &creds()).await.unwrap();
+    journal.revisions.trunk = trunk;
+    journal.in_flight = Some(InFlight::Tag);
+    journal.save(&env.paths).unwrap();
+
+    let observer = Arc::new(NullObserver);
+    let (state, journal) =
+        run::resume_tag(inputs(&env, false).await, observer, CancellationToken::new(), journal)
+            .await;
+    assert_eq!(state.phase, Phase::Verified, "{:?}", state.error);
+    assert_eq!(journal.revisions.tag, Some(tag));
+    assert_eq!(journal.outcome, Some(Outcome::Complete));
+}
+
+#[tokio::test]
+async fn resume_rolls_back_a_commit_that_never_landed() {
+    let env = env();
+    let before = read(&env.project.path, "readme.txt");
+    let mut journal = stopped_before_the_commit(&env).await;
+    let svn = Svn::new("svn", &NullReporter, CancellationToken::new());
+    let since = svn.last_changed_revision(&env.project.svn_url, None).await.unwrap();
+    journal.in_flight = Some(InFlight::Commit { since, message: "Release 1.0.0".into() });
+    journal.main_file = None;
+    journal.save(&env.paths).unwrap();
+
+    let observer = Arc::new(NullObserver);
+    let (state, journal) =
+        run::resume_tag(inputs(&env, false).await, observer, CancellationToken::new(), journal)
+            .await;
+    assert_eq!(state.error.unwrap().code, "RESUME_NOT_COMMITTED");
+    assert!(!journal.needs_tag());
+    assert!(svn.list_tags(&env.project.svn_url, None).await.unwrap().is_empty());
+    assert_eq!(read(&env.project.path, "readme.txt"), before);
+    assert!(svn.status(&env.paths.working_copy("minimal")).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn discard_keeps_the_files_of_a_commit_that_landed() {
+    let env = env();
+    let mut journal = stopped_before_the_commit(&env).await;
+    let svn = Svn::new("svn", &NullReporter, CancellationToken::new());
+    let since = svn.last_changed_revision(&env.project.svn_url, None).await.unwrap();
+    journal.in_flight = Some(InFlight::Commit { since, message: "Release 1.0.0".into() });
+    let landed = svn.commit(&env.paths.working_copy("minimal"), "Release 1.0.0", &creds()).await;
+    let landed = landed.unwrap();
+
+    let inputs = inputs(&env, false).await;
+    let journal = run::discard(&inputs, &NullObserver, journal).await.unwrap();
+    assert_eq!(journal.revisions.trunk, landed);
+    assert!(journal.discarded && journal.in_flight.is_none());
 }

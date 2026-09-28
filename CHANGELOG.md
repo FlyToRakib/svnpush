@@ -4,6 +4,8 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Working copies and built packages are kept in the local app data folder, so a roaming Windows profile no longer syncs them. They are recreated on the next release.
+- Build package refuses a plugin header version that is not a valid version, instead of using it as a folder name.
 - Closing the window while a release runs now asks first, because closing stops the release halfway. Install update waits until no release is running.
 - Opening SVNpush a second time brings the open window to the front instead of starting a second copy that could overwrite your projects, accounts and providers.
 - Reset working copy is refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
@@ -41,6 +43,17 @@ All notable changes to SVNpush are listed here, newest first.
 - Rewriting an existing changelog entry keeps the blank line under its title.
 - Files that end lines with a lone carriage return (old Mac style) are now read line by line, as WordPress reads them, and edits keep that line ending.
 - Pre-release versions are now ordered the way WordPress.org and PHP order them: 1.0-beta10 is newer than 1.0-beta9, and 1.0-RC1 is newer than 1.0-beta2.
+- Changed files with non-ASCII names are listed correctly in the change set and the AI draft.
+- A .svnpush.json in the plugin repository can no longer set the pre-build command or point the package or assets folder outside the plugin; the command you set in Project settings is the one that runs.
+- Publishing is safe against interruptions: if a commit or tag reaches WordPress.org but SVNpush stops or sees an error, Resume finds it on the server and finishes the release instead of rolling back or failing with "tag already exists". Cancel no longer interrupts a commit already on its way.
+- Cancelling a release no longer overwrites changes you made to your plugin files while it ran.
+- The optional git tag after publishing is created only when the release commit succeeded.
+- Files with @ in their name (logo@2x.png) or with characters outside your Windows language now release correctly, and commit messages keep every character.
+- Renaming a folder only in case (Includes to includes) now renames it on WordPress.org too.
+- After an interrupted preview, the next release no longer misses files the preview had copied.
+- Files set to native line endings on the server no longer show as changed on every release.
+- Cancelling a pre-build command now also stops the programs it started (npm, node), a build that leaves a background process running no longer hangs the release, and quotes in the command work on Windows.
+- File names with non-ASCII characters work when SVNpush is started from the macOS Finder or a Linux desktop.
 - Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.

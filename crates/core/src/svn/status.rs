@@ -21,7 +21,7 @@ pub enum StatusItem {
     Replaced,
     /// In conflict.
     Conflicted,
-    /// Not under version control.
+    /// Not under version control (including ignored).
     Unversioned,
     /// Versioned but missing from disk.
     Missing,
@@ -52,7 +52,8 @@ fn item(value: &str) -> StatusItem {
         "deleted" => StatusItem::Deleted,
         "replaced" => StatusItem::Replaced,
         "conflicted" => StatusItem::Conflicted,
-        "unversioned" => StatusItem::Unversioned,
+        // Ignored files (`--no-ignore`) are unversioned too: nothing commits them.
+        "unversioned" | "ignored" => StatusItem::Unversioned,
         "missing" => StatusItem::Missing,
         _ => StatusItem::Normal,
     }

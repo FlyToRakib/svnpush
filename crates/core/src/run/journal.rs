@@ -75,6 +75,25 @@ pub struct Revisions {
     pub assets: Option<u64>,
 }
 
+/// A server write that started and has not been confirmed yet. It is saved
+/// before the write, so a crash or an error that hides the result leaves a
+/// record: Resume and Discard ask the server whether it landed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind")]
+#[ts(export)]
+pub enum InFlight {
+    /// A commit of trunk and assets (or assets alone) with this message.
+    Commit {
+        /// The plugin's last-changed revision before the commit, when known.
+        #[ts(type = "number | null")]
+        since: Option<u64>,
+        /// The commit message, to recognise the commit in the log.
+        message: String,
+    },
+    /// The server-side copy to `tags/<version>`.
+    Tag,
+}
+
 /// A run's journal (plan §13 `RunJournal`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -115,6 +134,10 @@ pub struct RunJournal {
     /// Whether the run synced and committed only `assets/`.
     #[serde(default)]
     pub assets_only: bool,
+    /// A commit or tag copy that started but was not confirmed.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub in_flight: Option<InFlight>,
 }
 
 impl RunJournal {
@@ -138,7 +161,14 @@ impl RunJournal {
             snapshot: None,
             discarded: false,
             assets_only: false,
+            in_flight: None,
         }
+    }
+
+    /// Whether a trunk commit started and it is not known yet whether it
+    /// reached the server.
+    pub fn commit_unconfirmed(&self) -> bool {
+        self.revisions.trunk.is_none() && matches!(self.in_flight, Some(InFlight::Commit { .. }))
     }
 
     /// Whether the run stopped without an outcome (the app closed mid-run).
@@ -146,12 +176,14 @@ impl RunJournal {
         self.outcome.is_none()
     }
 
-    /// Whether trunk was committed but no tag was created: Resume creates only the tag.
+    /// Whether trunk was committed (or a commit or copy may have landed) but
+    /// no tag is recorded: Resume checks the server and creates only the tag.
     pub fn needs_tag(&self) -> bool {
-        self.revisions.trunk.is_some()
+        (self.revisions.trunk.is_some() || self.in_flight.is_some())
             && self.revisions.tag.is_none()
             && !self.dry_run
             && !self.discarded
+            && !self.assets_only
     }
 
     /// The last step that finished.
@@ -222,6 +254,7 @@ pub fn prune_snapshots(paths: &AppPaths, slug: &str) -> Result<(), ConfigError> 
                     source,
                 })?;
             }
+            let _ = std::fs::remove_file(dir.with_extension("json"));
             journal.snapshot = None;
             journal.save(paths)?;
         }
@@ -253,6 +286,22 @@ mod tests {
         assert_eq!(all[0].last_step(), Some(Step::Publish));
         assert!(!all[1].is_interrupted());
         assert!(list(&paths, "other").unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unconfirmed_commit_needs_the_tag_step_and_old_journals_still_load() {
+        let mut journal = RunJournal::start("20260928-000000", "demo", "/p", false);
+        assert!(!journal.needs_tag());
+        journal.in_flight =
+            Some(InFlight::Commit { since: Some(4), message: "Release 1.0.1".into() });
+        assert!(journal.commit_unconfirmed() && journal.needs_tag());
+        journal.assets_only = true;
+        assert!(!journal.needs_tag());
+
+        let mut old = serde_json::to_value(RunJournal::start("x", "demo", "/p", false)).unwrap();
+        old.as_object_mut().unwrap().remove("in_flight");
+        let loaded: RunJournal = serde_json::from_value(old).unwrap();
+        assert!(loaded.in_flight.is_none());
     }
 
     #[test]

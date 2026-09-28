@@ -156,10 +156,11 @@ mock server.
 ## Data on disk
 
 `<app-data>/svnpush/`: `projects.json`, `providers.json`, `accounts.json`
-(usernames only), `settings.json`, `wc/<slug>/` (sparse working copies),
-`builds/<slug>/<version>/`, `runs/<slug>/<run id>.json` and snapshots, and
-`logs/`. A project may add `.svnpush.json` for team settings; it is never
-packaged.
+(usernames only), `settings.json`, `runs/<slug>/<run id>.json` and
+snapshots, and `logs/`. The local (non-roaming) `<local-data>/svnpush/`
+holds what regenerates: `wc/<slug>/` (sparse working copies) and
+`builds/<slug>/<version>/`. A project may add `.svnpush.json` for team
+settings; it is never packaged.
 
 ## Testing
 

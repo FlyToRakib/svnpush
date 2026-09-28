@@ -137,7 +137,9 @@ fn bump(plugin: &Path, main_file: &str, next: &str) {
 }
 
 fn propget(path: &Path) -> String {
-    let out = Command::new("svn").args(["propget", "svn:mime-type"]).arg(path).output().unwrap();
+    // The trailing `@` keeps a name such as logo@2x.png from reading as a peg revision.
+    let target = format!("{}@", path.display());
+    let out = Command::new("svn").args(["propget", "svn:mime-type", &target]).output().unwrap();
     String::from_utf8_lossy(&out.stdout).trim().to_owned()
 }
 
@@ -283,6 +285,101 @@ async fn case_only_rename_is_delete_plus_add() {
     publish(&env, "minimal", "1.0.1", "minimal.php").await;
     let listed = client(&env).list(&format!("{}/trunk", env.url), None).await.unwrap();
     assert_eq!(listed, ["helper.php", "minimal.php", "readme.txt"]);
+}
+
+#[tokio::test]
+async fn at_signs_and_non_ascii_names_and_messages_survive() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::create_dir_all(plugin.join("img")).unwrap();
+    std::fs::write(plugin.join("img/logo@2x.png"), [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
+    std::fs::write(plugin.join("img/café.php"), "<?php\n").unwrap();
+    std::fs::write(plugin.join("img/日本.php"), "<?php\n").unwrap();
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert_eq!(
+        trunk.added,
+        ["img/café.php", "img/logo@2x.png", "img/日本.php", "minimal.php", "readme.txt"]
+    );
+    let wc = env.root.join("wc/minimal");
+    assert_eq!(propget(&wc.join("trunk/img/logo@2x.png")), "image/png");
+
+    let svn = client(&env);
+    let message = "Release 1.0.0 — für 日本";
+    let rev = svn.commit(&wc, message, &credentials()).await.unwrap().unwrap();
+    assert_eq!(svn.find_commit(&env.url, Some(rev - 1), message, None).await.unwrap(), Some(rev));
+    assert_eq!(svn.find_commit(&env.url, Some(rev), message, None).await.unwrap(), None);
+    let listed = svn.list(&format!("{}/trunk/img", env.url), None).await.unwrap();
+    assert_eq!(listed, ["café.php", "logo@2x.png", "日本.php"]);
+
+    std::fs::remove_file(plugin.join("img/logo@2x.png")).unwrap();
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert_eq!(trunk.deleted, ["img/logo@2x.png"]);
+    svn.commit(&wc, "Remove the logo", &credentials()).await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn a_case_only_folder_rename_replaces_the_folder() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::create_dir_all(plugin.join("Includes/Sub")).unwrap();
+    std::fs::write(plugin.join("Includes/a.php"), "<?php\n").unwrap();
+    std::fs::write(plugin.join("Includes/Sub/b.php"), "<?php\n").unwrap();
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::rename(plugin.join("Includes"), plugin.join("includes-tmp")).unwrap();
+    std::fs::rename(plugin.join("includes-tmp"), plugin.join("includes")).unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.1").await;
+    assert_eq!(trunk.added, ["includes/Sub/b.php", "includes/a.php"]);
+    assert_eq!(trunk.deleted, ["Includes/", "Includes/Sub/b.php", "Includes/a.php"]);
+    publish(&env, "minimal", "1.0.1", "minimal.php").await;
+    let listed = client(&env).list(&format!("{}/trunk", env.url), None).await.unwrap();
+    assert_eq!(listed, ["includes/", "minimal.php", "readme.txt"]);
+    let inner = client(&env).list(&format!("{}/trunk/includes", env.url), None).await.unwrap();
+    assert_eq!(inner, ["Sub/", "a.php"]);
+}
+
+#[tokio::test]
+async fn files_left_by_an_interrupted_preview_are_added_again() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    // An interrupted run: the adds are undone, the copied files stay on disk
+    // with the same content, and one of them is ignored.
+    let wc = env.root.join("wc/minimal");
+    run("svn", &["revert", "-R", "-q", wc.join("trunk").to_str().unwrap()]);
+    run("svn", &["propset", "-q", "svn:ignore", "readme.txt", wc.join("trunk").to_str().unwrap()]);
+    run("svn", &["commit", "-q", "-m", "Ignore", wc.join("trunk").to_str().unwrap()]);
+    assert!(wc.join("trunk/minimal.php").is_file());
+
+    let svn = client(&env);
+    let sources = {
+        let listing = package::list(&plugin, &Exclusions::load(&plugin, &[]).unwrap()).unwrap();
+        let built = package::build(&listing, &env.root.join("builds"), "minimal", "1.0.0").unwrap();
+        svn::source_files(Path::new(&built.root), &built.files)
+    };
+    let trunk = svn.mirror(&sources, &wc.join("trunk")).await.unwrap();
+    assert_eq!(trunk.added, ["minimal.php", "readme.txt"]);
+    svn.commit(&wc, "Release 1.0.0", &credentials()).await.unwrap().unwrap();
+    let listed = svn.list(&format!("{}/trunk", env.url), None).await.unwrap();
+    assert_eq!(listed, ["minimal.php", "readme.txt"]);
+}
+
+#[tokio::test]
+async fn native_eol_files_are_not_modified_on_every_run() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::write(plugin.join("notes.txt"), "one\ntwo\n").unwrap();
+    preview(&env, &plugin, "minimal", "1.0.0").await;
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+    let wc = env.root.join("wc/minimal");
+    let notes = format!("{}@", wc.join("trunk/notes.txt").display());
+    run("svn", &["propset", "-q", "svn:eol-style", "native", &notes]);
+    run("svn", &["commit", "-q", "-m", "Native line endings", wc.to_str().unwrap()]);
+
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert!(trunk.is_empty(), "{trunk:?}");
 }
 
 #[tokio::test]

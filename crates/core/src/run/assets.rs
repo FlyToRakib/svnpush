@@ -145,7 +145,7 @@ impl Run {
         self.begin(Step::Publish, Phase::Publishing)?;
         let creds = credentials(&self.inputs)?;
         let wc = self.inputs.paths.working_copy(&self.inputs.project.slug);
-        let revision = self.svn().commit_paths(&[wc.join("assets")], &message, &creds).await?;
+        let revision = self.commit_journalled(&[wc.join("assets")], &message, &creds).await?;
         drop(creds);
         self.journal.revisions.assets = revision;
         self.journal.outcome = Some(Outcome::Complete);

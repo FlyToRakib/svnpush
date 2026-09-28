@@ -1,5 +1,10 @@
 //! Step 7, Publish, and what happens after an interrupted run: Resume
 //! (create only the tag) and Discard (roll back local changes).
+//!
+//! Every server write is journalled as in flight before it starts. When it
+//! fails, or the app stops, the server is asked whether it landed, so a
+//! commit that reached the server is never rolled back locally and a tag
+//! that exists is recorded instead of blocking Resume.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -8,11 +13,12 @@ use tokio_util::sync::CancellationToken;
 
 use crate::clock;
 use crate::detect::git::Git;
-use crate::svn::{Credentials, Svn, TagVerification, VERIFY_DELAY};
+use crate::detect::{self, DetectOptions};
+use crate::svn::{Credentials, DEEP_FOLDERS, Svn, SvnError, TagVerification, VERIFY_DELAY};
 use crate::vault;
 
 use super::engine::Run;
-use super::journal::{Outcome, RunJournal};
+use super::journal::{InFlight, Outcome, RunJournal};
 use super::lock::ProjectLock;
 use super::model::{Decision, ErrorView, Phase, PublishResult, RunState, Step, StepStatus};
 use super::snapshot::Snapshot;
@@ -48,6 +54,10 @@ fn svn_client<'a>(
     Svn::new(bin, observer, cancel.clone())
 }
 
+fn tag_url(url: &str, version: &str) -> String {
+    format!("{}/tags/{version}", url.trim_end_matches('/'))
+}
+
 /// The commit messages from a Publish confirmation; other decisions are not for Step 7.
 pub(super) fn publish_messages(decision: Decision) -> Option<(String, String)> {
     match decision {
@@ -73,12 +83,39 @@ impl Run {
         let wc = self.inputs.paths.working_copy(&self.inputs.project.slug);
         let main_file = self.facts()?.main_file.clone();
 
-        let trunk = self.svn().commit(&wc, &trunk_message, &creds).await?;
+        let folders: Vec<PathBuf> =
+            DEEP_FOLDERS.iter().map(|f| wc.join(f)).filter(|p| p.is_dir()).collect();
+        let trunk = self.commit_journalled(&folders, &trunk_message, &creds).await?;
         self.journal.revisions.trunk = trunk;
         self.journal.tag_message = Some(tag_message.clone());
         self.save_journal();
 
-        let tag = self.svn().tag(&url, &version, trunk, &tag_message, &creds).await?;
+        // A cancel during the commit takes effect here: trunk is recorded,
+        // so nothing is rolled back and Resume creates the tag.
+        if self.cancel.is_cancelled() {
+            return Err(RunFailure::cancelled());
+        }
+        self.journal.in_flight = Some(InFlight::Tag);
+        self.save_journal();
+        let result = self.svn().tag(&url, &version, trunk, &tag_message, &creds).await;
+        let tag = match result {
+            Ok(tag) => tag,
+            Err(error) => {
+                let fresh =
+                    svn_client(&self.inputs, self.observer.as_ref(), &CancellationToken::new());
+                match landed_tag(&fresh, &url, &version, &error, &creds).await {
+                    Ok(Some(tag)) => tag,
+                    Ok(None) => {
+                        self.journal.in_flight = None;
+                        self.save_journal();
+                        return Err(error.into());
+                    }
+                    // Unknown: the marker stays, so nothing is rolled back.
+                    Err(_) => return Err(error.into()),
+                }
+            }
+        };
+        self.journal.in_flight = None;
         self.journal.revisions.tag = Some(tag);
         self.save_journal();
 
@@ -117,7 +154,52 @@ impl Run {
         Ok(())
     }
 
-    /// Post-publish option: commit the release edits and tag `v<version>` in git.
+    /// Commits `folders`, journalling the commit as in flight first. When
+    /// `svn` reports an error, the server's log decides whether it landed;
+    /// when that cannot be checked, the marker stays and nothing is rolled back.
+    pub(super) async fn commit_journalled(
+        &mut self,
+        folders: &[PathBuf],
+        message: &str,
+        creds: &Credentials,
+    ) -> Result<Option<u64>, RunFailure> {
+        if self.cancel.is_cancelled() {
+            return Err(RunFailure::cancelled());
+        }
+        let url = self.inputs.project.svn_url.clone();
+        let since = self.svn().last_changed_revision(&url, Some(creds)).await.ok().flatten();
+        self.journal.in_flight = Some(InFlight::Commit { since, message: message.to_owned() });
+        self.save_journal();
+
+        let result = self.svn().commit_paths(folders, message, creds).await;
+        let revision = match result {
+            Ok(revision) => revision,
+            Err(error) => {
+                let fresh =
+                    svn_client(&self.inputs, self.observer.as_ref(), &CancellationToken::new());
+                match fresh.find_commit(&url, since, message, Some(creds)).await {
+                    Ok(Some(revision)) => {
+                        self.state.notices.push(format!(
+                            "svn reported an error, but the commit reached the server as r{revision}."
+                        ));
+                        Some(revision)
+                    }
+                    Ok(None) => {
+                        self.journal.in_flight = None;
+                        self.save_journal();
+                        return Err(error.into());
+                    }
+                    Err(_) => return Err(error.into()),
+                }
+            }
+        };
+        self.journal.in_flight = None;
+        Ok(revision)
+    }
+
+    /// Post-publish option: commit the release edits and tag `v<version>` in
+    /// git. The tag is created only when the commit succeeded, or when there
+    /// was nothing to commit.
     async fn git_release(&mut self, version: &str) {
         let Some(bin) = self.inputs.git.clone() else {
             self.state.notices.push("Git is not available, so no git tag was created.".to_owned());
@@ -126,20 +208,151 @@ impl Run {
         let root = self.project_root();
         let git = Git::new(&bin, &root, self.observer.as_ref(), &self.cancel);
         let message = format!("Release {version}");
-        let mut commit: Vec<&str> = vec!["commit", "-m", &message, "--"];
-        commit.extend(self.state.diffs.iter().map(|d| d.path.as_str()));
         let tag = format!("v{version}");
-        let committed = git.output(&commit).await.ok().flatten().is_some();
-        let tagged = git.output(&["tag", &tag]).await.ok().flatten().is_some();
-        if !(committed && tagged) {
+        let paths: Vec<&str> = self.state.diffs.iter().map(|d| d.path.as_str()).collect();
+        let committed = if paths.is_empty() {
+            true
+        } else {
+            let mut commit: Vec<&str> = vec!["commit", "-m", &message, "--"];
+            commit.extend(paths);
+            git.output(&commit).await.ok().flatten().is_some()
+        };
+        if !committed {
             self.state.notices.push(format!(
-                "The git commit or tag {tag} could not be created. Create them yourself if you need them."
+                "The git commit could not be created, so {tag} was not tagged. Commit and tag the release yourself if you need them."
+            ));
+            return;
+        }
+        if git.output(&["tag", &tag]).await.ok().flatten().is_none() {
+            self.state.notices.push(format!(
+                "The git tag {tag} could not be created. Create it yourself if you need it."
             ));
         }
     }
 }
 
-/// Resume after the trunk commit: create only the tag and verify it (plan §8.6).
+/// The revision of `tags/<version>` when a copy that reported `error` did
+/// reach the server anyway.
+async fn landed_tag(
+    svn: &Svn<'_>,
+    url: &str,
+    version: &str,
+    error: &SvnError,
+    creds: &Credentials,
+) -> Result<Option<u64>, SvnError> {
+    // An existing tag was refused before any copy started.
+    if matches!(error, SvnError::TagExists { .. }) {
+        return Ok(None);
+    }
+    svn.last_changed_revision(&tag_url(url, version), Some(creds)).await
+}
+
+/// The main file to verify the tag with: the journal's, or detected again.
+fn main_file_for(inputs: &RunInputs, journal: &RunJournal) -> Option<String> {
+    journal.main_file.clone().filter(|f| !f.is_empty()).or_else(|| {
+        let settings = &inputs.project.settings;
+        detect::detect(
+            Path::new(&journal.project_path),
+            DetectOptions {
+                svn_url: &inputs.project.svn_url,
+                main_file: settings.main_file.as_deref(),
+                version_locations: &settings.version_locations,
+            },
+        )
+        .ok()
+        .map(|facts| facts.main_file)
+    })
+}
+
+/// Restores the snapshot and reverts the working copy of an interrupted run.
+async fn roll_back_journal(
+    inputs: &RunInputs,
+    observer: &dyn RunObserver,
+    journal: &RunJournal,
+) -> Result<(), ErrorView> {
+    if let Some(dir) = journal.snapshot.clone().filter(|d| Path::new(d).is_dir()) {
+        let snapshot = Snapshot::open(Path::new(&journal.project_path), Path::new(&dir))
+            .map_err(|f| f.error)?;
+        let skipped = snapshot.restore().map_err(|f| f.error)?;
+        observer.info("Restored the files the interrupted run changed.");
+        for notice in snapshot.skipped_notices(&skipped) {
+            observer.info(&notice);
+        }
+    }
+    let wc = inputs.paths.working_copy(&journal.slug);
+    if wc.join(".svn").is_dir() {
+        svn_client(inputs, observer, &CancellationToken::new())
+            .revert(&wc)
+            .await
+            .map_err(|e| ErrorView::from_coded(&e))?;
+    }
+    Ok(())
+}
+
+/// For a commit that was never confirmed: records it when the server has
+/// it; otherwise rolls the run back and stops, since nothing was published.
+async fn confirm_commit(
+    inputs: &RunInputs,
+    observer: &dyn RunObserver,
+    svn: &Svn<'_>,
+    creds: &Credentials,
+    journal: &mut RunJournal,
+) -> Result<(), RunFailure> {
+    let (true, Some(InFlight::Commit { since, message })) =
+        (journal.commit_unconfirmed(), journal.in_flight.clone())
+    else {
+        return Ok(());
+    };
+    let url = &inputs.project.svn_url;
+    if let Some(revision) = svn.find_commit(url, since, &message, Some(creds)).await? {
+        observer.info(&format!("The trunk commit reached the server as r{revision}."));
+        journal.revisions.trunk = Some(revision);
+        journal.in_flight = None;
+        let _ = journal.save(&inputs.paths);
+        return Ok(());
+    }
+    roll_back_journal(inputs, observer, journal)
+        .await
+        .map_err(|error| RunFailure { error, cancelled: false })?;
+    journal.in_flight = None;
+    Err(RunFailure::new(
+        "RESUME_NOT_COMMITTED",
+        "The trunk commit never reached the server, so nothing was published. Your plugin files were restored.",
+        Some("Release again.".to_owned()),
+    ))
+}
+
+/// The tag's revision: an existing `tags/<version>` is recorded (it was
+/// created before the interruption), otherwise trunk is copied now.
+async fn resume_copy(
+    inputs: &RunInputs,
+    observer: &dyn RunObserver,
+    svn: &Svn<'_>,
+    creds: &Credentials,
+    journal: &mut RunJournal,
+    version: &str,
+) -> Result<u64, RunFailure> {
+    let url = &inputs.project.svn_url;
+    if let Some(existing) = svn.last_changed_revision(&tag_url(url, version), Some(creds)).await? {
+        observer.info(&format!("tags/{version} already exists; checking it."));
+        return Ok(existing);
+    }
+    let message = journal.tag_message.clone().unwrap_or_else(|| format!("Tag {version}"));
+    journal.in_flight = Some(InFlight::Tag);
+    let _ = journal.save(&inputs.paths);
+    match svn.tag(url, version, journal.revisions.trunk, &message, creds).await {
+        Ok(tag) => Ok(tag),
+        Err(error) => {
+            let fresh = svn_client(inputs, observer, &CancellationToken::new());
+            let landed = landed_tag(&fresh, url, version, &error, creds).await;
+            Ok(landed.ok().flatten().ok_or(error)?)
+        }
+    }
+}
+
+/// Resume after the trunk commit: create only the tag and verify it (plan
+/// §8.6). A commit that was never confirmed is looked up first; a tag that
+/// already exists is recorded rather than created again.
 pub async fn resume_tag(
     inputs: RunInputs,
     observer: Arc<dyn RunObserver>,
@@ -166,13 +379,20 @@ pub async fn resume_tag(
         let creds = credentials(&inputs)?;
         let svn = svn_client(&inputs, observer.as_ref(), &cancel);
         let url = inputs.project.svn_url.clone();
-        let message = journal.tag_message.clone().unwrap_or_else(|| format!("Tag {version}"));
-        let tag = svn.tag(&url, &version, journal.revisions.trunk, &message, &creds).await?;
+        confirm_commit(&inputs, observer.as_ref(), &svn, &creds, &mut journal).await?;
+        let tag =
+            resume_copy(&inputs, observer.as_ref(), &svn, &creds, &mut journal, &version).await?;
+        journal.in_flight = None;
         journal.revisions.tag = Some(tag);
         let _ = journal.save(&inputs.paths);
-        let main_file = journal.main_file.clone().unwrap_or_default();
-        let verification =
-            svn.verify_tag(&url, &version, &main_file, Some(&creds), VERIFY_DELAY).await?;
+        let verification = match main_file_for(&inputs, &journal) {
+            Some(main_file) => {
+                svn.verify_tag(&url, &version, &main_file, Some(&creds), VERIFY_DELAY).await?
+            }
+            None => TagVerification::Unverified(
+                "The main plugin file is not known, so the tag was not checked.".to_owned(),
+            ),
+        };
         Ok::<_, RunFailure>((version, tag, verification))
     }
     .await;
@@ -212,26 +432,44 @@ pub async fn resume_tag(
 
 /// Discard an interrupted run: restore the snapshot (when trunk was not
 /// committed), revert the working copy, and close the journal as cancelled.
+/// A commit that was never confirmed is looked up first, and when it did
+/// reach the server nothing is rolled back.
 pub async fn discard(
     inputs: &RunInputs,
     observer: &dyn RunObserver,
     mut journal: RunJournal,
 ) -> Result<RunJournal, ErrorView> {
     let _lock = ProjectLock::acquire(&inputs.paths.runs(&journal.slug)).map_err(|f| f.error)?;
-    if journal.revisions.trunk.is_none() {
-        if let Some(dir) = journal.snapshot.clone().filter(|d| Path::new(d).is_dir()) {
-            let snapshot = Snapshot::open(Path::new(&journal.project_path), Path::new(&dir))
-                .map_err(|f| f.error)?;
-            snapshot.restore().map_err(|f| f.error)?;
-            observer.info("Restored the files the interrupted run changed.");
+    if let (true, false, Some(InFlight::Commit { since, message })) =
+        (journal.commit_unconfirmed(), journal.assets_only, journal.in_flight.clone())
+    {
+        let svn = svn_client(inputs, observer, &CancellationToken::new());
+        let landed = svn
+            .find_commit(&inputs.project.svn_url, since, &message, None)
+            .await
+            .map_err(|e| ErrorView::from_coded(&e))?;
+        if let Some(revision) = landed {
+            observer.info(&format!(
+                "The trunk commit had reached the server as r{revision}, so your files were kept."
+            ));
+            journal.revisions.trunk = Some(revision);
         }
-        let wc = inputs.paths.working_copy(&journal.slug);
-        if wc.join(".svn").is_dir() {
-            svn_client(inputs, observer, &CancellationToken::new())
-                .revert(&wc)
-                .await
-                .map_err(|e| ErrorView::from_coded(&e))?;
+    }
+    if let (Some(InFlight::Tag), Some(version)) = (&journal.in_flight, &journal.version) {
+        let svn = svn_client(inputs, observer, &CancellationToken::new());
+        let url = tag_url(&inputs.project.svn_url, version);
+        let landed =
+            svn.last_changed_revision(&url, None).await.map_err(|e| ErrorView::from_coded(&e))?;
+        if let Some(revision) = landed {
+            observer.info(&format!(
+                "tags/{version} had been created as r{revision}, so your files were kept."
+            ));
+            journal.revisions.tag = Some(revision);
         }
+    }
+    journal.in_flight = None;
+    if journal.revisions.trunk.is_none() && journal.revisions.tag.is_none() {
+        roll_back_journal(inputs, observer, &journal).await?;
     }
     if journal.outcome.is_none() {
         journal.outcome = Some(Outcome::Cancelled);

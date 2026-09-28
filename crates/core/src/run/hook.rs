@@ -1,25 +1,14 @@
 //! The project's pre-build command (plan §5.5 step 1), run through the
 //! platform shell with its output streamed to the log.
 
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tokio_util::sync::CancellationToken;
 
 use crate::report::Reporter;
-use crate::tools::process::{self, ProcessError, ProcessSpec};
+use crate::tools::process::{self, ProcessError};
 
 use super::RunFailure;
-
-fn shell() -> (PathBuf, Vec<OsString>) {
-    if cfg!(windows) {
-        let comspec =
-            std::env::var_os("ComSpec").map_or_else(|| PathBuf::from("cmd.exe"), PathBuf::from);
-        (comspec, vec!["/D".into(), "/S".into(), "/C".into()])
-    } else {
-        (PathBuf::from("/bin/sh"), vec!["-c".into()])
-    }
-}
 
 /// Runs `command` in `folder`. A non-zero exit stops the release.
 pub async fn run_pre_build(
@@ -29,18 +18,15 @@ pub async fn run_pre_build(
     cancel: &CancellationToken,
 ) -> Result<(), RunFailure> {
     reporter.info(&format!("Running the pre-build command: {command}"));
-    let (program, mut args) = shell();
-    args.push(command.into());
-    let spec =
-        ProcessSpec { program: &program, args, cwd: Some(folder), stdin: None, log_output: true };
-    let output = process::run(spec, reporter, cancel).await.map_err(|e| match e {
-        ProcessError::Cancelled => RunFailure::cancelled(),
-        other => RunFailure::new(
-            "HOOK_NOT_RUNNABLE",
-            format!("The pre-build command could not start: {other}"),
-            Some("Check the command in project settings.".to_owned()),
-        ),
-    })?;
+    let output =
+        process::run_shell(command, folder, reporter, cancel).await.map_err(|e| match e {
+            ProcessError::Cancelled => RunFailure::cancelled(),
+            other => RunFailure::new(
+                "HOOK_NOT_RUNNABLE",
+                format!("The pre-build command could not start: {other}"),
+                Some("Check the command in project settings.".to_owned()),
+            ),
+        })?;
     if output.success() {
         Ok(())
     } else {

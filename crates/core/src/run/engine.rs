@@ -158,7 +158,10 @@ impl Run {
     pub(super) async fn roll_back(&mut self, remove_build: bool) {
         if let Some(snapshot) = &self.snapshot {
             match snapshot.restore() {
-                Ok(()) => self.observer.info("Restored the files Step 3 changed."),
+                Ok(skipped) => {
+                    self.observer.info("Restored the files Step 3 changed.");
+                    self.state.notices.extend(snapshot.skipped_notices(&skipped));
+                }
                 Err(e) => self
                     .state
                     .notices
@@ -190,11 +193,22 @@ impl Run {
 
     async fn stop(&mut self, failure: RunFailure) {
         let step = self.state.active_step().unwrap_or(Step::Detect);
-        if self.journal.revisions.trunk.is_some() {
+        let revisions = &self.journal.revisions;
+        if revisions.trunk.is_some() || revisions.tag.is_some() {
             self.state.notices.push(
                 "Trunk was already committed and cannot be undone. Use Resume to create the tag."
                     .to_owned(),
             );
+        } else if revisions.assets.is_some() {
+            self.state.notices.push("The assets were already committed.".to_owned());
+        } else if self.journal.in_flight.is_some() {
+            // Rolling back a commit that did land would leave the plugin
+            // files behind the server, so nothing is undone until it is known.
+            self.state.notices.push(if self.journal.assets_only {
+                "It is not known whether the assets commit reached the server. Run Update assets again: it commits only what still differs.".to_owned()
+            } else {
+                "It is not known whether the commit or tag reached the server, so nothing was rolled back. Use Resume to check and finish the release.".to_owned()
+            });
         } else {
             let remove_build =
                 failure.cancelled && matches!(step, Step::Build | Step::Preview | Step::Publish);

