@@ -491,6 +491,9 @@ export const S = {
   },
   errors: {
     unexpected: "Something went wrong.",
+    renderFix:
+      "Reload the window, or open another screen from the bar above. A release in progress keeps running.",
+    reload: "Reload",
   },
   closeGuard: {
     title: "A release is in progress",

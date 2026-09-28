@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Modal } from "./components/Modal";
 import { TitleBar } from "./components/TitleBar";
 import { commands } from "./ipc/commands";
@@ -92,7 +93,10 @@ export function App() {
     <div className="app">
       <TitleBar current={screen} onNavigate={setScreen} />
       <main className="app__main">
-        <div className="app__content">{render()}</div>
+        <div className="app__content">
+          {/* Keyed on the screen, so opening another screen clears a render error. */}
+          <ErrorBoundary key={screen}>{render()}</ErrorBoundary>
+        </div>
       </main>
       <Modal
         open={closeBlocked}
