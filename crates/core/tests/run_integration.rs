@@ -286,17 +286,19 @@ async fn a_commit_error_after_sending_keeps_the_in_flight_marker() {
         .decisions
         .send(Decision::Publish {
             trunk_message: preview.trunk_message,
-            tag_message: preview.tag_message,
+            tag_message: "Tag 1.0.0, edited".into(),
         })
         .await
         .unwrap();
     let (state, journal) = driver.task.await.unwrap();
 
     // The log does not show the commit, but the error is not one that
-    // refuses before writing: nothing is rolled back and Resume is offered.
+    // refuses before writing: nothing is rolled back and Resume is offered,
+    // with the tag message the developer confirmed.
     assert_eq!(state.phase, Phase::Failed);
     assert!(matches!(journal.in_flight, Some(InFlight::Commit { since: Some(_), .. })));
     assert!(journal.needs_tag());
+    assert_eq!(journal.tag_message.as_deref(), Some("Tag 1.0.0, edited"));
     assert_eq!(read(&env.project.path, "readme.txt"), edited);
 
     // Resume checks again, finds nothing and rolls back.

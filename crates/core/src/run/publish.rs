@@ -85,9 +85,11 @@ impl Run {
 
         let folders: Vec<PathBuf> =
             DEEP_FOLDERS.iter().map(|f| wc.join(f)).filter(|p| p.is_dir()).collect();
+        // Saved with the in-flight commit, so Resume tags with this message
+        // even when the commit's outcome is unknown.
+        self.journal.tag_message = Some(tag_message.clone());
         let trunk = self.commit_journalled(&folders, &trunk_message, &creds).await?;
         self.journal.revisions.trunk = trunk;
-        self.journal.tag_message = Some(tag_message.clone());
         self.save_journal();
 
         // A cancel during the commit takes effect here: trunk is recorded,
