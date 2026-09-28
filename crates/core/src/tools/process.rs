@@ -118,18 +118,46 @@ fn utf8_ctype(lc_ctype: Option<&str>, lang: Option<&str>) -> Option<&'static str
     }
 }
 
+/// Windows PowerShell: lists the process tree under `{pid}` (a child is
+/// created after its parent, so a reused process id is not taken for one),
+/// then stops it root first. `taskkill /T` stops children first, and a
+/// shell whose child died runs its next command (`build & copy`) before it
+/// is stopped itself.
+#[cfg(windows)]
+const STOP_TREE: &str = "$all = Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate; \
+$tree = @($all | Where-Object ProcessId -eq {pid}); \
+if ($tree.Count -eq 0) { exit 1 }; \
+for ($i = 0; $i -lt $tree.Count; $i++) { $p = $tree[$i]; \
+$tree += @($all | Where-Object { $_.ParentProcessId -eq $p.ProcessId -and $_.CreationDate -ge $p.CreationDate }) }; \
+foreach ($p in $tree) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }; \
+exit 0";
+
 /// Kills the process and everything it started: the process tree on
-/// Windows (`taskkill /T`), the process group on Unix (every child is a group
-/// leader). A shell's grandchildren, such as `npm` and `node`, die with it.
+/// Windows (root first, see `STOP_TREE`, or `taskkill /T` when PowerShell
+/// cannot run), the process group on Unix (every child is a group leader,
+/// and one signal stops the group at once). A shell's grandchildren, such as
+/// `npm` and `node`, die with it.
 async fn kill_tree(pid: Option<u32>) {
     let Some(pid) = pid else { return };
     #[cfg(windows)]
     let mut command = {
-        let taskkill = std::env::var_os("SystemRoot").map_or_else(
-            || PathBuf::from("taskkill.exe"),
-            |root| PathBuf::from(root).join("System32").join("taskkill.exe"),
-        );
-        let mut command = tokio::process::Command::new(taskkill);
+        let system = std::env::var_os("SystemRoot")
+            .map_or_else(PathBuf::new, |root| PathBuf::from(root).join("System32"));
+        let powershell = system.join(r"WindowsPowerShell\v1.0\powershell.exe");
+        let script = STOP_TREE.replace("{pid}", &pid.to_string());
+        let stopped = tokio::process::Command::new(powershell)
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_ok_and(|s| s.success());
+        if stopped {
+            return;
+        }
+        let mut command = tokio::process::Command::new(system.join("taskkill.exe"));
         command.args(["/PID", &pid.to_string(), "/T", "/F"]).creation_flags(CREATE_NO_WINDOW);
         command
     };
@@ -373,11 +401,13 @@ mod tests {
     #[tokio::test]
     async fn cancel_kills_the_shell_and_its_children() {
         let dir = tempfile::tempdir().unwrap();
-        // The grandchild would write the marker after two seconds unless killed.
+        // The shell (or its child) would write the marker after five seconds
+        // unless killed. On Windows the shell must die before its child, or
+        // it runs the command after `&`.
         let line = if cfg!(windows) {
-            "ping -n 3 127.0.0.1 >nul & echo done> marker.txt"
+            "ping -n 6 127.0.0.1 >nul & echo done> marker.txt"
         } else {
-            "sh -c 'sleep 2; echo done > marker.txt'"
+            "sh -c 'sleep 5; echo done > marker.txt'"
         };
         let cancel = CancellationToken::new();
         let stopper = cancel.clone();
@@ -388,8 +418,8 @@ mod tests {
         let started = std::time::Instant::now();
         let err = run_shell(line, dir.path(), &Recorder::default(), &cancel).await.unwrap_err();
         assert!(matches!(err, ProcessError::Cancelled));
-        assert!(started.elapsed() < Duration::from_secs(2));
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        assert!(started.elapsed() < Duration::from_secs(4), "{:?}", started.elapsed());
+        tokio::time::sleep(Duration::from_secs(6)).await;
         assert!(!dir.path().join("marker.txt").exists(), "the grandchild was killed");
     }
 
