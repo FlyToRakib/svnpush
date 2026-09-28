@@ -66,6 +66,21 @@ describe("ReleaseScreen", () => {
     });
   });
 
+  it("scrolls to the steps without animation when reduced motion is asked for", () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: true })),
+    );
+    try {
+      open(runState("Detecting", "Detect"));
+      expect(scroll).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+    } finally {
+      vi.unstubAllGlobals();
+      scroll.mockRestore();
+    }
+  });
+
   it("keeps the SVN preview open while it asks to confirm the publish", async () => {
     const user = userEvent.setup();
     open(

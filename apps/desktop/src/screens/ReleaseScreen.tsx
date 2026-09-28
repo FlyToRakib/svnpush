@@ -80,10 +80,14 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
     setBeforeToggle({ active, open });
   };
 
-  // When a release starts, bring the release steps into view.
+  // When a release starts, bring the release steps into view. An explicit
+  // "smooth" ignores the stylesheet's reduced-motion rule, so it is checked here.
   useEffect(() => {
     if (active) {
-      stepsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const still =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      stepsRef.current?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
     }
   }, [active]);
   const publishResult = state?.publish ?? null;
