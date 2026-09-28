@@ -160,12 +160,14 @@ pub fn list(app: &AppState) -> Result<ProvidersFile, ErrorView> {
     records::load(&app.paths).map_err(|e| coded(&e))
 }
 
-/// Adds or edits a record; a new key goes straight to the keychain.
+/// Adds or edits a record; a new key goes straight to the keychain. The
+/// record changes inside `records::update`, after the keychain write, so a
+/// request count or "needs attention" saved meanwhile is not lost.
 pub fn save(app: &AppState, input: ProviderInput) -> Result<ProvidersFile, ErrorView> {
     let adapter = registry::get(&input.kind).map_err(|e| coded(&e))?;
     let meta = adapter.meta();
     let key = input.api_key.as_deref().map(str::trim).filter(|k| !k.is_empty());
-    let mut file = records::load(&app.paths).map_err(|e| coded(&e))?;
+    let file = records::load(&app.paths).map_err(|e| coded(&e))?;
     let existing = input.id.as_ref().and_then(|id| file.providers.iter().position(|p| &p.id == id));
     let has_stored_key = existing.is_some_and(|i| file.providers[i].has_key);
     if !meta.keyless && key.is_none() && !has_stored_key {
@@ -201,38 +203,39 @@ pub fn save(app: &AppState, input: ProviderInput) -> Result<ProvidersFile, Error
     } else {
         input.model.trim().to_owned()
     };
-    if let Some(i) = existing {
-        let current = &mut file.providers[i];
-        current.kind.clone_from(&input.kind);
-        current.label = label;
-        current.model = model;
-        current.base_url = base_url;
-        current.has_key = !meta.keyless && (key.is_some() || has_stored_key);
-    } else {
-        file.providers.push(ProviderRecord {
-            id: id.clone(),
-            kind: input.kind.clone(),
-            label,
-            model,
-            base_url,
-            has_key: !meta.keyless,
-            is_default: false,
-            needs_attention: None,
-            created_at: clock::iso8601(clock::now()),
-            requests_this_month: 0,
-            usage_month: clock::month(clock::now()),
-        });
-    }
-    let record = id;
-    let only_one = file.providers.len() == 1;
-    if input.is_default || only_one {
-        for p in &mut file.providers {
-            p.is_default = p.id == record;
+    records::update(&app.paths, |file| {
+        if let Some(current) = file.providers.iter_mut().find(|p| p.id == id) {
+            let has_stored_key = current.has_key;
+            current.kind.clone_from(&input.kind);
+            current.label = label;
+            current.model = model;
+            current.base_url = base_url;
+            current.has_key = !meta.keyless && (key.is_some() || has_stored_key);
+        } else {
+            file.providers.push(ProviderRecord {
+                id: id.clone(),
+                kind: input.kind.clone(),
+                label,
+                model,
+                base_url,
+                has_key: !meta.keyless,
+                is_default: false,
+                needs_attention: None,
+                created_at: clock::iso8601(clock::now()),
+                requests_this_month: 0,
+                usage_month: clock::month(clock::now()),
+            });
         }
-    } else if let Some(p) = file.providers.iter_mut().find(|p| p.id == record) {
-        p.is_default = false;
-    }
-    records::save(&app.paths, &file).map_err(|e| coded(&e))?;
+        let only_one = file.providers.len() == 1;
+        if input.is_default || only_one {
+            for p in &mut file.providers {
+                p.is_default = p.id == id;
+            }
+        } else if let Some(p) = file.providers.iter_mut().find(|p| p.id == id) {
+            p.is_default = false;
+        }
+    })
+    .map_err(|e| coded(&e))?;
     list(app)
 }
 
@@ -389,6 +392,45 @@ mod tests {
             is_default: false,
             api_key: key.map(str::to_owned),
         }
+    }
+
+    /// A keychain whose write lands while a run counts a request.
+    struct CountingVault(svnpush_core::project::AppPaths);
+
+    impl vault::CredentialStore for CountingVault {
+        fn get(&self, _key: &str) -> Result<Option<Secret>, vault::VaultError> {
+            Ok(None)
+        }
+
+        fn set(&self, _key: &str, _secret: &Secret) -> Result<(), vault::VaultError> {
+            let id = records::load(&self.0).unwrap().providers[0].id.clone();
+            records::record_request(&self.0, &id).unwrap();
+            Ok(())
+        }
+
+        fn delete(&self, _key: &str) -> Result<(), vault::VaultError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_request_counted_during_the_keychain_write_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = svnpush_core::project::AppPaths::new(dir.path());
+        let plain = crate::test_support::app(dir.path());
+        let saved = save(&plain, input("claude", Some("sk-ant-first"))).unwrap();
+        let app = AppState::new(
+            paths.clone(),
+            std::sync::Arc::new(CountingVault(paths)),
+            svnpush_core::ai::client::AiClient::new().unwrap(),
+        );
+        let edit = ProviderInput {
+            id: Some(saved.providers[0].id.clone()),
+            ..input("claude", Some("sk-ant-second"))
+        };
+        let after = save(&app, edit).unwrap();
+        assert_eq!(after.providers[0].requests_this_month, 1);
+        assert!(after.providers[0].has_key);
     }
 
     #[test]
