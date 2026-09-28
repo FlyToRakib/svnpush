@@ -644,7 +644,7 @@ Registered adapters, in this order after Revoye:
 | `qwen` | Qwen (DashScope) | `/chat/completions` | `qwen-plus` | Factory. |
 | `perplexity` | Perplexity | Router API `/router/v1/chat/completions` | `perplexity/kimi-k3` | Factory. The retired `sonar*` ids are sent as the default. |
 | `openai_compatible` | OpenAI-compatible | `/chat/completions` | free text | Factory; base URL required. |
-| `local` | Local model (Ollama / LM Studio) | `/chat/completions` | `gemma3` | Factory; keyless; default base URL `http://localhost:11434/v1`. |
+| `local` | Local model (Ollama / LM Studio) | `/chat/completions` | `gemma3` | Factory; keyless; default base URL `http://localhost:11434/v1`; JSON via `response_format: json_schema` (LM Studio rejects `json_object`). |
 
 `ai/adapters/openai.rs` exposes `OpenAiCompatible::new(spec)`, the factory
 behind every `/chat/completions` provider, exactly as `makeOpenAiCompatible`
@@ -673,10 +673,15 @@ nothing outside it exists. Behaviour, mirroring the SyncDock adapter:
   The job is durable the moment it is accepted, so a cancelled poll loop
   never loses work.
 - **Idempotency-Key** derived from the work, not random:
-  `svnpush:<slug>:<version>:<task>:<blake3(prompt)[..16]>`. A crash and
-  retry recomputes the same key and gets the same job back instead of
-  running a second one. This is the single deliberate difference from the
-  SyncDock adapter, which cannot retry and therefore uses a random UUID.
+  `svnpush:<slug>:<version>:<task>:<operation>:<blake3(prompt)[..16]>`,
+  where `<operation>` is `<run id>.<n>` and `n` counts the explicit
+  Generates in the run. Resending the same request recomputes the same key
+  and gets the same job back instead of running a second one. Revoye
+  returns the original job for a reused key even when it failed or was
+  cancelled, so each Generate (a regenerate, or a generate after Stop or a
+  failure) is new work with a new key. A connection test (no work) uses
+  `svnpush:test:<nanosecond timestamp>:<blake3(prompt)[..16]>`, new every
+  time.
 - **Poll** `GET /v1/completions/{id}` every 4 s, up to 600 s, showing
   `queue_position` as "waiting for an agent (N ahead)" in the UI. Cancel via
   `DELETE /v1/completions/{id}` when the user cancels the step, because
