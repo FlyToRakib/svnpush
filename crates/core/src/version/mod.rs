@@ -214,6 +214,9 @@ pub enum VersionError {
     /// A custom version location's pattern is unusable.
     #[error("the pattern for {path} is invalid: {reason}")]
     BadPattern { path: String, reason: String },
+    /// A version location's path leaves the package root.
+    #[error("the version location \"{path}\" is not a file inside the plugin folder")]
+    OutsideRoot { path: String },
     /// A version location matched nothing.
     #[error("no version found in {path}")]
     NotFound { path: String },
@@ -227,6 +230,7 @@ impl Coded for VersionError {
         match self {
             Self::Invalid { .. } => "VERSION_INVALID",
             Self::BadPattern { .. } => "VERSION_BAD_PATTERN",
+            Self::OutsideRoot { .. } => "VERSION_PATH_OUTSIDE",
             Self::NotFound { .. } => "VERSION_NOT_FOUND",
             Self::Edit(inner) => inner.code(),
         }
@@ -240,6 +244,10 @@ impl Coded for VersionError {
             ),
             Self::BadPattern { .. } => Some(
                 "Use a regular expression with exactly one capture group around the version."
+                    .to_owned(),
+            ),
+            Self::OutsideRoot { .. } => Some(
+                "Use a path relative to the plugin folder, such as includes/version.php, in project settings or .svnpush.json."
                     .to_owned(),
             ),
             Self::NotFound { path } => Some(format!(

@@ -148,7 +148,10 @@ pub fn main_file_candidates(root: &Path) -> Result<Vec<String>, DetectError> {
 
 fn resolve_main_file(root: &Path, chosen: Option<&str>) -> Result<String, DetectError> {
     if let Some(path) = chosen {
-        let ok = root.join(path).is_file()
+        // WordPress reads the main file from the plugin folder itself, and
+        // Write edits it: a path cannot reach into another folder.
+        let ok = !path.contains(['/', '\\', ':'])
+            && root.join(path).is_file()
             && edit::read_text(root, path).is_ok_and(|t| header::is_main_plugin_file(&t));
         return if ok {
             Ok(path.to_owned())

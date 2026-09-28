@@ -113,6 +113,20 @@ fn a_chosen_file_without_a_header_is_rejected() {
 }
 
 #[test]
+fn a_chosen_file_outside_the_package_root_is_rejected() {
+    // `minimal` is a real main plugin file, reached from another plugin's root.
+    let (url, locations) = options("no-readme");
+    for chosen in ["../minimal/minimal.php", "..\\minimal\\minimal.php"] {
+        let err = detect::detect(
+            &fixture("no-readme"),
+            DetectOptions { svn_url: &url, main_file: Some(chosen), version_locations: &locations },
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "DETECT_NOT_A_MAIN_FILE", "{chosen}");
+    }
+}
+
+#[test]
 fn stable_tag_trunk() {
     let facts = detect_fixture("stable-tag-trunk").unwrap();
     let stable = facts.versions.iter().find(|v| v.kind == VersionSourceKind::StableTag).unwrap();

@@ -54,8 +54,19 @@ pub struct VersionLocation {
     pub pattern: String,
 }
 
-/// Compiles a location's pattern, requiring exactly one capture group.
+/// Compiles a location's pattern, requiring exactly one capture group, and
+/// checks that its path stays inside the package root: `.svnpush.json` is
+/// shared through the repository, and Write edits the file it names.
 pub fn validate_location(location: &VersionLocation) -> Result<Regex, VersionError> {
+    let path = &location.path;
+    if path.trim().is_empty()
+        || Path::new(path).is_absolute()
+        || path.starts_with(['/', '\\'])
+        || path.contains(':')
+        || path.split(['/', '\\']).any(|part| part == "..")
+    {
+        return Err(VersionError::OutsideRoot { path: path.clone() });
+    }
     let bad = |reason: String| VersionError::BadPattern { path: location.path.clone(), reason };
     let regex = Regex::new(&location.pattern).map_err(|e| bad(e.to_string()))?;
     let groups = regex.captures_len() - 1;
@@ -249,6 +260,25 @@ mod tests {
         assert_eq!(validate_location(&loc).unwrap_err().code(), "VERSION_BAD_PATTERN");
         let loc = VersionLocation { path: "x".into(), pattern: "([".into() };
         assert!(validate_location(&loc).is_err());
+    }
+
+    #[test]
+    fn rejects_paths_outside_the_package_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("p");
+        std::fs::create_dir_all(&root).unwrap();
+        plugin(&root);
+        std::fs::write(dir.path().join("outside.txt"), "v='1.0.0'").unwrap();
+        for path in ["../outside.txt", "sub/../../outside.txt", "/etc/hosts", "C:\\x.txt", ""] {
+            let loc = vec![VersionLocation { path: path.into(), pattern: "'([^']+)'".into() }];
+            assert!(read_sources(&root, "p.php", &loc).is_err(), "{path}");
+            let mut edits = EditSet::new(&root);
+            let err = write_version(&mut edits, "p.php", &loc, "2.0").unwrap_err();
+            assert_eq!(err.code(), "VERSION_PATH_OUTSIDE", "{path}");
+        }
+        assert_eq!(std::fs::read_to_string(dir.path().join("outside.txt")).unwrap(), "v='1.0.0'");
+        let inside = VersionLocation { path: "./inc/v.php".into(), pattern: "(a)".into() };
+        assert!(validate_location(&inside).is_ok());
     }
 
     #[test]
