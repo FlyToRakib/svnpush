@@ -170,8 +170,20 @@ pub async fn from_git(
     filter: &Filter,
 ) -> Result<Material, ProcessError> {
     let base = changes.base.clone().unwrap_or_default();
+    // Without core.quotePath=false git writes a non-ASCII name as "b/caf\303\251.php",
+    // which never matches the change set's path, and that file's diff is lost.
     let output = git
-        .output(&["diff", "--relative", "-M", "--no-color", &base, "--", "."])
+        .output(&[
+            "-c",
+            "core.quotePath=false",
+            "diff",
+            "--relative",
+            "-M",
+            "--no-color",
+            &base,
+            "--",
+            ".",
+        ])
         .await?
         .unwrap_or_default();
     let mut diffs = split_git_diff(&output);
@@ -314,5 +326,40 @@ mod tests {
         let diffed: Vec<&str> = material.diffs.iter().map(|(p, _)| p.as_str()).collect();
         assert_eq!(diffed, ["plugin.php"]);
         assert!(material.stat.contains("added: bundle.js"));
+    }
+
+    #[tokio::test]
+    async fn git_diffs_of_non_ascii_names_are_kept() {
+        let repo = tempfile::tempdir().unwrap();
+        let git = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(["-c", "user.email=test@example.org", "-c", "user.name=Test"])
+                .args(args)
+                .current_dir(repo.path())
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}");
+        };
+        std::fs::write(repo.path().join("café.php"), "<?php\n").unwrap();
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&["commit", "-q", "-m", "First"]);
+        git(&["tag", "v1.0.0"]);
+        std::fs::write(repo.path().join("café.php"), "<?php\n// changed\n").unwrap();
+
+        let bin =
+            crate::tools::discover_git(None).await.path.map(std::path::PathBuf::from).unwrap();
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let runner = Git::new(&bin, repo.path(), &crate::report::NullReporter, &cancel);
+        let changes = ChangeSet {
+            source: ChangeSource::Git,
+            base: Some("v1.0.0".into()),
+            files: vec![ChangedFile { path: "café.php".into(), kind: ChangeKind::Modified }],
+            commits: vec![],
+        };
+        let material = from_git(&runner, repo.path(), &changes, &Filter::new(&[])).await.unwrap();
+        assert_eq!(material.diffs.len(), 1, "the diff was dropped");
+        assert_eq!(material.diffs[0].0, "café.php");
+        assert!(material.diffs[0].1.contains("+// changed"));
     }
 }
