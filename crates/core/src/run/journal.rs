@@ -136,6 +136,7 @@ pub struct RunJournal {
     pub assets_only: bool,
     /// A commit or tag copy that started but was not confirmed.
     #[serde(default)]
+    #[ts(optional = nullable)]
     pub in_flight: Option<InFlight>,
 }
 

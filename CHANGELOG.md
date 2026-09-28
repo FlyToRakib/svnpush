@@ -4,6 +4,8 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Working copies and built packages are kept in the local app data folder, so a roaming Windows profile no longer syncs them. They are recreated on the next release.
+- Build package refuses a plugin header version that is not a valid version, instead of using it as a folder name.
 - Closing the window while a release runs now asks first, because closing stops the release halfway. Install update waits until no release is running.
 - Opening SVNpush a second time brings the open window to the front instead of starting a second copy that could overwrite your projects, accounts and providers.
 - Reset working copy is refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
