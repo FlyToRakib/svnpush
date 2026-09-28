@@ -4,6 +4,8 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Plugin images: names are checked with WordPress.org's own rules, so GIF banners and screenshots, .jpeg files, uppercase names, -rtl screenshots and locales such as -de_DE_formal are accepted. A .webp screenshot is no longer counted, because WordPress.org ignores it.
+- Plugin images: the size of a JPEG saved with large metadata (for example from Photoshop) is now read correctly.
 - Environment templates (.env.example, .env.dist, .env.sample) and public certificate bundles such as Composer's cacert.pem no longer stop a release as secret files.
 - The direct-access check (V09) also accepts `if ( ! function_exists( 'add_action' ) )` as a guard.
 - Filling an empty Version header written on one line, such as `/* Version: */`, now puts the version inside the comment instead of after it, which broke the PHP file.

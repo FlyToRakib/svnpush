@@ -41,7 +41,7 @@ export const TOOLS = {
       { name: "icon-128x128.png", size: "128 × 128", note: "Icon. PNG, JPG or GIF, up to 1 MB." },
       { name: "icon-256x256.png", size: "256 × 256", note: "Icon for high-resolution screens." },
       { name: "icon.svg", size: "any", note: "Optional. Needs the PNG icons as a fallback." },
-      { name: "banner-772x250.png", size: "772 × 250", note: "Banner. PNG or JPG, up to 4 MB." },
+      { name: "banner-772x250.png", size: "772 × 250", note: "Banner. PNG, JPG or GIF, up to 4 MB." },
       {
         name: "banner-1544x500.png",
         size: "1544 × 500",
@@ -55,7 +55,7 @@ export const TOOLS = {
       {
         name: "screenshot-1.png",
         size: "any",
-        note: "PNG or JPG, up to 10 MB. One per line in the readme's == Screenshots ==: 1. matches screenshot-1.",
+        note: "PNG, JPG or GIF, up to 10 MB. One per line in the readme's == Screenshots ==: 1. matches screenshot-1.",
       },
     ],
     guideNote:

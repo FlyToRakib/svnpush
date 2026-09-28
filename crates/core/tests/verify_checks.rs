@@ -424,6 +424,10 @@ fn w04_warns_on_mismatched_screenshots() {
     case.assets = Some(vec!["screenshot-1.png".into(), "screenshot-3.png".into()]);
     let r = assert_fails(&case, "W04");
     assert_eq!(r.paths, ["screenshot-2", "screenshot-3"]);
+    // WordPress.org's importer does not read WebP.
+    case.assets = Some(vec!["screenshot-1.png".into(), "screenshot-2.webp".into()]);
+    let r = assert_fails(&case, "W04");
+    assert_eq!(r.paths, ["screenshot-2"]);
 }
 
 #[test]
