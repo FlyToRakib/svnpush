@@ -109,7 +109,8 @@ mock server.
 ## Shell (`apps/desktop/src-tauri/src`)
 
 - `lib.rs` builds the app: logging, the keychain store, the AI client,
-  plugins (dialog, opener, updater) and the command list.
+  plugins (single-instance, dialog, opener, updater), the close guard and
+  the command list.
 - `commands.rs` holds one `#[tauri::command]` per action. Each forwards to
   `service/`, which holds the logic as plain functions over `AppState`, so it
   is unit-tested without a window.

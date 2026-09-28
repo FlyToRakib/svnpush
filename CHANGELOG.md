@@ -4,6 +4,15 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Closing the window while a release runs now asks first, because closing stops the release halfway. Install update waits until no release is running.
+- Opening SVNpush a second time brings the open window to the front instead of starting a second copy that could overwrite your projects, accounts and providers.
+- Reset working copy is refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
+- A release running in this window no longer shows as unfinished or locked in the Projects list.
+- Testing an SVN account makes one small request instead of listing every plugin on WordPress.org.
+- If SVNpush cannot start, it says why in a message box instead of closing silently.
+- The Projects list, the file check, Build package and the Vault no longer freeze the app while they read the disk or the keychain.
+- The window background follows the system theme from the first moment, with no white flash in dark mode.
+
 - Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.
