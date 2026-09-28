@@ -26,11 +26,11 @@ export function SvnPreviewView({ preview }: SvnPreviewViewProps) {
             return (
               <li key={file}>
                 {diff === undefined ? (
-                  <span className="mono">{path}</span>
+                  <span className="mono break">{path}</span>
                 ) : (
                   <button
                     type="button"
-                    className="btn--link mono"
+                    className="btn--link mono break"
                     aria-expanded={open === file}
                     onClick={() => {
                       setOpen(open === file ? null : file);

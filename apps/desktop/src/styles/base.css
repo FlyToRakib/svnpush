@@ -150,6 +150,7 @@ pre,
   cursor: pointer;
   font: inherit;
   padding: 0;
+  text-align: left;
   text-decoration: underline;
 }
 
