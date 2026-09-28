@@ -17,6 +17,7 @@ use svnpush_core::ai::schemas::{self, DraftAnswer};
 use svnpush_core::ai::task::{self, TaskError};
 use svnpush_core::project::AppPaths;
 use svnpush_core::secret::Secret;
+use svnpush_core::settings;
 use svnpush_core::vault::{self, CredentialStore, VaultError};
 use tokio_util::sync::CancellationToken;
 use wiremock::matchers::{header, method, path};
@@ -65,7 +66,12 @@ fn revoye_request(messages: &[Message]) -> GenerateRequest<'_> {
         max_tokens: None,
         temperature: None,
         json_schema: None,
-        work: Some(WorkId { slug: "demo", version: "1.2.0", task: "draft_release" }),
+        work: Some(WorkId {
+            slug: "demo",
+            version: "1.2.0",
+            task: "draft_release",
+            operation: "run1.1",
+        }),
     }
 }
 
@@ -188,6 +194,126 @@ async fn a_poll_rate_limit_waits_for_retry_after_once() {
         started.elapsed() >= Duration::from_secs(9),
         "two poll intervals plus the Retry-After wait"
     );
+}
+
+async fn mount_submit(server: &MockServer) {
+    Mock::given(method("POST"))
+        .and(path("/v1/completions"))
+        .respond_with(ResponseTemplate::new(202).set_body_json(job(
+            "queued",
+            &Value::Null,
+            json!({}),
+        )))
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn a_transient_poll_failure_is_ridden_out() {
+    let server = MockServer::start().await;
+    mount_submit(&server).await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/completions/{JOB}")))
+        .respond_with(sequence(vec![
+            ResponseTemplate::new(503).insert_header("Retry-After", "1"),
+            ResponseTemplate::new(200).set_body_json(job("succeeded", &json!("ok"), json!({}))),
+        ]))
+        .mount(&server)
+        .await;
+    let messages = [Message { role: Role::User, content: "Hi".into() }];
+    let result = revoye_client(&server)
+        .generate(&REVOYE, &revoye_request(&messages), &CancellationToken::new(), &|_| {})
+        .await
+        .unwrap();
+    assert_eq!(result.text, "ok");
+}
+
+#[tokio::test]
+async fn abandoning_a_job_after_a_poll_error_cancels_it_on_the_server() {
+    let server = MockServer::start().await;
+    mount_submit(&server).await;
+    Mock::given(method("GET"))
+        .and(path(format!("/v1/completions/{JOB}")))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({ "error": { "code": "UNAUTHORIZED", "message": "x", "request_id": "r", "details": {} } })))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path(format!("/v1/completions/{JOB}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(job(
+            "cancelled",
+            &Value::Null,
+            json!({}),
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let messages = [Message { role: Role::User, content: "Hi".into() }];
+    let err = revoye_client(&server)
+        .generate(&REVOYE, &revoye_request(&messages), &CancellationToken::new(), &|_| {})
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ClientError::Provider(ref e) if e.code == ErrorCode::Auth), "{err:?}");
+}
+
+#[tokio::test]
+async fn a_success_status_without_json_is_a_server_error() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("<html>proxy</html>"))
+        .mount(&server)
+        .await;
+    let adapter = svnpush_core::ai::registry::get("local").unwrap();
+    let messages = [Message { role: Role::User, content: "Hi".into() }];
+    let base = format!("{}/v1", server.uri());
+    let request = GenerateRequest {
+        base_url: Some(&base),
+        api_key: None,
+        model: "m",
+        work: None,
+        ..revoye_request(&messages)
+    };
+    let err = AiClient::new()
+        .unwrap()
+        .generate(adapter, &request, &CancellationToken::new(), &|_| {})
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ClientError::Provider(ref e) if e.code == ErrorCode::Server), "{err:?}");
+}
+
+#[tokio::test]
+async fn redirects_are_not_followed_and_huge_answers_are_refused() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(
+            ResponseTemplate::new(307).insert_header("Location", "http://elsewhere.invalid/"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/big/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(9 * 1024 * 1024)))
+        .mount(&server)
+        .await;
+    let adapter = svnpush_core::ai::registry::get("local").unwrap();
+    let messages = [Message { role: Role::User, content: "Hi".into() }];
+    for (base, code) in [("/v1", ErrorCode::BadRequest), ("/big", ErrorCode::Server)] {
+        let base = format!("{}{base}", server.uri());
+        let request = GenerateRequest {
+            base_url: Some(&base),
+            api_key: None,
+            model: "m",
+            work: None,
+            ..revoye_request(&messages)
+        };
+        let err = AiClient::new()
+            .unwrap()
+            .generate(adapter, &request, &CancellationToken::new(), &|_| {})
+            .await
+            .unwrap_err();
+        assert!(matches!(err, ClientError::Provider(ref e) if e.code == code), "{base}: {err:?}");
+    }
 }
 
 #[tokio::test]
@@ -341,7 +467,8 @@ async fn fallback_rolls_over_only_when_the_user_built_a_chain_and_marks_attentio
     Mock::given(method("POST"))
         .and(path("/v1/chat/completions"))
         .respond_with(
-            ResponseTemplate::new(401).set_body_json(json!({ "error": { "message": "bad key" } })),
+            ResponseTemplate::new(401)
+                .set_body_json(json!({ "error": { "message": "bad key sk-test" } })),
         )
         .mount(&failing)
         .await;
@@ -375,10 +502,20 @@ async fn fallback_rolls_over_only_when_the_user_built_a_chain_and_marks_attentio
     assert!(matches!(err, ClientError::Provider(ref e) if e.code == ErrorCode::Auth));
     assert_eq!(
         records::load(&paths).unwrap().providers[0].needs_attention.as_deref(),
-        Some("bad key")
+        Some("bad key [redacted]"),
     );
 
     let with = ProvidersFile { fallback: vec!["prov_a".into(), "prov_b".into()], ..without };
+    // prov_b's privacy notice was never accepted, so the chain skips it.
+    let err =
+        router.generate(&with, &first, &ask, &CancellationToken::new(), &|_| {}).await.unwrap_err();
+    assert!(matches!(err, ClientError::Provider(ref e) if e.code == ErrorCode::Auth));
+    let consented = settings::AppSettings {
+        privacy_notice_seen: vec!["prov_a".into(), "prov_b".into()],
+        ..settings::AppSettings::default()
+    };
+    settings::save(&paths, &consented).unwrap();
+
     let attempts: Arc<Mutex<Vec<String>>> = Arc::default();
     let log = attempts.clone();
     let answer = router

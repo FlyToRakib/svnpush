@@ -11,12 +11,16 @@ use crate::detect::git::Git;
 use crate::edit;
 use crate::readme::README_FILE;
 use crate::tools::ProcessError;
+use crate::verify;
 
 use super::changes::{ChangeKind, ChangeSet, ChangeSource};
 use super::steps::unified_diff;
 
 /// At most this many files are summarised one by one when the diff is too large.
 pub const MAX_SUMMARISED_FILES: usize = 25;
+/// Larger files are listed in the stat but not read or diffed: a generated or
+/// bundled file that size says nothing a release note needs.
+pub const MAX_DIFF_FILE_BYTES: u64 = 2 * 1024 * 1024;
 
 /// What the AI sees of the changes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -47,12 +51,6 @@ impl Material {
         }
         self.diffs.iter().map(|(_, d)| d.as_str()).collect::<Vec<_>>().join("\n")
     }
-}
-
-/// Files that look like secrets never reach a prompt, whatever the settings say.
-pub fn looks_secret(path: &str) -> bool {
-    let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
-    name.starts_with(".env") || has_extension(&name, &["pem", "key"]) || name == "wp-config.php"
 }
 
 fn has_extension(path: &str, extensions: &[&str]) -> bool {
@@ -89,9 +87,10 @@ impl Filter {
         Self { rules: builder.build().unwrap_or_else(|_| Gitignore::empty()) }
     }
 
-    /// Whether `path` stays out of the prompt.
+    /// Whether `path` stays out of the prompt. Files that look like secrets
+    /// (the list check V11 blocks) never reach one, whatever the settings say.
     pub fn excludes(&self, path: &str) -> bool {
-        looks_secret(path)
+        verify::looks_like_secret(path)
             || self.rules.matched_path_or_any_parents(Path::new("/").join(path), false).is_ignore()
     }
 }
@@ -118,7 +117,12 @@ pub fn split_git_diff(output: &str) -> BTreeMap<String, String> {
     files
 }
 
+/// A text file, unless it is binary or too large to diff.
 fn text_of(root: &Path, rel: &str) -> Option<String> {
+    let size = std::fs::metadata(root.join(rel)).ok()?.len();
+    if size > MAX_DIFF_FILE_BYTES {
+        return None;
+    }
     edit::read_text(root, rel).ok().filter(|t| !t.contains('\0'))
 }
 
@@ -227,9 +231,17 @@ mod tests {
     #[test]
     fn secrets_are_always_withheld_and_patterns_apply() {
         let filter = Filter::new(&crate::project::default_ai_exclude_patterns());
-        for secret in
-            [".env", "config/.env.local", "certs/site.pem", "private.key", "wp-config.php"]
-        {
+        for secret in [
+            ".env",
+            "config/.env.local",
+            "certs/site.pem",
+            "private.key",
+            "wp-config.php",
+            ".ssh/id_rsa",
+            "deploy/id_ed25519",
+            "signing.p12",
+            "certs/site.PFX",
+        ] {
             assert!(filter.excludes(secret), "{secret}");
         }
         for excluded in
@@ -288,5 +300,19 @@ mod tests {
             ..Material::default()
         };
         assert!(big.needs_summaries());
+    }
+
+    #[test]
+    fn oversized_files_are_listed_but_not_diffed() {
+        let src = tempfile::tempdir().unwrap();
+        let trunk = tempfile::tempdir().unwrap();
+        let size = usize::try_from(MAX_DIFF_FILE_BYTES).unwrap() + 1;
+        std::fs::write(src.path().join("bundle.js"), "x".repeat(size)).unwrap();
+        std::fs::write(src.path().join("plugin.php"), "<?php\n").unwrap();
+        let changes = set(&[("bundle.js", ChangeKind::Added), ("plugin.php", ChangeKind::Added)]);
+        let material = from_trunk(src.path(), trunk.path(), &changes, &Filter::new(&[]));
+        let diffed: Vec<&str> = material.diffs.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(diffed, ["plugin.php"]);
+        assert!(material.stat.contains("added: bundle.js"));
     }
 }

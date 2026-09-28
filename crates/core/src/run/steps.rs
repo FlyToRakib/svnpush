@@ -1,6 +1,7 @@
 //! Steps 1–4: Detect, Draft, Write, Verify.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use similar::TextDiff;
 
@@ -25,9 +26,14 @@ use super::material::{self, Filter, Material};
 use super::model::{DraftContext, ErrorView, FileDiff, Phase, Step};
 use super::snapshot::Snapshot;
 
+/// Past this, the diff algorithm gives up on the minimal diff and approximates.
+const DIFF_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Unified diff of one file, three lines of context.
 pub(super) fn unified_diff(path: &str, before: &str, after: &str) -> String {
-    TextDiff::from_lines(before, after)
+    TextDiff::configure()
+        .timeout(DIFF_TIMEOUT)
+        .diff_lines(before, after)
         .unified_diff()
         .context_radius(3)
         .header(&format!("a/{path}"), &format!("b/{path}"))

@@ -5,6 +5,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::project::AppPaths;
 use crate::secret::Secret;
+use crate::settings;
 use crate::vault::{self, CredentialStore};
 
 use super::client::{AiClient, ClientError, Pending};
@@ -61,11 +62,17 @@ pub fn resolve(
     }
 }
 
-/// The user's chain after `failed_id`, skipping records that need attention.
-pub fn fallback_chain(file: &ProvidersFile, failed_id: &str) -> Vec<ProviderRecord> {
+/// The user's chain after `failed_id`, skipping records that need attention
+/// and records whose privacy notice the developer has not accepted: a
+/// fallback must never send the project to a provider they did not agree to.
+pub fn fallback_chain(
+    file: &ProvidersFile,
+    failed_id: &str,
+    consented: &[String],
+) -> Vec<ProviderRecord> {
     file.fallback
         .iter()
-        .filter(|id| id.as_str() != failed_id)
+        .filter(|id| id.as_str() != failed_id && consented.contains(id))
         .filter_map(|id| file.providers.iter().find(|p| &p.id == id))
         .filter(|p| p.needs_attention.is_none())
         .cloned()
@@ -154,7 +161,16 @@ impl Router<'_> {
             work: ask.work,
         };
         let pending = |p: &Pending| on_event(RouteEvent::Pending(p.clone()));
-        let result = self.client.generate(adapter, &request, cancel, &pending).await;
+        let result = self.client.generate(adapter, &request, cancel, &pending).await.map_err(|e| {
+            // A provider may echo the key back in its error text.
+            match (e, &key) {
+                (ClientError::Provider(mut p), Some(key)) => {
+                    p.message = key.redact(&p.message);
+                    ClientError::Provider(p)
+                }
+                (other, _) => other,
+            }
+        });
         drop(key);
         if !matches!(result, Err(ClientError::Cancelled))
             && records::record_request(self.paths, &record.id).is_err()
@@ -186,7 +202,9 @@ impl Router<'_> {
             Err(ClientError::Provider(e)) if FALLBACK_CODES.contains(&e.code) => e,
             Err(other) => return Err(other),
         };
-        for next in fallback_chain(file, &first.id) {
+        let consented =
+            settings::load(self.paths).map(|s| s.privacy_notice_seen).unwrap_or_default();
+        for next in fallback_chain(file, &first.id, &consented) {
             match self.attempt(&next, ask, cancel, on_event).await {
                 Ok(result) => {
                     return Ok(Routed {
@@ -254,10 +272,15 @@ mod tests {
         let mut broken = record("c", false);
         broken.needs_attention = Some("Key rejected".into());
         let f = file(vec![record("a", true), record("b", false), broken], &["c", "a", "b"]);
-        let chain: Vec<String> = fallback_chain(&f, "a").into_iter().map(|p| p.id).collect();
-        assert_eq!(chain, ["b"]);
+        let all: Vec<String> = ["a", "b", "c"].map(String::from).to_vec();
+        let ids = |consented: &[String]| -> Vec<String> {
+            fallback_chain(&f, "a", consented).into_iter().map(|p| p.id).collect()
+        };
+        assert_eq!(ids(&all), ["b"]);
+        assert!(ids(&["a".to_owned()]).is_empty(), "b's privacy notice was never accepted");
         assert!(
-            fallback_chain(&file(vec![record("a", true), record("b", false)], &[]), "a").is_empty()
+            fallback_chain(&file(vec![record("a", true), record("b", false)], &[]), "a", &all)
+                .is_empty()
         );
     }
 

@@ -62,6 +62,7 @@ pub(super) struct Job {
     record: ProviderRecord,
     slug: String,
     version: String,
+    operation: String,
 }
 
 impl Job {
@@ -80,7 +81,12 @@ impl Job {
             user: &prompt.user,
             json_schema: Some(schema),
             max_tokens: JSON_MAX_TOKENS,
-            work: Some(WorkId { slug: &self.slug, version: &self.version, task: task_name }),
+            work: Some(WorkId {
+                slug: &self.slug,
+                version: &self.version,
+                task: task_name,
+                operation: &self.operation,
+            }),
         };
         let sender = events.clone();
         let on_event = move |event| {
@@ -233,7 +239,9 @@ impl Run {
         self.resolve_ai(None)
     }
 
-    pub(super) fn job(&self, record: ProviderRecord, version: &str) -> Job {
+    /// A job for one explicit Generate.
+    pub(super) fn job(&mut self, record: ProviderRecord, version: &str) -> Job {
+        self.ai_generations += 1;
         Job {
             paths: self.inputs.paths.clone(),
             vault: self.inputs.vault.clone(),
@@ -242,6 +250,7 @@ impl Run {
             record,
             slug: self.inputs.project.slug.clone(),
             version: version.to_owned(),
+            operation: format!("{}.{}", self.state.id, self.ai_generations),
         }
     }
 

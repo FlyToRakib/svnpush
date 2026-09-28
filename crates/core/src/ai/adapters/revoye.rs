@@ -108,11 +108,21 @@ pub fn flatten_prompt(req: &GenerateRequest<'_>) -> Result<String, ProviderError
     Ok(prompt)
 }
 
-/// Derived from the work, so a crash and retry gets the same job back (plan §9.3).
+/// Derived from the work, so resending the same request gets the same job
+/// back (plan §9.3). The operation makes each explicit Generate new work:
+/// Revoye returns the original job, even a cancelled or failed one, for a
+/// reused key.
 pub fn idempotency_key(req: &GenerateRequest<'_>, prompt: &str) -> String {
     let hash = blake3::hash(prompt.as_bytes()).to_hex();
     if let Some(work) = req.work {
-        return format!("svnpush:{}:{}:{}:{}", work.slug, work.version, work.task, &hash[..16]);
+        return format!(
+            "svnpush:{}:{}:{}:{}:{}",
+            work.slug,
+            work.version,
+            work.task,
+            work.operation,
+            &hash[..16]
+        );
     }
     // A connection test is new work every time.
     let nonce = std::time::SystemTime::now()
@@ -194,7 +204,14 @@ impl Adapter for Revoye {
     }
 
     fn parse_response(&self, json: &Value) -> Result<ParseOutcome, ProviderError> {
-        parse_job(json)
+        match parse_job(json)? {
+            // Without an id there is nothing to poll or cancel.
+            ParseOutcome::Pending { job_id, .. } if job_id.is_empty() => {
+                Err(err(ErrorCode::Server, "Revoye accepted the request but returned no job id.")
+                    .with_status(200))
+            }
+            outcome => Ok(outcome),
+        }
     }
 
     fn parse_error(&self, status: u16, json: &Value) -> ProviderError {

@@ -33,7 +33,12 @@ fn request<'a>(messages: &'a [Message], schema: Option<&'a Value>) -> GenerateRe
         max_tokens: Some(2000),
         temperature: None,
         json_schema: schema,
-        work: Some(WorkId { slug: "demo", version: "1.2.0", task: "draft_release" }),
+        work: Some(WorkId {
+            slug: "demo",
+            version: "1.2.0",
+            task: "draft_release",
+            operation: "run1.1",
+        }),
     }
 }
 
@@ -59,7 +64,7 @@ fn revoye_submit_is_async_with_a_work_derived_idempotency_key() {
     assert_eq!(req.url, "https://api.revoye.com/v1/completions");
     assert_eq!(header(&req, "authorization"), Some("Bearer test-key"));
     let key = header(&req, "idempotency-key").unwrap().to_owned();
-    assert!(key.starts_with("svnpush:demo:1.2.0:draft_release:"));
+    assert!(key.starts_with("svnpush:demo:1.2.0:draft_release:run1.1:"));
     assert_eq!(key.rsplit(':').next().unwrap().len(), 16);
     let body = req.body.unwrap();
     assert_eq!(body["wait"], false);
@@ -74,6 +79,12 @@ fn revoye_submit_is_async_with_a_work_derived_idempotency_key() {
 
     let again = adapter("revoye").build_request(&request(&messages, Some(&schema))).unwrap();
     assert_eq!(header(&again, "idempotency-key"), Some(key.as_str()));
+
+    // A regenerate, or a generate after a stop, must not get the old job back.
+    let mut next = request(&messages, Some(&schema));
+    next.work = next.work.map(|w| WorkId { operation: "run1.2", ..w });
+    let regenerated = adapter("revoye").build_request(&next).unwrap();
+    assert_ne!(header(&regenerated, "idempotency-key"), Some(key.as_str()));
 }
 
 #[test]
@@ -138,6 +149,11 @@ fn revoye_job_statuses() {
     let pruned = revoye.parse_response(&fixture("revoye/pruned.json")).unwrap_err();
     assert_eq!(pruned.code, ErrorCode::Server);
     assert!(pruned.message.contains("Run it again"));
+
+    // A submit answer without a job id cannot be polled.
+    for body in [Value::Null, json!({ "status": "queued" })] {
+        assert_eq!(revoye.parse_response(&body).unwrap_err().code, ErrorCode::Server);
+    }
 }
 
 #[test]
@@ -289,6 +305,16 @@ fn openai_family_requests_differ_only_where_they_must() {
     let deepseek = adapter("deepseek").build_request(&req).unwrap();
     assert_eq!(deepseek.url, "https://api.deepseek.com/v1/chat/completions");
     assert_eq!(deepseek.body.unwrap()["max_tokens"], 2000);
+    let mut large = req;
+    large.max_tokens = Some(16_000);
+    for (kind, field, sent) in [
+        ("deepseek", "max_tokens", 8_192),
+        ("qwen", "max_tokens", 8_192),
+        ("openai", "max_completion_tokens", 16_000),
+    ] {
+        let body = adapter(kind).build_request(&large).unwrap().body.unwrap();
+        assert_eq!(body[field], sent, "{kind}");
+    }
 
     let mut local_req = req;
     local_req.api_key = None;

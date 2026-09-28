@@ -77,8 +77,9 @@ pub struct Answer<T> {
     pub routed: Routed,
 }
 
-/// Output ceiling for JSON tasks.
-pub const JSON_MAX_TOKENS: u32 = 8_192;
+/// Output ceiling for JSON tasks. Thinking models count their reasoning
+/// against it, so it is well above what the answer itself needs.
+pub const JSON_MAX_TOKENS: u32 = 16_000;
 
 /// Asks `ask`, validates against `schema`, and retries once with the error.
 pub async fn ask_json<T: DeserializeOwned>(

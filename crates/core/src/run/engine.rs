@@ -29,6 +29,8 @@ pub struct Run {
     pub(super) previewed: bool,
     /// The provider chosen with the Change link; it applies to the rest of the run.
     pub(super) ai_override: Option<String>,
+    /// Explicit AI generations so far; each one is new work for idempotency.
+    pub(super) ai_generations: u32,
     _lock: ProjectLock,
 }
 
@@ -58,6 +60,7 @@ impl Run {
             package: None,
             previewed: false,
             ai_override: None,
+            ai_generations: 0,
             _lock: lock,
         })
     }

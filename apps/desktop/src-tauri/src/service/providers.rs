@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use svnpush_core::ai::client::ClientError;
-use svnpush_core::ai::provider::{Adapter, Fleet, GenerateRequest, Message, ModelList, Role};
+use svnpush_core::ai::provider::{
+    Adapter, Fleet, GenerateRequest, Message, ModelList, Role, is_loopback_url, url_host,
+};
 use svnpush_core::ai::records::{self, ProviderRecord, ProvidersFile};
 use svnpush_core::ai::registry;
 use svnpush_core::clock;
@@ -86,6 +88,49 @@ fn coded(e: &impl svnpush_core::Coded) -> ErrorView {
     ErrorView::from_coded(e)
 }
 
+/// Where a record's requests go: its base URL, or the adapter's default.
+fn destination<'a>(adapter: &'a dyn Adapter, base_url: Option<&'a str>) -> &'a str {
+    base_url.filter(|b| !b.trim().is_empty()).unwrap_or(adapter.meta().default_base_url)
+}
+
+/// A key is never sent in the clear: plain `http://` only reaches this machine.
+fn check_secure(adapter: &dyn Adapter, base_url: Option<&str>) -> Result<(), ErrorView> {
+    let url = destination(adapter, base_url).trim();
+    let plain = url.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("http://"));
+    if adapter.meta().keyless || !plain || is_loopback_url(url) {
+        return Ok(());
+    }
+    Err(ErrorView::new(
+        "PROVIDER_INSECURE_URL",
+        "The base URL must start with https:// so the API key is not sent in the clear.",
+        Some(
+            "Use the provider's https:// address. Plain http:// works only for localhost."
+                .to_owned(),
+        ),
+    ))
+}
+
+/// Whether a stored key may go where `adapter` and `base_url` now point: only
+/// to the provider and host it was saved for.
+fn same_destination(
+    record: &ProviderRecord,
+    adapter: &dyn Adapter,
+    base_url: Option<&str>,
+) -> bool {
+    let Ok(saved) = registry::get(&record.kind) else { return false };
+    record.kind == adapter.meta().kind
+        && url_host(destination(saved, record.base_url.as_deref()))
+            == url_host(destination(adapter, base_url))
+}
+
+fn key_again() -> ErrorView {
+    ErrorView::new(
+        "PROVIDER_KEY_REQUIRED",
+        "Paste the API key again: the provider or its address changed.",
+        Some("A stored key is only sent to the provider and host it was saved for.".to_owned()),
+    )
+}
+
 fn info(adapter: &dyn Adapter) -> AdapterInfo {
     let m = adapter.meta();
     AdapterInfo {
@@ -130,6 +175,16 @@ pub fn save(app: &AppState, input: ProviderInput) -> Result<ProvidersFile, Error
             Some("Paste the key from the provider's dashboard.".to_owned()),
         ));
     }
+    let base_url =
+        if meta.fixed_base_url { None } else { input.base_url.filter(|b| !b.trim().is_empty()) };
+    check_secure(adapter, base_url.as_deref())?;
+    if !meta.keyless
+        && key.is_none()
+        && existing
+            .is_some_and(|i| !same_destination(&file.providers[i], adapter, base_url.as_deref()))
+    {
+        return Err(key_again());
+    }
     let id = input.id.clone().unwrap_or_else(records::new_id);
     if meta.keyless {
         app.vault.delete(&vault::ai_key(&id)).map_err(|e| coded(&e))?;
@@ -146,8 +201,6 @@ pub fn save(app: &AppState, input: ProviderInput) -> Result<ProvidersFile, Error
     } else {
         input.model.trim().to_owned()
     };
-    let base_url =
-        if meta.fixed_base_url { None } else { input.base_url.filter(|b| !b.trim().is_empty()) };
     if let Some(i) = existing {
         let current = &mut file.providers[i];
         current.kind.clone_from(&input.kind);
@@ -221,20 +274,32 @@ pub fn save_fallback(app: &AppState, order: Vec<String>) -> Result<ProvidersFile
     list(app)
 }
 
-fn key_for(app: &AppState, target: &ProviderTarget) -> Result<Option<Secret>, ErrorView> {
+/// The key typed in the form, or the saved record's key when the form still
+/// points where that key was saved for.
+fn key_for(
+    app: &AppState,
+    adapter: &dyn Adapter,
+    target: &ProviderTarget,
+) -> Result<Option<Secret>, ErrorView> {
+    let base_url = if adapter.meta().fixed_base_url { None } else { target.base_url.as_deref() };
+    check_secure(adapter, base_url)?;
     if let Some(key) = target.api_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
         return Ok(Some(Secret::new(key)));
     }
-    match &target.id {
-        Some(id) => app.vault.get(&vault::ai_key(id)).map_err(|e| coded(&e)),
-        None => Ok(None),
+    let Some(id) = &target.id else { return Ok(None) };
+    let file = list(app)?;
+    if let Some(record) = file.providers.iter().find(|p| &p.id == id)
+        && !same_destination(record, adapter, base_url)
+    {
+        return Err(key_again());
     }
+    app.vault.get(&vault::ai_key(id)).map_err(|e| coded(&e))
 }
 
 /// The models the account behind a key can use.
 pub async fn list_models(app: &AppState, target: ProviderTarget) -> Result<ModelList, ErrorView> {
     let adapter = registry::get(&target.kind).map_err(|e| coded(&e))?;
-    let key = key_for(app, &target)?;
+    let key = key_for(app, adapter, &target)?;
     app.ai
         .list_models(adapter, target.base_url.as_deref(), key.as_ref().map(Secret::expose))
         .await
@@ -244,7 +309,7 @@ pub async fn list_models(app: &AppState, target: ProviderTarget) -> Result<Model
 /// The fleet snapshot for a Revoye key.
 pub async fn fleet(app: &AppState, target: ProviderTarget) -> Result<Fleet, ErrorView> {
     let adapter = registry::get(&target.kind).map_err(|e| coded(&e))?;
-    let key = key_for(app, &target)?.ok_or_else(|| {
+    let key = key_for(app, adapter, &target)?.ok_or_else(|| {
         ErrorView::new(
             "PROVIDER_KEY_REQUIRED",
             "Paste the API key first.",
@@ -376,5 +441,48 @@ mod tests {
         assert!(after.providers[0].is_default);
         assert_eq!(after.fallback, [local.id]);
         assert!(app.vault.get(&vault::ai_key(&revoye.id)).unwrap().is_none());
+    }
+
+    #[test]
+    fn keys_only_travel_over_https_or_to_this_machine() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::test_support::app(dir.path());
+        let mut plain = input("openai_compatible", Some("sk-abc"));
+        plain.base_url = Some("http://gateway.example/v1".into());
+        assert_eq!(save(&app, plain.clone()).unwrap_err().code, "PROVIDER_INSECURE_URL");
+        plain.base_url = Some("http://127.0.0.1:8080/v1".into());
+        assert!(save(&app, plain).is_ok());
+        let mut lan = input("local", None);
+        lan.base_url = Some("http://192.168.1.5:11434/v1".into());
+        assert!(save(&app, lan).is_ok(), "no key is sent to a keyless server");
+    }
+
+    #[tokio::test]
+    async fn a_stored_key_is_not_sent_to_a_new_host_or_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::test_support::app(dir.path());
+        let mut first = input("openai_compatible", Some("sk-abc"));
+        first.base_url = Some("https://gateway.example/v1".into());
+        let saved = save(&app, first.clone()).unwrap().providers[0].clone();
+
+        let mut moved = first.clone();
+        moved.id = Some(saved.id.clone());
+        moved.api_key = None;
+        moved.base_url = Some("https://other.example/v1".into());
+        assert_eq!(save(&app, moved.clone()).unwrap_err().code, "PROVIDER_KEY_REQUIRED");
+        let mut switched = moved.clone();
+        switched.kind = "openai".into();
+        switched.base_url = None;
+        assert_eq!(save(&app, switched).unwrap_err().code, "PROVIDER_KEY_REQUIRED");
+        moved.base_url = Some("https://gateway.example/v2".into());
+        assert!(save(&app, moved).is_ok(), "same host, new path");
+
+        let target = ProviderTarget {
+            id: Some(saved.id),
+            kind: "openai_compatible".into(),
+            base_url: Some("https://other.example/v1".into()),
+            api_key: None,
+        };
+        assert_eq!(list_models(&app, target).await.unwrap_err().code, "PROVIDER_KEY_REQUIRED");
     }
 }
