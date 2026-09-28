@@ -30,7 +30,12 @@ export function UnfinishedBanner({
 }: UnfinishedBannerProps) {
   // Mirrors `RunJournal::needs_tag`: a trunk commit, or a commit or copy that
   // may have landed, with no tag recorded.
-  const unconfirmed = journal.revisions.trunk === null && journal.in_flight != null;
+  const unconfirmed =
+    !journal.assets_only &&
+    !journal.dry_run &&
+    !journal.discarded &&
+    journal.revisions.trunk === null &&
+    journal.in_flight?.kind === "Commit";
   const needsTag =
     (journal.revisions.trunk !== null || journal.in_flight != null) &&
     journal.revisions.tag === null &&

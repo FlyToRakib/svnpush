@@ -270,6 +270,16 @@ describe("ProvidersScreen", () => {
     );
   });
 
+  it("asks for the key again after the provider type changes", async () => {
+    setup([record({})]);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    const key = screen.getByLabelText<HTMLInputElement>("API key");
+    expect(key.placeholder).toBe("Unchanged — paste a new key to replace it");
+    await user.selectOptions(screen.getByLabelText("Provider"), "openai");
+    expect(screen.getByLabelText<HTMLInputElement>("API key").placeholder).toBe("sk-…");
+  });
+
   it("shows attention with Clear, tests a provider, and confirms removal", async () => {
     setup([record({ needs_attention: "The key was rejected." })]);
     const user = userEvent.setup();

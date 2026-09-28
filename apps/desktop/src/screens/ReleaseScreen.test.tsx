@@ -238,6 +238,34 @@ describe("ReleaseScreen", () => {
     expect(screen.queryByRole("button", { name: "Discard" })).toBeNull();
   });
 
+  it("resumes an interrupted assets-only commit without promising to finish a release", async () => {
+    const stopped = summary({
+      unfinished: {
+        id: "20260917-090000",
+        slug: "demo",
+        project_path: PROJECT_PATH,
+        version: null,
+        main_file: null,
+        dry_run: false,
+        started: "2026-09-17T09:00:00Z",
+        finished: null,
+        steps: [],
+        revisions: { trunk: null, tag: null, assets: null },
+        outcome: null,
+        diffs: [],
+        tag_message: null,
+        verification: null,
+        snapshot: null,
+        discarded: false,
+        assets_only: true,
+        in_flight: { kind: "Commit", since: 41, message: "Update assets" },
+      },
+    });
+    open(runState("Failed", "Publish"), stopped);
+    expect(await screen.findByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Resume: check and finish" })).toBeNull();
+  });
+
   it("offers the team's pre-build command but never saves it by itself", async () => {
     const user = userEvent.setup();
     open(runState("DryRunComplete", null), summary({ team_pre_build_command: "npm run build" }));

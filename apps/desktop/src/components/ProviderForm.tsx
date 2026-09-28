@@ -33,6 +33,16 @@ function fleetLine(fleet: Fleet): string {
       );
 }
 
+/** The host a base URL points at, lowercased; the text itself when it is not a URL. */
+function hostOf(url: string | null | undefined): string {
+  const text = (url ?? "").trim();
+  try {
+    return new URL(text).host.toLowerCase();
+  } catch {
+    return text.toLowerCase();
+  }
+}
+
 function optionLabel(model: string, fleet: Fleet | null): string {
   const kind = model.replace(/^revoye\//, "");
   const found = fleet?.providers.find((p) => p.kind === kind);
@@ -66,19 +76,27 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
   // example for the provider you just switched away from) is dropped.
   const latest = useRef(0);
   const adapter = adapters.find((a) => a.kind === kind);
+  // The shell sends a stored key only to the provider type and host it was
+  // saved for; after either changes, the key has to be pasted again.
+  const savedAdapter = adapters.find((a) => a.kind === editing?.kind);
+  const keyKept =
+    editing?.has_key === true &&
+    kind === editing.kind &&
+    hostOf(baseUrl || adapter?.default_base_url) ===
+      hostOf(editing.base_url || savedAdapter?.default_base_url);
 
   const loadModels = async (silent: boolean, typedKey: string) => {
     if (!adapter?.can_list_models) {
       return;
     }
-    if (!typedKey.trim() && !editing?.has_key) {
+    if (!typedKey.trim() && !keyKept) {
       if (!silent) {
         setModelNote(S.providers.pasteKeyFirst);
       }
       return;
     }
     const target = {
-      id: typedKey.trim() ? null : (editing?.id ?? null),
+      id: keyKept && !typedKey.trim() ? editing.id : null,
       kind: adapter.kind,
       base_url: baseUrl || null,
       api_key: typedKey.trim() || null,
@@ -305,9 +323,7 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
                   type={showKey ? "text" : "password"}
                   autoComplete="off"
                   value={apiKey}
-                  placeholder={
-                    editing?.has_key ? S.providers.keyUnchanged : adapter.key_placeholder
-                  }
+                  placeholder={keyKept ? S.providers.keyUnchanged : adapter.key_placeholder}
                   onChange={(e) => {
                     setApiKey(e.target.value);
                   }}

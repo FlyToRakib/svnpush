@@ -92,7 +92,12 @@ export const useRunStore = create<RunStore>((set, get) => {
     queued = [];
     const byPath = new Map<string, LogLine[]>();
     for (const { path, line } of batch) {
-      byPath.set(path, [...(byPath.get(path) ?? []), line]);
+      const lines = byPath.get(path);
+      if (lines) {
+        lines.push(line);
+      } else {
+        byPath.set(path, [line]);
+      }
     }
     for (const [path, lines] of byPath) {
       get().receiveLogs(path, lines);
@@ -100,6 +105,12 @@ export const useRunStore = create<RunStore>((set, get) => {
   };
   const queueLog = (path: string, line: LogLine) => {
     queued.push({ path, line });
+    // A hidden window gets no animation frames; flush now rather than let
+    // the queue grow without bound (the store keeps the last LOG_LIMIT lines).
+    if (queued.length >= LOG_LIMIT) {
+      flushLogs();
+      return;
+    }
     if (!scheduled) {
       scheduled = true;
       if (typeof requestAnimationFrame === "function") {
@@ -111,10 +122,12 @@ export const useRunStore = create<RunStore>((set, get) => {
   };
 
   // The shell starts a run before it answers, so run-state events can arrive
-  // before the command's own reply. Those events are newer: keep them.
-  const adopt = (path: string, before: RunState | null, returned: RunState) => {
+  // before the command's own reply. Those events are newer: keep them. A
+  // start or resume reply names its own run, so only events for that run
+  // count; a `current_run` reply is never newer than any event (`anyRun`).
+  const adopt = (path: string, before: RunState | null, returned: RunState, anyRun = false) => {
     const now = get().runs[path]?.state ?? null;
-    if (now !== before && now?.id === returned.id) {
+    if (now !== before && (anyRun || now?.id === returned.id)) {
       return;
     }
     patch(path, { state: returned });
@@ -193,7 +206,7 @@ export const useRunStore = create<RunStore>((set, get) => {
       await attempt(path, async () => {
         const state = await commands.currentRun(path);
         if (state) {
-          adopt(path, before, state);
+          adopt(path, before, state, true);
         }
       });
     },

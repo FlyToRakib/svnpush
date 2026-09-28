@@ -79,6 +79,31 @@ describe("runStore", () => {
     expect(useRunStore.getState().runs[PROJECT_PATH]?.state?.phase).toBe("Failed");
   });
 
+  it("never lets a current_run reply replace a newer run from events", async () => {
+    await useRunStore.getState().listen();
+    tauriMock.handle("current_run", () => {
+      // A release started while the reply was on its way.
+      tauriMock.emit("run-state", {
+        project_path: PROJECT_PATH,
+        state: { ...runState("Detecting", "Detect"), id: "newer" },
+      });
+      return runState("Failed", "Verify");
+    });
+    await useRunStore.getState().load(PROJECT_PATH);
+    expect(useRunStore.getState().runs[PROJECT_PATH]?.state?.id).toBe("newer");
+  });
+
+  it("flushes a full log queue at once instead of waiting for a frame", async () => {
+    await useRunStore.getState().listen();
+    for (let i = 0; i < LOG_LIMIT; i++) {
+      tauriMock.emit("run-log", {
+        project_path: PROJECT_PATH,
+        line: { stream: "Stdout", text: String(i) },
+      });
+    }
+    expect(useRunStore.getState().runs[PROJECT_PATH]?.logs).toHaveLength(LOG_LIMIT);
+  });
+
   it("sends one start for a double click and keeps the old log until it is accepted", async () => {
     useRunStore.getState().receiveLogs(PROJECT_PATH, [{ stream: "Stdout", text: "old run" }]);
     let answer: (state: unknown) => void = () => undefined;

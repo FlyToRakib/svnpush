@@ -352,7 +352,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         <PastReleases journals={history} />
       </section>
 
-      <LogDrawer projectPath={path} />
+      <LogDrawer key={path} projectPath={path} />
 
       <Modal
         open={removing}
