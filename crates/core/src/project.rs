@@ -1,6 +1,7 @@
 //! Projects: the app-level list in `projects.json`, per-project settings,
 //! the optional team file `.svnpush.json`, and where everything lives on disk.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -309,7 +310,16 @@ pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ConfigErro
     // rename each other's half-written file.
     let n = WRITES.fetch_add(1, Ordering::Relaxed);
     let temp = path.with_extension(format!("json.{}-{n}.tmp", std::process::id()));
-    std::fs::write(&temp, format!("{text}\n")).map_err(|e| io("write", e))?;
+    // Flushed to disk before the rename: otherwise a crash or power cut
+    // right after it can leave an empty file in place of the old one.
+    let written = std::fs::File::create(&temp).and_then(|mut file| {
+        file.write_all(format!("{text}\n").as_bytes())?;
+        file.sync_all()
+    });
+    written.map_err(|e| {
+        let _ = std::fs::remove_file(&temp);
+        io("write", e)
+    })?;
     std::fs::rename(&temp, path).map_err(|e| {
         let _ = std::fs::remove_file(&temp);
         io("replace", e)
