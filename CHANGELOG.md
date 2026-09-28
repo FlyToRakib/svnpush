@@ -4,6 +4,12 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Providers: a base URL that sends an API key must use https://; plain http:// works only for localhost. Changing a provider's type or host asks for its key again, so a stored key never goes to a new address.
+- AI fallback only uses providers whose data notice you have accepted.
+- Regenerate, or Generate after Stop or a failure, now asks Revoye for a new answer instead of returning the previous job.
+- A Revoye job that SVNpush gives up on is cancelled on Revoye, and a brief network or server hiccup while waiting no longer ends the draft.
+- Local models get up to 10 minutes to answer, and thinking models have more room before their answer is cut off.
+- SSH keys (id_rsa, id_ed25519) and .p12/.pfx certificates are never sent to an AI provider.
 - Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.
