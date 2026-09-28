@@ -5,6 +5,8 @@
 //! or `@`, matching the header name case-insensitively. A trailing `*/` or
 //! `?>` and everything after it is dropped from the value.
 
+use std::sync::LazyLock;
+
 use regex::Regex;
 use serde::Serialize;
 use ts_rs::TS;
@@ -55,18 +57,31 @@ fn scan_window(text: &str) -> &str {
     &text[..end]
 }
 
+/// The fields [`parse`] reads, whose patterns are compiled once.
+const FIELDS: [&str; 6] =
+    ["Plugin Name", "Version", "Text Domain", "Requires at least", "Requires PHP", "License"];
+
+static FIELD_PATTERNS: LazyLock<Vec<Option<Regex>>> =
+    LazyLock::new(|| FIELDS.iter().map(|name| header_regex(name)).collect());
+
+/// A trailing `*/` or `?>`, where the value is cut off.
+static VALUE_END: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"\s*(?:\*/|\?>)").ok());
+
 fn header_regex(name: &str) -> Option<Regex> {
     Regex::new(&format!(r"(?i)^(?:[ \t]*<\?php)?[ \t/*#@]*{}:(.*)$", regex::escape(name))).ok()
 }
 
-fn value_end_regex() -> Option<Regex> {
-    Regex::new(r"\s*(?:\*/|\?>)").ok()
-}
-
 /// Finds the first occurrence of header `name` in `text`.
 pub fn find(text: &str, name: &str) -> Option<HeaderMatch> {
-    let pattern = header_regex(name)?;
-    let cut = value_end_regex()?;
+    let compiled;
+    let pattern = match FIELDS.iter().position(|field| *field == name) {
+        Some(index) => FIELD_PATTERNS[index].as_ref()?,
+        None => {
+            compiled = header_regex(name)?;
+            &compiled
+        }
+    };
+    let cut = VALUE_END.as_ref()?;
     let window = scan_window(text);
     for (index, line) in text::lines(window).iter().enumerate() {
         let Some(caps) = pattern.captures(line.content) else {
@@ -77,11 +92,9 @@ pub fn find(text: &str, name: &str) -> Option<HeaderMatch> {
         let kept = cut.find(raw_text).map_or(raw_text, |m| &raw_text[..m.start()]);
         let trimmed = kept.trim();
         if trimmed.is_empty() {
-            return Some(HeaderMatch {
-                value: String::new(),
-                span: line.start + raw.end()..line.start + raw.end(),
-                line_index: index,
-            });
+            // Before a cut-off `*/` or `?>`, so a filled value stays inside the comment.
+            let at = line.start + raw.start() + kept.len();
+            return Some(HeaderMatch { value: String::new(), span: at..at, line_index: index });
         }
         let leading = kept.len() - kept.trim_start().len();
         let start = line.start + raw.start() + leading;
@@ -178,5 +191,13 @@ mod tests {
     fn set_fills_an_empty_value() {
         let updated = set("<?php\n * Version:\n", "Version", "1.0").unwrap();
         assert_eq!(parse(&updated).version.as_deref(), Some("1.0"));
+    }
+
+    #[test]
+    fn set_fills_an_empty_value_inside_the_comment() {
+        let updated = set("<?php /* Version: */\n", "Version", "1.0").unwrap();
+        assert_eq!(updated, "<?php /* Version: 1.0 */\n");
+        let updated = set("<?php /* Version:*/\n", "Version", "1.0").unwrap();
+        assert_eq!(updated, "<?php /* Version: 1.0*/\n");
     }
 }
