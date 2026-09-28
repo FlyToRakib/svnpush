@@ -86,7 +86,7 @@ fn guard_close(window: &tauri::Window, event: &WindowEvent) {
 
 /// A failure before the window opens is otherwise invisible in a release
 /// build, which has no console.
-fn report_startup_failure(err: &tauri::Error) {
+fn report_startup_failure(err: &dyn std::fmt::Display) {
     tracing::error!("SVNpush failed to start: {err}");
     eprintln!("SVNpush failed to start: {err}");
     #[cfg(desktop)]
@@ -95,6 +95,19 @@ fn report_startup_failure(err: &tauri::Error) {
         .set_title("SVNpush could not start")
         .set_description(format!("SVNpush failed to start: {err}"))
         .show();
+}
+
+/// Opens the logs and creates the app state.
+fn setup(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let paths = AppPaths::with_local(&app.path().data_dir()?, &app.path().local_data_dir()?);
+    app.manage(LogGuard(logging::init(&paths.logs())));
+    tracing::info!(version = %app.package_info().version, "SVNpush started");
+    let ai = AiClient::new()?;
+    let state = Arc::new(AppState::new(paths, Arc::new(Keychain), ai));
+    let pruning = state.clone();
+    tauri::async_runtime::spawn(async move { service::runs::prune(&pruning).await });
+    app.manage(state);
+    Ok(())
 }
 
 /// Builds and runs the Tauri application.
@@ -115,15 +128,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            let paths =
-                AppPaths::with_local(&app.path().data_dir()?, &app.path().local_data_dir()?);
-            app.manage(LogGuard(logging::init(&paths.logs())));
-            tracing::info!(version = %app.package_info().version, "SVNpush started");
-            let ai = AiClient::new()?;
-            let state = Arc::new(AppState::new(paths, Arc::new(Keychain), ai));
-            let pruning = state.clone();
-            tauri::async_runtime::spawn(async move { service::runs::prune(&pruning).await });
-            app.manage(state);
+            // Tauri panics when setup returns an error, which a release build
+            // shows nowhere, so the failure is reported here instead.
+            if let Err(err) = setup(app) {
+                report_startup_failure(&err);
+                std::process::exit(1);
+            }
             Ok(())
         })
         .on_window_event(guard_close)
