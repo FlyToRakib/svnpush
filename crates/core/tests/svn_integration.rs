@@ -321,6 +321,23 @@ async fn at_signs_and_non_ascii_names_and_messages_survive() {
 }
 
 #[tokio::test]
+async fn names_starting_with_a_dash_are_not_read_as_options() {
+    let env = env("minimal");
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::write(plugin.join("-x.png"), [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert_eq!(trunk.added, ["-x.png", "minimal.php", "readme.txt"]);
+    let wc = env.root.join("wc/minimal");
+    assert_eq!(propget(&wc.join("trunk/-x.png")), "image/png");
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+
+    std::fs::remove_file(plugin.join("-x.png")).unwrap();
+    bump(&plugin, "minimal.php", "1.0.1");
+    let (trunk, _) = preview(&env, &plugin, "minimal", "1.0.1").await;
+    assert_eq!(trunk.deleted, ["-x.png"]);
+}
+
+#[tokio::test]
 async fn a_released_non_ascii_file_is_deleted_or_named_in_a_clear_error() {
     let env = env("minimal");
     let plugin = fixture_copy(&env, "minimal");

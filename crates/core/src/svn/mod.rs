@@ -250,7 +250,9 @@ impl<'a> Svn<'a> {
         log_output: bool,
     ) -> Result<ProcessOutput, SvnError> {
         let command = args.first().map(|a| a.to_string_lossy().into_owned()).unwrap_or_default();
-        args.push("--non-interactive".into());
+        // Right after the subcommand, so it stays an option when the
+        // targets follow `--`.
+        args.insert(args.len().min(1), "--non-interactive".into());
         let spec = ProcessSpec {
             program: &self.bin,
             args,
@@ -272,7 +274,8 @@ impl<'a> Svn<'a> {
     }
 
     /// Runs `svn <command> <fixed args> <paths>` in batches, in `base`, with
-    /// `rels` relative to it.
+    /// `rels` relative to it. `--` ends the options, so a name such as
+    /// `-x.php` is not read as one.
     async fn batched(
         &self,
         command: &[&str],
@@ -281,6 +284,7 @@ impl<'a> Svn<'a> {
     ) -> Result<(), SvnError> {
         for chunk in rels.chunks(TARGETS_PER_CALL) {
             let mut args: Vec<OsString> = command.iter().map(OsString::from).collect();
+            args.push("--".into());
             args.extend(chunk.iter().map(|rel| path_target(rel)));
             self.local_in(base, args).await?;
         }
