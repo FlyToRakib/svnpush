@@ -1,7 +1,7 @@
 //! The deterministic zip and its SHA-256.
 
 use std::collections::BTreeSet;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
@@ -53,18 +53,16 @@ pub fn write_zip(
     entries.extend(files.iter().map(|f| (format!("{slug}/{}", f.rel), Some(f))));
     entries.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let mut buffer = Vec::new();
     for (name, file) in entries {
         match file {
             None => zip.add_directory(name, dir_options).map_err(|e| zip_error(&e))?,
             Some(f) => {
                 zip.start_file(name, file_options).map_err(|e| zip_error(&e))?;
                 let source = staged_root.join(&f.rel);
-                buffer.clear();
+                // Streamed, so a large file is never held in memory whole.
                 std::fs::File::open(&source)
-                    .and_then(|mut r| r.read_to_end(&mut buffer))
+                    .and_then(|mut reader| std::io::copy(&mut reader, &mut zip))
                     .map_err(|e| io_error("read", &source, e))?;
-                zip.write_all(&buffer).map_err(|e| zip_error(&e))?;
             }
         }
     }
