@@ -225,10 +225,15 @@ pub fn list(paths: &AppPaths, slug: &str) -> Result<Vec<RunJournal>, ConfigError
     let mut journals = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().is_some_and(|e| e == "json")
-            && let Some(journal) = project::read_json::<RunJournal>(&path)?
-        {
-            journals.push(journal);
+        if path.extension().is_none_or(|e| e != "json") {
+            continue;
+        }
+        // A journal that cannot be parsed (cut short by a power cut) cannot
+        // be resumed, and must not hide the others.
+        match project::read_json::<RunJournal>(&path) {
+            Ok(Some(journal)) => journals.push(journal),
+            Ok(None) | Err(ConfigError::Invalid { .. }) => {}
+            Err(e) => return Err(e),
         }
     }
     journals.sort_by(|a, b| b.id.cmp(&a.id));
@@ -287,6 +292,11 @@ mod tests {
         assert_eq!(all[0].last_step(), Some(Step::Publish));
         assert!(!all[1].is_interrupted());
         assert!(list(&paths, "other").unwrap().is_empty());
+
+        // A journal cut short (a power cut while it was saved) hides no other.
+        std::fs::write(paths.runs("demo").join("20250101-000000.json"), "").unwrap();
+        assert_eq!(list(&paths, "demo").unwrap().len(), 2);
+        prune_snapshots(&paths, "demo").unwrap();
     }
 
     #[test]
