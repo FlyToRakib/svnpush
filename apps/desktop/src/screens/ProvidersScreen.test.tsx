@@ -87,6 +87,8 @@ function setup(providers: ProviderRecord[] = [], fallback: string[] = []) {
   });
   tauriMock.handle("provider_adapters", () => ADAPTERS);
   tauriMock.handle("list_providers", () => ({ schema: 1, providers, fallback }));
+  // Editing a stored record lists its models; tests that care replace this.
+  tauriMock.handle("list_provider_models", () => ({ models: [], note: null }));
   return render(<ProvidersScreen />);
 }
 
