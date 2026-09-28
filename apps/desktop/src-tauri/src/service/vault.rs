@@ -12,6 +12,7 @@ use svnpush_core::{settings, tools};
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
+use crate::service;
 use crate::state::AppState;
 
 /// An account as the Vault screen shows it. The password is never returned.
@@ -109,7 +110,9 @@ pub fn remove(app: &AppState, host: &str, username: &str) -> Result<VaultView, E
 /// message says so rather than claiming a verification that did not happen.
 pub async fn test(app: &AppState, host: &str, username: &str) -> Result<String, ErrorView> {
     let account = SvnAccount { host: host.to_owned(), username: username.to_owned() };
-    let Some(password) = app.vault.get(&account.key()).map_err(|e| coded(&e))? else {
+    let (store, key) = (app.vault.clone(), account.key());
+    let stored = service::blocking(move || store.get(&key).map_err(|e| coded(&e))).await?;
+    let Some(password) = stored else {
         return Err(ErrorView::new(
             "VAULT_NO_CREDENTIALS",
             format!("No password is stored for {username}."),
@@ -123,7 +126,7 @@ pub async fn test(app: &AppState, host: &str, username: &str) -> Result<String, 
     };
     let svn = Svn::new(PathBuf::from(bin), &NullReporter, CancellationToken::new());
     let credentials = Credentials { username: username.to_owned(), password };
-    svn.list(&format!("https://{host}/"), Some(&credentials)).await.map_err(|e| coded(&e))?;
+    svn.ping(&format!("https://{host}/"), Some(&credentials)).await.map_err(|e| coded(&e))?;
     Ok(format!(
         "The keychain returned the password and {host} answered. The server checks the password itself only when you publish."
     ))

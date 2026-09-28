@@ -222,6 +222,12 @@ impl<'a> Svn<'a> {
         }
         Ok(())
     }
+
+    /// Asks the server about `url` with `svn info`: one small request, unlike
+    /// listing a repository root that holds every plugin.
+    pub async fn ping(&self, url: &str, credentials: Option<&Credentials>) -> Result<(), SvnError> {
+        self.network(vec!["info".into(), url.into()], credentials, false).await.map(|_| ())
+    }
 }
 
 /// Maps `svn` error codes (locale-independent) to typed errors.
