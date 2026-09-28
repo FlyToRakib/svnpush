@@ -1,6 +1,8 @@
 //! Provider records in `providers.json` (plan §9.6). No keys: those live in
 //! the keychain under `ai:<id>`.
 
+use std::sync::{Mutex, PoisonError};
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -83,11 +85,16 @@ pub fn save(paths: &AppPaths, file: &ProvidersFile) -> Result<(), ConfigError> {
     project::write_json(&paths.providers_file(), file)
 }
 
-/// Loads, changes and saves in one step.
+/// Loads, changes and saves in one step. Updates are serialised so two at
+/// once (a request count and an edit on the Providers screen) cannot lose
+/// each other's change.
 pub fn update<T>(
     paths: &AppPaths,
     change: impl FnOnce(&mut ProvidersFile) -> T,
 ) -> Result<T, ConfigError> {
+    static UPDATES: Mutex<()> = Mutex::new(());
+    // A panic mid-update leaves nothing half-written on disk, so a poisoned lock is safe to take.
+    let _guard = UPDATES.lock().unwrap_or_else(PoisonError::into_inner);
     let mut file = load(paths)?;
     let result = change(&mut file);
     save(paths, &file)?;
@@ -157,6 +164,26 @@ mod tests {
         let a = again.providers.iter().find(|p| p.id == "a").unwrap();
         assert_eq!(a.requests_this_month, 1);
         assert_eq!(a.needs_attention.as_deref(), Some("Key rejected"));
+    }
+
+    #[test]
+    fn concurrent_updates_are_not_lost() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::new(dir.path());
+        let file =
+            ProvidersFile { schema: 1, providers: vec![record("a", "claude")], fallback: vec![] };
+        save(&paths, &file).unwrap();
+        let before = load(&paths).unwrap().providers[0].requests_this_month;
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    for _ in 0..5 {
+                        record_request(&paths, "a").unwrap();
+                    }
+                });
+            }
+        });
+        assert_eq!(load(&paths).unwrap().providers[0].requests_this_month, before + 40);
     }
 
     #[test]

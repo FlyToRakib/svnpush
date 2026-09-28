@@ -2,6 +2,7 @@
 //! the optional team file `.svnpush.json`, and where everything lives on disk.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -283,6 +284,9 @@ pub fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<Option<T
         .map_err(|e| ConfigError::Invalid { path: shown, reason: e.to_string() })
 }
 
+/// Numbers this process's temporary files.
+static WRITES: AtomicU64 = AtomicU64::new(0);
+
 /// Writes a JSON config file atomically (temporary file, then rename).
 pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ConfigError> {
     let shown = path.display().to_string();
@@ -292,9 +296,15 @@ pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), ConfigErro
     }
     let text = serde_json::to_string_pretty(value)
         .map_err(|e| ConfigError::Invalid { path: shown.clone(), reason: e.to_string() })?;
-    let temp = path.with_extension("json.tmp");
+    // One temp file per write: two writers sharing a name would overwrite or
+    // rename each other's half-written file.
+    let n = WRITES.fetch_add(1, Ordering::Relaxed);
+    let temp = path.with_extension(format!("json.{}-{n}.tmp", std::process::id()));
     std::fs::write(&temp, format!("{text}\n")).map_err(|e| io("write", e))?;
-    std::fs::rename(&temp, path).map_err(|e| io("replace", e))
+    std::fs::rename(&temp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&temp);
+        io("replace", e)
+    })
 }
 
 /// Loads every project.
