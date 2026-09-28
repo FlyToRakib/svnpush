@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { AddProjectForm } from "../components/AddProjectForm";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { ProjectRow } from "../components/ProjectRow";
@@ -12,7 +13,9 @@ interface ProjectsScreenProps {
 
 /** The list of plugin projects. */
 export function ProjectsScreen({ onOpen }: ProjectsScreenProps) {
-  const { projects, loaded, error, add } = useProjectStore();
+  const { projects, loaded, error, add } = useProjectStore(
+    useShallow((s) => ({ projects: s.projects, loaded: s.loaded, error: s.error, add: s.add })),
+  );
   const [adding, setAdding] = useState(false);
 
   const addButton = (
@@ -47,6 +50,7 @@ export function ProjectsScreen({ onOpen }: ProjectsScreenProps) {
           }}
         />
       )}
+      {!loaded && <p className="muted">{S.common.loading}</p>}
       {loaded && projects.length === 0 && !adding && (
         <div className="card">
           <div className="empty">

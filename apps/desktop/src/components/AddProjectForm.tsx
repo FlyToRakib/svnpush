@@ -21,11 +21,11 @@ export function AddProjectForm({ onAdd, onCancel }: AddProjectFormProps) {
   const [saving, setSaving] = useState(false);
 
   const choose = async () => {
-    const folder = await open({ directory: true, multiple: false });
-    if (typeof folder !== "string") {
-      return;
-    }
     try {
+      const folder = await open({ directory: true, multiple: false });
+      if (typeof folder !== "string") {
+        return;
+      }
       const found = await commands.inspectFolder(folder);
       setInspection(found);
       setSvnUrl(found.suggested_svn_url ?? "");
@@ -70,9 +70,17 @@ export function AddProjectForm({ onAdd, onCancel }: AddProjectFormProps) {
         }}
       >
         <div className="field">
-          <span className="field__label">{S.projects.folder}</span>
+          <label className="field__label" htmlFor="add-folder">
+            {S.projects.folder}
+          </label>
           <div className="input-group">
-            <output className="input mono input--readonly">{inspection?.folder ?? ""}</output>
+            <output
+              id="add-folder"
+              className="input mono input--readonly"
+              title={inspection?.folder}
+            >
+              {inspection?.folder ?? ""}
+            </output>
             <button
               type="button"
               className="btn"

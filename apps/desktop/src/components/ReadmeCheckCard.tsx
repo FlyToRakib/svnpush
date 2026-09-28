@@ -76,8 +76,8 @@ export function ReadmeCheckCard({ projectPath, disabled }: ReadmeCheckCardProps)
                 {S.tools.readme.counts(count("Error"), count("Warning"), count("Note"))}
               </p>
               <ul className="readme-issues">
-                {report.issues.map((issue) => (
-                  <li key={issue.code}>
+                {report.issues.map((issue, index) => (
+                  <li key={`${issue.code}-${String(index)}`}>
                     <span className={`pill pill--${PILLS[issue.level]}`}>
                       {S.tools.readme.level[issue.level]}
                     </span>{" "}

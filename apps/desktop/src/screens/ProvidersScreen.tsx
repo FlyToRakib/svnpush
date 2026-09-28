@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { ErrorNotice } from "../components/ErrorNotice";
 import { FallbackCard } from "../components/FallbackCard";
 import { Modal } from "../components/Modal";
@@ -33,7 +34,20 @@ export function ProvidersScreen() {
     setDefault,
     clearAttention,
     saveFallback,
-  } = useProviderStore();
+  } = useProviderStore(
+    useShallow((s) => ({
+      adapters: s.adapters,
+      file: s.file,
+      loaded: s.loaded,
+      error: s.error,
+      load: s.load,
+      save: s.save,
+      remove: s.remove,
+      setDefault: s.setDefault,
+      clearAttention: s.clearAttention,
+      saveFallback: s.saveFallback,
+    })),
+  );
   const [form, setForm] = useState<FormState>({ mode: "closed" });
   const [removing, setRemoving] = useState<ProviderRecord | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
@@ -72,7 +86,9 @@ export function ProvidersScreen() {
     }
   };
 
-  const addButton = (
+  // The form is built from the adapter list: without it (it failed to load) there is nothing to add.
+  const canAdd = adapters.length > 0;
+  const addButton = canAdd && (
     <button
       type="button"
       className="btn btn--primary"

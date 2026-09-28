@@ -23,6 +23,7 @@ export const TOOLS = {
       "WordPress.org shows these on your plugin page. Keep them in this folder: every release uploads them to SVN assets/, and Update assets uploads only them. They are never part of the plugin zip.",
     none: "There is no assets folder yet.",
     create: "Create the folder",
+    checking: "Checking the folder…",
     open: "Open folder",
     checkAgain: "Check again",
     empty: "The folder is empty. Add your icon, banner and screenshots.",

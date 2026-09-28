@@ -7,13 +7,33 @@ interface DraftFormProps {
   context: DraftContext;
   /** The AI's draft when one arrived, otherwise the pre-filled one. */
   initial: ReleaseDraft;
+  /** Goes up each time a new AI draft arrives. */
+  generation: number;
   onApprove: (draft: ReleaseDraft) => void;
   disabled: boolean;
 }
 
 /** Step 2: the version, changelog entry and upgrade notice to approve. */
-export function DraftForm({ context, initial, onApprove, disabled }: DraftFormProps) {
-  const [draft, setDraft] = useState<ReleaseDraft>(initial);
+export function DraftForm({ context, initial, generation, onApprove, disabled }: DraftFormProps) {
+  const [draft, setDraftState] = useState<ReleaseDraft>(initial);
+  const [edited, setEdited] = useState(false);
+  const [shown, setShown] = useState(generation);
+
+  // A new AI draft fills an untouched form. Once you have typed, it waits to be asked for.
+  const offered = generation !== shown;
+  if (offered && !edited) {
+    setShown(generation);
+    setDraftState(initial);
+  }
+  const setDraft = (next: ReleaseDraft) => {
+    setDraftState(next);
+    setEdited(true);
+  };
+  const takeOffered = () => {
+    setShown(generation);
+    setDraftState(initial);
+    setEdited(false);
+  };
 
   const submit = (event: SyntheticEvent) => {
     event.preventDefault();
@@ -23,6 +43,14 @@ export function DraftForm({ context, initial, onApprove, disabled }: DraftFormPr
   return (
     <form className="stack" onSubmit={submit} aria-label={S.draft.title}>
       <h3 className="section-title">{S.draft.title}</h3>
+      {offered && edited && (
+        <div className="notice notice--info row" role="status">
+          <span>{S.draft.aiReady}</span>
+          <button type="button" className="btn btn--sm" onClick={takeOffered}>
+            {S.draft.useAi}
+          </button>
+        </div>
+      )}
       <div className="field">
         <label className="field__label" htmlFor="draft-version">
           {S.draft.version}

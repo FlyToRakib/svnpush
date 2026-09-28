@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { useRunStore } from "../store/runStore";
+import { PROJECT_PATH, runState } from "../test/fixtures";
 import { tauriMock } from "../test/tauriMock";
 import { SettingsScreen } from "./SettingsScreen";
 
@@ -68,5 +70,52 @@ describe("SettingsScreen", () => {
     await user.click(screen.getByRole("button", { name: "Check for updates" }));
     expect(await screen.findByText("Version 0.2.0 is available.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Install and restart" })).toBeTruthy();
+  });
+
+  it("confirms before installing an update, and waits for a running release", async () => {
+    tauriMock.handle("get_settings", () => SETTINGS);
+    tauriMock.handle("run_doctor", () => DOCTOR);
+    tauriMock.handle("check_update", () => ({ current: "0.1.0", available: "0.2.0" }));
+    useRunStore.setState({
+      runs: {
+        [PROJECT_PATH]: {
+          state: runState("Publishing", "Publish"),
+          logs: [],
+          actionError: null,
+          pending: false,
+          building: false,
+        },
+      },
+    });
+    const user = userEvent.setup();
+    render(<SettingsScreen />);
+    await user.click(await screen.findByRole("button", { name: "Check for updates" }));
+    const install = await screen.findByRole<HTMLButtonElement>("button", {
+      name: "Install and restart",
+    });
+    expect(install.disabled).toBe(true);
+    expect(screen.getByText(/Finish or cancel the release in progress first/)).toBeTruthy();
+
+    act(() => {
+      useRunStore.setState({ runs: {} });
+    });
+    expect(install.disabled).toBe(false);
+    await user.click(install);
+    const dialog = screen.getByRole("dialog", { name: "Install the update" });
+    expect(tauriMock.calls.some((c) => c.command === "install_update")).toBe(false);
+    await user.click(within(dialog).getByRole("button", { name: "Install and restart" }));
+    expect(tauriMock.calls.some((c) => c.command === "install_update")).toBe(true);
+  });
+
+  it("clears Settings saved once you edit again", async () => {
+    tauriMock.handle("get_settings", () => SETTINGS);
+    tauriMock.handle("run_doctor", () => DOCTOR);
+    tauriMock.handle("save_settings", (args) => args?.settings);
+    const user = userEvent.setup();
+    render(<SettingsScreen />);
+    await user.click(await screen.findByRole("button", { name: "Save settings" }));
+    expect(await screen.findByText("Settings saved.")).toBeTruthy();
+    await user.type(screen.getByLabelText("svn executable"), "C");
+    expect(screen.queryByText("Settings saved.")).toBeNull();
   });
 });

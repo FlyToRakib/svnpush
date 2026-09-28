@@ -18,13 +18,17 @@ interface AssetsCardProps {
 export function AssetsCard({ projectPath, disabled }: AssetsCardProps) {
   const [report, setReport] = useState<AssetReport | null>(null);
   const [error, setError] = useState<ErrorView | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = async (action: (path: string) => Promise<AssetReport>) => {
+    setBusy(true);
     try {
       setReport(await action(projectPath));
       setError(null);
     } catch (e) {
       setError(toErrorView(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -52,6 +56,7 @@ export function AssetsCard({ projectPath, disabled }: AssetsCardProps) {
       </div>
       <div className="card__body stack">
         <p className="muted">{S.tools.assets.intro}</p>
+        {!report && !error && <p className="muted">{S.tools.assets.checking}</p>}
         {folder && <p className="mono break">{folder}</p>}
         {error && <ErrorNotice error={error} />}
         {report && !report.exists && folder && (
@@ -60,7 +65,7 @@ export function AssetsCard({ projectPath, disabled }: AssetsCardProps) {
             <button
               type="button"
               className="btn btn--primary"
-              disabled={disabled}
+              disabled={disabled || busy}
               onClick={() => {
                 void load(commands.createAssetsFolder);
               }}
@@ -86,7 +91,7 @@ export function AssetsCard({ projectPath, disabled }: AssetsCardProps) {
                 <tbody>
                   {report.files.map((file) => (
                     <tr key={file.name}>
-                      <td className="mono">{file.name}</td>
+                      <td className="mono break">{file.name}</td>
                       <td>{S.tools.assets.role[file.kind]}</td>
                       <td className="mono">
                         {file.width !== null && file.height !== null
@@ -115,29 +120,32 @@ export function AssetsCard({ projectPath, disabled }: AssetsCardProps) {
                 ))}
               </ul>
             )}
-            <div className="row">
+          </>
+        )}
+        {(report?.exists || error) && (
+          <div className="row">
+            <button
+              type="button"
+              className="btn btn--sm"
+              disabled={busy}
+              onClick={() => {
+                void load(commands.checkAssets);
+              }}
+            >
+              {S.tools.assets.checkAgain}
+            </button>
+            {report?.exists && folder && (
               <button
                 type="button"
                 className="btn btn--sm"
                 onClick={() => {
-                  void load(commands.checkAssets);
+                  void openPath(folder);
                 }}
               >
-                {S.tools.assets.checkAgain}
+                {S.tools.assets.open}
               </button>
-              {folder && (
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  onClick={() => {
-                    void openPath(folder);
-                  }}
-                >
-                  {S.tools.assets.open}
-                </button>
-              )}
-            </div>
-          </>
+            )}
+          </div>
         )}
         <details>
           <summary>{S.tools.assets.guideTitle}</summary>

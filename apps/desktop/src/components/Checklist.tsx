@@ -65,9 +65,10 @@ export function Checklist({
               )}
               {drafting ? (
                 <DraftForm
-                  key={`${state.id}-${String(state.draft_ai?.generation ?? 0)}`}
+                  key={state.id}
                   context={state.draft_context}
                   initial={state.draft_ai?.draft ?? state.draft_context.prefill}
+                  generation={state.draft_ai?.generation ?? 0}
                   onApprove={onApprove}
                   disabled={disabled}
                 />
@@ -127,7 +128,14 @@ export function Checklist({
       case "Preview":
         return state.preview && <SvnPreviewView preview={state.preview} />;
       case "Publish":
-        return <PublishPanel key={state.id} state={state} onPublish={onPublish} />;
+        // Keyed on the preview too: the commit messages start from it once it exists.
+        return (
+          <PublishPanel
+            key={`${state.id}-${state.preview ? "preview" : "none"}`}
+            state={state}
+            onPublish={onPublish}
+          />
+        );
     }
   };
 

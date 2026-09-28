@@ -45,7 +45,7 @@ export function FileList({ pkg }: FileListProps) {
         <tbody>
           {pkg.files.map((file) => (
             <tr key={file.rel}>
-              <td className="mono">{file.rel}</td>
+              <td className="mono break">{file.rel}</td>
               <td className="mono num">{formatBytes(file.size)}</td>
             </tr>
           ))}

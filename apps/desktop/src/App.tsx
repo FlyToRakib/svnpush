@@ -47,7 +47,10 @@ export function App() {
         if (!settings.setup_seen) {
           setWelcome(true);
           setScreen("help");
-          void commands.saveSettings({ ...settings, setup_seen: true });
+          // If this fails, Help simply opens again next time.
+          commands.saveSettings({ ...settings, setup_seen: true }).catch((error: unknown) => {
+            console.error("Could not record that setup was seen", error);
+          });
         }
       },
       () => undefined,

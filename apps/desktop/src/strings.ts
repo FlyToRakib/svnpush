@@ -30,14 +30,11 @@ export const S = {
     cancel: "Cancel",
     save: "Save",
     remove: "Remove",
-    close: "Close",
-    copy: "Copy",
     copied: "Copied",
+    copyFailed: "Could not copy",
     loading: "Loading…",
     none: "None",
     fix: "Fix",
-    yes: "Yes",
-    no: "No",
   },
   projects: {
     title: "Projects",
@@ -86,7 +83,7 @@ export const S = {
       "Sync and commit only your assets folder: banners, icons and screenshots. No version change and no tag.",
     assetsPublished: "Assets published",
     cancel: "Cancel",
-    running: "Release in progress",
+    starting: "Starting…",
     svnUrl: "SVN URL",
     account: "Account",
     noAccount: "No SVN account in Vault",
@@ -97,6 +94,9 @@ export const S = {
     resume: "Resume",
     resumeTag: "Resume: create tag",
     discard: "Discard",
+    discardTitle: "Discard the unfinished release",
+    discardBody:
+      "SVNpush puts back the plugin files that release edited, as they were before it started. Changes you made to those files since then are lost.",
     notices: "Notes",
     resetWorkingCopy: "Reset working copy",
     resetDone: "The working copy was checked out again.",
@@ -137,8 +137,6 @@ export const S = {
       Failed: "Failed",
       Skipped: "Skipped",
     },
-    expand: "Show details",
-    collapse: "Hide details",
   },
   detect: {
     mainFile: "Main file",
@@ -181,6 +179,8 @@ export const S = {
     summary: "Release summary",
     summaryHint:
       "One paragraph about the release, for your announcement. It is not written to any file.",
+    aiReady: "The AI draft is ready. Using it replaces what you typed.",
+    useAi: "Use the AI draft",
   },
   ai: {
     draftTitle: "AI draft",
@@ -292,8 +292,6 @@ export const S = {
     trunkMessage: "Trunk commit message",
     tagMessage: "Tag commit message",
     diffTitle: (path: string) => `Diff of ${path}`,
-    showDiff: "Show diff",
-    hideDiff: "Hide diff",
   },
   publish: {
     publish: "Publish",
@@ -379,8 +377,7 @@ export const S = {
     subtitle: "Connect the AI that writes your release notes. You choose which runs, always.",
     add: "Add provider",
     emptyTitle: "No AI providers yet",
-    emptyBody:
-      "No AI providers yet. Revoye is recommended. A local model works without an API key.",
+    emptyBody: "Revoye is recommended. A local model works without an API key.",
     defaultBadge: "Default",
     needsAttention: (why: string) => `Needs attention: ${why}`,
     requests: (count: number) => `${count.toString()} request(s) this month`,
@@ -413,7 +410,6 @@ export const S = {
     baseUrlHint: "Only change this for self-hosted gateways or local servers.",
     defaultToggle: "Use this provider when nothing else is chosen",
     save: "Save",
-    saved: "Provider saved.",
     fleetNoDevice: (total: number) =>
       `No device online, ${total.toString()} paired. Jobs wait until one connects.`,
     fleetOnline: (online: number, total: number, idle: number, agents: number, queued: number) =>
@@ -455,7 +451,7 @@ export const S = {
     remove: "Remove",
     stored: "Password stored",
     missing: "No password stored",
-    removeTitle: "Forget this account",
+    removeTitle: "Remove this account",
     removeBody: (username: string) =>
       `SVNpush forgets ${username} and deletes its password from your keychain.`,
   },
@@ -469,6 +465,7 @@ export const S = {
     gitPath: "git executable",
     pathHint: "Leave empty to search PATH and the usual install locations.",
     doctor: "Run Doctor",
+    doctorRunning: "Running Doctor…",
     keychain: "Keychain",
     keychainOk: "Available.",
     found: "Found",
@@ -488,6 +485,9 @@ export const S = {
     upToDate: "You have the latest version.",
     updateAvailable: (version: string) => `Version ${version} is available.`,
     installUpdate: "Install and restart",
+    installTitle: "Install the update",
+    installBody: "SVNpush closes, installs the new version and opens again.",
+    updateWaits: "Finish or cancel the release in progress first: installing restarts SVNpush.",
   },
   errors: {
     unexpected: "Something went wrong.",

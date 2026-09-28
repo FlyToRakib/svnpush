@@ -25,7 +25,7 @@ function rows(checks: CheckResult[]) {
               </div>
             )}
             {check.status === "Fail" && check.paths.length > 0 && (
-              <ul className="check__paths">
+              <ul className="check__paths break">
                 {check.paths.map((path) => (
                   <li key={path} className="mono">
                     {path}
@@ -49,14 +49,18 @@ export function CheckTable({ checks }: CheckTableProps) {
   const warnings = checks.filter((c) => c.severity === "Warn");
   return (
     <div className="stack">
-      <table className="table checks">
-        <caption className="table__caption">{S.checks.blocking}</caption>
-        <tbody>{rows(blocking)}</tbody>
-      </table>
-      <table className="table checks">
-        <caption className="table__caption">{S.checks.warnings}</caption>
-        <tbody>{rows(warnings)}</tbody>
-      </table>
+      {blocking.length > 0 && (
+        <table className="table checks">
+          <caption className="table__caption">{S.checks.blocking}</caption>
+          <tbody>{rows(blocking)}</tbody>
+        </table>
+      )}
+      {warnings.length > 0 && (
+        <table className="table checks">
+          <caption className="table__caption">{S.checks.warnings}</caption>
+          <tbody>{rows(warnings)}</tbody>
+        </table>
+      )}
     </div>
   );
 }

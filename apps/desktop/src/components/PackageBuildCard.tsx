@@ -3,6 +3,7 @@ import type { BuiltPackage } from "../ipc/bindings/BuiltPackage";
 import type { ErrorView } from "../ipc/bindings/ErrorView";
 import { commands } from "../ipc/commands";
 import { toErrorView } from "../ipc/tauri";
+import { useRunStore } from "../store/runStore";
 import { S } from "../strings";
 import { CheckTable } from "./CheckTable";
 import { ErrorNotice } from "./ErrorNotice";
@@ -18,19 +19,22 @@ interface PackageBuildCardProps {
 /** Builds the release package without releasing, to inspect or test it. */
 export function PackageBuildCard({ projectPath, currentVersion, disabled }: PackageBuildCardProps) {
   const [built, setBuilt] = useState<BuiltPackage | null>(null);
-  const [building, setBuilding] = useState(false);
+  // In the run store, so the release buttons know a build holds the project lock.
+  const building = useRunStore((s) => s.runs[projectPath]?.building ?? false);
+  const setBuilding = useRunStore((s) => s.setBuilding);
   const [error, setError] = useState<ErrorView | null>(null);
 
   const build = async () => {
-    setBuilding(true);
+    setBuilding(projectPath, true);
     try {
       setBuilt(await commands.buildPackage(projectPath));
       setError(null);
     } catch (e) {
       setBuilt(null);
       setError(toErrorView(e));
+    } finally {
+      setBuilding(projectPath, false);
     }
-    setBuilding(false);
   };
 
   return (

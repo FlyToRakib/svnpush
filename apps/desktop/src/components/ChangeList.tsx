@@ -31,7 +31,7 @@ export function ChangeList({ changes }: ChangeListProps) {
           {changes.files.map((file) => (
             <li key={file.path} className={`file-change file-change--${file.kind.toLowerCase()}`}>
               <span className="file-change__kind">{S.changes.kind[file.kind]}</span>
-              <span className="mono">{file.path}</span>
+              <span className="mono break">{file.path}</span>
             </li>
           ))}
         </ul>

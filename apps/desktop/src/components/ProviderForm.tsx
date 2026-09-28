@@ -1,4 +1,4 @@
-import { useEffect, useState, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import type { AdapterInfo } from "../ipc/bindings/AdapterInfo";
 import type { ErrorView } from "../ipc/bindings/ErrorView";
 import type { Fleet } from "../ipc/bindings/Fleet";
@@ -60,7 +60,11 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ErrorView | null>(null);
+  // Counts model-list requests; an answer that is not the latest one (for
+  // example for the provider you just switched away from) is dropped.
+  const latest = useRef(0);
   const adapter = adapters.find((a) => a.kind === kind);
 
   const loadModels = async (silent: boolean, typedKey: string) => {
@@ -79,11 +83,18 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
       base_url: baseUrl || null,
       api_key: typedKey.trim() || null,
     };
+    const ticket = ++latest.current;
     setLoading(true);
     try {
       const list = await commands.listProviderModels(target);
+      const snapshot = adapter.has_fleet
+        ? await commands.providerFleet(target).catch(() => null)
+        : null;
+      if (ticket !== latest.current) {
+        return;
+      }
       if (adapter.has_fleet) {
-        setFleet(await commands.providerFleet(target).catch(() => null));
+        setFleet(snapshot);
       }
       if (list.models.length > 0) {
         setModels(list.models);
@@ -93,11 +104,13 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
       }
       setError(null);
     } catch (e) {
-      if (!silent) {
+      if (!silent && ticket === latest.current) {
         setError(toErrorView(e));
       }
     } finally {
-      setLoading(false);
+      if (ticket === latest.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -111,10 +124,12 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
       return;
     }
     let live = true;
+    const ticket = ++latest.current;
+    const current = () => live && ticket === latest.current;
     const target = { id: editingId, kind: openKind, base_url: openBase, api_key: null };
     commands.listProviderModels(target).then(
       (list) => {
-        if (live && list.models.length > 0) {
+        if (current() && list.models.length > 0) {
           setModels(list.models);
           setModelNote(S.providers.modelsLoaded(list.models.length));
         }
@@ -124,7 +139,7 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
     if (openFleet) {
       commands.providerFleet(target).then(
         (snapshot) => {
-          if (live) {
+          if (current()) {
             setFleet(snapshot);
           }
         },
@@ -138,6 +153,8 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
 
   const chooseKind = (next: string) => {
     const nextAdapter = adapters.find((a) => a.kind === next);
+    latest.current += 1;
+    setLoading(false);
     setKind(next);
     setModel(nextAdapter?.default_model ?? "");
     setModels(nextAdapter?.models ?? []);
@@ -149,9 +166,10 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
 
   const submit = async (event: SyntheticEvent) => {
     event.preventDefault();
-    if (!adapter) {
+    if (!adapter || saving) {
       return;
     }
+    setSaving(true);
     try {
       await onSave({
         id: editing?.id ?? null,
@@ -164,6 +182,8 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
       });
     } catch (e) {
       setError(toErrorView(e));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -353,7 +373,7 @@ export function ProviderForm({ adapters, editing, onSave, onCancel }: ProviderFo
 
         {error && <ErrorNotice error={error} />}
         <div>
-          <button type="submit" className="btn btn--primary">
+          <button type="submit" className="btn btn--primary" disabled={saving}>
             {S.providers.save}
           </button>
         </div>

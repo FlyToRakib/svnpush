@@ -66,6 +66,24 @@ describe("HelpScreen", () => {
     expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
   });
 
+  it("still shows the checklist when one item cannot be read, and reports a failed install", async () => {
+    mockHelp(() => false);
+    tauriMock.reject("vault_view", { code: "KEYCHAIN", message: "No keychain.", fix: null });
+    tauriMock.reject("install_svn", {
+      code: "INSTALL_FAILED",
+      message: "winget is not available.",
+      fix: null,
+    });
+    const user = userEvent.setup();
+    render(<HelpScreen welcome={false} onNavigate={vi.fn()} />);
+    expect(await screen.findByText("Subversion is not installed yet.")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Install Subversion" }));
+    expect(await screen.findByText("winget is not available.")).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Install Subversion" }).disabled,
+    ).toBe(false);
+  });
+
   it("links each missing item to the screen that fixes it", async () => {
     mockHelp(() => true);
     const onNavigate = vi.fn();

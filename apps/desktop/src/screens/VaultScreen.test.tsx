@@ -63,7 +63,7 @@ describe("VaultScreen", () => {
     await user.click(await screen.findByRole("button", { name: "Test" }));
     expect(await screen.findByText(/answered\./)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Remove" }));
-    const dialog = screen.getByRole("dialog", { name: "Forget this account" });
+    const dialog = screen.getByRole("dialog", { name: "Remove this account" });
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     expect(tauriMock.calls.find((c) => c.command === "remove_account")?.args).toEqual({
       host: "plugins.svn.wordpress.org",

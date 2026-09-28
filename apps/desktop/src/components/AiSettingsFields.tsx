@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { AiChoice } from "../ipc/bindings/AiChoice";
 import { useProviderStore } from "../store/providerStore";
 import { S } from "../strings";
@@ -27,7 +28,9 @@ export function AiSettingsFields({
   onChoice,
   onPatterns,
 }: AiSettingsFieldsProps) {
-  const { file, loaded, load } = useProviderStore();
+  const { file, loaded, load } = useProviderStore(
+    useShallow((s) => ({ file: s.file, loaded: s.loaded, load: s.load })),
+  );
 
   useEffect(() => {
     if (!loaded) {

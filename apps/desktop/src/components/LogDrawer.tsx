@@ -1,24 +1,33 @@
 import { useEffect, useRef, useState } from "react";
-import type { LogLine } from "../ipc/bindings/LogLine";
+import { useRunStore, type LogEntry } from "../store/runStore";
 import { S } from "../strings";
 import { CopyButton } from "./CopyButton";
 
+const NO_LOGS: LogEntry[] = [];
+
+/** How close to the end, in pixels, still counts as following the output. */
+const FOLLOW_SLACK = 40;
+
+const lineText = (line: LogEntry) => (line.stream === "Command" ? `$ ${line.text}` : line.text);
+
 interface LogDrawerProps {
-  logs: LogLine[];
+  projectPath: string;
 }
 
 /** The collapsible drawer that streams command output. */
-export function LogDrawer({ logs }: LogDrawerProps) {
+export function LogDrawer({ projectPath }: LogDrawerProps) {
+  const logs = useRunStore((s) => s.runs[projectPath]?.logs ?? NO_LOGS);
   const [open, setOpen] = useState(false);
-  const end = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  // Follow new output only while the reader is at the end, not while they scroll back.
+  const following = useRef(true);
 
   useEffect(() => {
-    if (open) {
-      end.current?.scrollIntoView({ block: "end" });
+    const element = body.current;
+    if (open && element && following.current) {
+      element.scrollTop = element.scrollHeight;
     }
-  }, [logs.length, open]);
-
-  const text = logs.map((l) => (l.stream === "Command" ? `$ ${l.text}` : l.text)).join("\n");
+  }, [logs, open]);
 
   return (
     <section className={`log${open ? " log--open" : ""}`} aria-label={S.log.title}>
@@ -29,25 +38,38 @@ export function LogDrawer({ logs }: LogDrawerProps) {
           aria-expanded={open}
           aria-controls="log-body"
           onClick={() => {
+            following.current = true;
             setOpen(!open);
           }}
         >
           {open ? S.log.hide : S.log.show} ({logs.length})
         </button>
-        {open && logs.length > 0 && <CopyButton text={text} label={S.log.copy} />}
+        {open && logs.length > 0 && (
+          <CopyButton text={() => logs.map(lineText).join("\n")} label={S.log.copy} />
+        )}
       </div>
       {open && (
-        <div id="log-body" className="log__body" role="log" aria-live="polite" tabIndex={0}>
+        <div
+          id="log-body"
+          ref={body}
+          className="log__body"
+          role="log"
+          aria-live="polite"
+          tabIndex={0}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            following.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_SLACK;
+          }}
+        >
           {logs.length === 0 ? (
             <p className="muted">{S.log.empty}</p>
           ) : (
-            logs.map((line, index) => (
-              <div key={index} className={`log__line log__line--${line.stream.toLowerCase()}`}>
-                {line.stream === "Command" ? `$ ${line.text}` : line.text}
+            logs.map((line) => (
+              <div key={line.seq} className={`log__line log__line--${line.stream.toLowerCase()}`}>
+                {lineText(line)}
               </div>
             ))
           )}
-          <div ref={end} />
         </div>
       )}
     </section>
