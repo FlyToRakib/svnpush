@@ -13,7 +13,7 @@ use std::sync::Arc;
 use svnpush_core::ai::client::AiClient;
 use svnpush_core::project::AppPaths;
 use svnpush_core::vault::Keychain;
-use tauri::Manager;
+use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::state::AppState;
 
@@ -68,13 +68,49 @@ macro_rules! handlers {
             commands::diagnostics,
             commands::check_update,
             commands::install_update,
+            commands::force_close,
         ]
     };
 }
 
+/// Closing the window while a release runs would kill a commit halfway, so
+/// the close is held and the UI asks first (it calls `force_close` on yes).
+fn guard_close(window: &tauri::Window, event: &WindowEvent) {
+    if let WindowEvent::CloseRequested { api, .. } = event
+        && window.try_state::<Arc<AppState>>().is_some_and(|state| state.any_active())
+    {
+        api.prevent_close();
+        let _ = window.emit(events::CLOSE_BLOCKED_EVENT, ());
+    }
+}
+
+/// A failure before the window opens is otherwise invisible in a release
+/// build, which has no console.
+fn report_startup_failure(err: &tauri::Error) {
+    tracing::error!("SVNpush failed to start: {err}");
+    eprintln!("SVNpush failed to start: {err}");
+    #[cfg(desktop)]
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("SVNpush could not start")
+        .set_description(format!("SVNpush failed to start: {err}"))
+        .show();
+}
+
 /// Builds and runs the Tauri application.
 pub fn run() {
-    let result = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // First, so a second launch only focuses this window: two processes
+    // would overwrite each other's projects, accounts and providers.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+    let result = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -89,10 +125,11 @@ pub fn run() {
             app.manage(state);
             Ok(())
         })
+        .on_window_event(guard_close)
         .invoke_handler(handlers!())
         .run(tauri::generate_context!());
     if let Err(err) = result {
-        eprintln!("SVNpush failed to start: {err}");
+        report_startup_failure(&err);
         std::process::exit(1);
     }
 }

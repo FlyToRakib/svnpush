@@ -55,6 +55,7 @@
     "allow-install-svn",
     "allow-diagnostics",
     "allow-check-update",
-    "allow-install-update"
+    "allow-install-update",
+    "allow-force-close"
   ]
 }

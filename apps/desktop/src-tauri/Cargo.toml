@@ -30,6 +30,12 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 ts-rs.workspace = true
 
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+# Already in the tree through tauri-plugin-dialog; used for the startup-failure
+# message, shown when no window exists to show it in.
+rfd = { version = "0.16", default-features = false }
+tauri-plugin-single-instance = "2.4"
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }

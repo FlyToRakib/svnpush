@@ -492,4 +492,9 @@ export const S = {
   errors: {
     unexpected: "Something went wrong.",
   },
+  closeGuard: {
+    title: "A release is in progress",
+    body: "Closing now stops it halfway, and a commit may be left unfinished. Close anyway?",
+    confirm: "Close anyway",
+  },
 } as const;

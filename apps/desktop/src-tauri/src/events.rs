@@ -14,6 +14,8 @@ use crate::state::AppState;
 pub const RUN_STATE_EVENT: &str = "run-state";
 /// The event carrying one log line.
 pub const RUN_LOG_EVENT: &str = "run-log";
+/// Sent when closing the window was refused because a release is running.
+pub const CLOSE_BLOCKED_EVENT: &str = "close-blocked";
 
 /// Payload of [`RUN_STATE_EVENT`].
 #[derive(Debug, Clone, Serialize, TS)]

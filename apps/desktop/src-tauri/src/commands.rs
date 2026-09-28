@@ -19,12 +19,12 @@ use tauri_plugin_updater::UpdaterExt;
 use ts_rs::TS;
 
 use crate::events::{EventSink, TauriSink};
-use crate::service::checks;
 use crate::service::projects::{self, FolderInspection, ProjectSummary};
 use crate::service::providers::{self, AdapterInfo, ProviderInput, ProviderTarget};
 use crate::service::runs;
 use crate::service::settings::{self, DoctorReport};
 use crate::service::vault::{self, VaultView};
+use crate::service::{self, checks};
 use crate::state::AppState;
 
 type Shared<'a> = State<'a, Arc<AppState>>;
@@ -53,7 +53,8 @@ fn update_error(e: impl std::fmt::Display) -> ErrorView {
 
 #[tauri::command]
 pub async fn vault_view(state: Shared<'_>) -> Result<VaultView, ErrorView> {
-    vault::view(&state)
+    let app = state.inner().clone();
+    service::blocking(move || vault::view(&app)).await
 }
 
 #[tauri::command]
@@ -63,7 +64,8 @@ pub async fn save_account(
     username: String,
     password: String,
 ) -> Result<VaultView, ErrorView> {
-    vault::save(&state, &host, &username, &password)
+    let app = state.inner().clone();
+    service::blocking(move || vault::save(&app, &host, &username, &password)).await
 }
 
 #[tauri::command]
@@ -72,7 +74,8 @@ pub async fn remove_account(
     host: String,
     username: String,
 ) -> Result<VaultView, ErrorView> {
-    vault::remove(&state, &host, &username)
+    let app = state.inner().clone();
+    service::blocking(move || vault::remove(&app, &host, &username)).await
 }
 
 #[tauri::command]
@@ -189,14 +192,41 @@ pub async fn check_update(app: AppHandle) -> Result<UpdateInfo, ErrorView> {
     Ok(UpdateInfo { current, available: update.map(|u| u.version) })
 }
 
+fn refuse_during_release(state: &AppState) -> Result<(), ErrorView> {
+    if state.any_active() {
+        return Err(ErrorView::new(
+            "UPDATE_RUN_ACTIVE",
+            "A release is running, so SVNpush cannot restart to update yet.",
+            Some(
+                "Wait for the release to finish or cancel it, then install the update.".to_owned(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Installing quits the app (on Windows the installer exits it at once), which
+/// would kill a commit halfway, so it is refused while a release runs, checked
+/// again after the download.
 #[tauri::command]
-pub async fn install_update(app: AppHandle) -> Result<(), ErrorView> {
+pub async fn install_update(app: AppHandle, state: Shared<'_>) -> Result<(), ErrorView> {
+    refuse_during_release(&state)?;
     let Some(update) = app.updater().map_err(update_error)?.check().await.map_err(update_error)?
     else {
         return Ok(());
     };
-    update.download_and_install(|_, _| {}, || {}).await.map_err(update_error)?;
+    let bytes = update.download(|_, _| {}, || {}).await.map_err(update_error)?;
+    refuse_during_release(&state)?;
+    update.install(bytes).map_err(update_error)?;
     app.restart();
+}
+
+/// Quits even though a release is running, after the UI asked the developer.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)] // Tauri hands commands the handle by value.
+pub fn force_close(app: AppHandle) {
+    tracing::warn!("closed during a release at the developer's request");
+    app.exit(0);
 }
 
 #[tauri::command]

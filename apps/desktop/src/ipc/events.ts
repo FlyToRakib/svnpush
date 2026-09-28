@@ -9,6 +9,13 @@ export function onRunState(handler: (event: RunStateEvent) => void): Promise<Unl
   });
 }
 
+/** Subscribes to window closes the shell held back because a release is running. */
+export function onCloseBlocked(handler: () => void): Promise<UnlistenFn> {
+  return listen("close-blocked", () => {
+    handler();
+  });
+}
+
 /** Subscribes to run log lines. */
 export function onRunLog(handler: (event: RunLogEvent) => void): Promise<UnlistenFn> {
   return listen<RunLogEvent>("run-log", (event) => {

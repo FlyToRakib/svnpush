@@ -45,6 +45,7 @@ fn main() {
         "diagnostics",
         "check_update",
         "install_update",
+        "force_close",
     ]);
     if let Err(err) = tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
     {

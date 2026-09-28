@@ -81,4 +81,5 @@ export const commands = {
   diagnostics: () => call<string>("diagnostics"),
   checkUpdate: () => call<UpdateInfo>("check_update"),
   installUpdate: () => call<null>("install_update"),
+  forceClose: () => call<null>("force_close"),
 };

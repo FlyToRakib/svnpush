@@ -57,6 +57,18 @@ describe("App", () => {
     }
   });
 
+  it("asks before closing while a release runs", async () => {
+    mockApp(true);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => {
+      tauriMock.emit("close-blocked", null);
+      expect(screen.getByRole("dialog", { name: "A release is in progress" })).toBeTruthy();
+    });
+    await user.click(screen.getByRole("button", { name: "Close anyway" }));
+    expect(tauriMock.calls.some((c) => c.command === "force_close")).toBe(true);
+  });
+
   it("opens Help with the setup checklist on the first launch, once", async () => {
     mockApp(false);
     render(<App />);
