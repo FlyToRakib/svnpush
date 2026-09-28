@@ -74,6 +74,7 @@ export function VaultScreen() {
       <p className="notice notice--info">{S.vault.reminder}</p>
       {view?.keychain_problem && <ErrorNotice error={view.keychain_problem} />}
       {error && <ErrorNotice error={error} />}
+      {!view && !error && <p className="muted">{S.common.loading}</p>}
 
       {form.mode !== "closed" && (
         <section className="card">

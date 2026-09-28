@@ -3,6 +3,7 @@ import type { DoctorReport } from "../ipc/bindings/DoctorReport";
 import type { InstallOutcome } from "../ipc/bindings/InstallOutcome";
 import type { InstallPlan } from "../ipc/bindings/InstallPlan";
 import { commands } from "../ipc/commands";
+import { toErrorView } from "../ipc/tauri";
 import type { Screen } from "../screens/screen";
 import { S } from "../strings";
 import { SetupRow } from "./SetupRow";
@@ -11,15 +12,18 @@ interface SetupChecklistProps {
   onNavigate: (screen: Screen) => void;
 }
 
-/** Everything the checklist shows, read in one go. */
+/** Everything the checklist shows, read in one go. One failed read leaves its item as it was. */
 const load = () =>
-  Promise.all([
+  Promise.allSettled([
     commands.runDoctor(),
     commands.vaultView(),
     commands.listProviders(),
     commands.listProjects(),
     commands.svnInstallPlan(),
   ]);
+
+const valueOf = <T,>(result: PromiseSettledResult<T>): T | null =>
+  result.status === "fulfilled" ? result.value : null;
 
 interface Counts {
   accounts: number;
@@ -36,14 +40,22 @@ export function SetupChecklist({ onNavigate }: SetupChecklistProps) {
   const [outcome, setOutcome] = useState<InstallOutcome | null>(null);
 
   const apply = useCallback(
-    ([report, vault, providers, projects, install]: Awaited<ReturnType<typeof load>>) => {
-      setDoctor(report);
-      setPlan(install);
-      setCounts({
-        accounts: vault.accounts.length,
-        providers: providers.providers.length,
-        projects: projects.length,
-      });
+    ([doctorRead, vaultRead, providersRead, projectsRead, planRead]: Awaited<
+      ReturnType<typeof load>
+    >) => {
+      const report = valueOf(doctorRead);
+      const install = valueOf(planRead);
+      if (report) {
+        setDoctor(report);
+      }
+      if (install) {
+        setPlan(install);
+      }
+      setCounts((was) => ({
+        accounts: valueOf(vaultRead)?.accounts.length ?? was.accounts,
+        providers: valueOf(providersRead)?.providers.length ?? was.providers,
+        projects: valueOf(projectsRead)?.length ?? was.projects,
+      }));
     },
     [],
   );
@@ -67,9 +79,14 @@ export function SetupChecklist({ onNavigate }: SetupChecklistProps) {
   const install = async () => {
     setInstalling(true);
     setOutcome(null);
-    const result = await commands.installSvn();
-    setOutcome(result);
-    setInstalling(false);
+    try {
+      setOutcome(await commands.installSvn());
+    } catch (e) {
+      const view = toErrorView(e);
+      setOutcome({ ok: false, detail: view.fix ? `${view.message} ${view.fix}` : view.message });
+    } finally {
+      setInstalling(false);
+    }
     await refresh();
   };
 

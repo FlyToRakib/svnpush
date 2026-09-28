@@ -165,6 +165,51 @@ describe("ProvidersScreen", () => {
     expect(input.model).toBe("gemma3");
   });
 
+  it("saves once when Save is clicked twice", async () => {
+    setup();
+    const user = await openAdd();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Provider" }), "local");
+    let answer: (file: unknown) => void = () => undefined;
+    tauriMock.handle("save_provider", () => new Promise((resolve) => (answer = resolve)));
+    const save = screen.getByRole<HTMLButtonElement>("button", { name: "Save" });
+    await user.click(save);
+    await user.click(save);
+    expect(save.disabled).toBe(true);
+    expect(tauriMock.calls.filter((c) => c.command === "save_provider")).toHaveLength(1);
+    answer({ schema: 1, providers: [record({ kind: "local", has_key: false })], fallback: [] });
+    expect(await screen.findByRole("button", { name: "Add provider" })).toBeTruthy();
+  });
+
+  it("offers no Add when the provider list could not be loaded", async () => {
+    tauriMock.reject("provider_adapters", {
+      code: "UNEXPECTED",
+      message: "The adapter list could not be read.",
+      fix: null,
+    });
+    tauriMock.handle("list_providers", () => ({ schema: 1, providers: [], fallback: [] }));
+    useProviderStore.setState({ adapters: [], loaded: false });
+    render(<ProvidersScreen />);
+    expect(await screen.findByText("The adapter list could not be read.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add provider" })).toBeNull();
+  });
+
+  it("ignores models that arrive after switching to another provider", async () => {
+    setup();
+    const user = await openAdd();
+    let answer: (list: unknown) => void = () => undefined;
+    tauriMock.handle("list_provider_models", () => new Promise((resolve) => (answer = resolve)));
+    tauriMock.handle("provider_fleet", () => Promise.reject(new Error("offline")));
+    await user.type(screen.getByLabelText("API key"), "revoye_sk_live_abc");
+    await user.tab();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Provider" }), "openrouter");
+    answer({ models: ["revoye/auto", "chatgpt"], note: null });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const models = within(screen.getByRole("combobox", { name: "Model" }))
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+    expect(models).toEqual(["anthropic/claude-sonnet-5"]);
+  });
+
   it("loads the account's models silently when a key is pasted, with the fleet line", async () => {
     setup();
     const user = await openAdd();

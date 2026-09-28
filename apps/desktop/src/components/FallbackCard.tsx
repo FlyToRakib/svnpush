@@ -1,6 +1,9 @@
 import { useState } from "react";
+import type { ErrorView } from "../ipc/bindings/ErrorView";
 import type { ProviderRecord } from "../ipc/bindings/ProviderRecord";
+import { toErrorView } from "../ipc/tauri";
 import { S } from "../strings";
+import { ErrorNotice } from "./ErrorNotice";
 
 interface FallbackCardProps {
   providers: ProviderRecord[];
@@ -20,6 +23,8 @@ export function FallbackCard({ providers, chosen, onSave }: FallbackCardProps) {
     ...providers.filter((p) => !chosen.includes(p.id)).map((p) => ({ id: p.id, on: false })),
   ]);
   const [saved, setSaved] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<ErrorView | null>(null);
 
   const move = (index: number, by: number) => {
     const next = [...rows];
@@ -33,8 +38,17 @@ export function FallbackCard({ providers, chosen, onSave }: FallbackCardProps) {
 
   const save = async () => {
     const order = rows.filter((r) => r.on).map((r) => r.id);
-    await onSave(order);
-    setSaved(S.providers.fallbackSaved(order.length));
+    setSaving(true);
+    try {
+      await onSave(order);
+      setSaved(S.providers.fallbackSaved(order.length));
+      setError(null);
+    } catch (e) {
+      setSaved(null);
+      setError(toErrorView(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -94,11 +108,17 @@ export function FallbackCard({ providers, chosen, onSave }: FallbackCardProps) {
             );
           })}
         </ol>
-        {saved && <p className="notice notice--ok">{saved}</p>}
+        {error && <ErrorNotice error={error} />}
+        {saved && (
+          <p className="notice notice--ok" role="status">
+            {saved}
+          </p>
+        )}
         <div>
           <button
             type="button"
             className="btn btn--sm"
+            disabled={saving}
             onClick={() => {
               void save();
             }}
