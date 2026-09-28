@@ -354,6 +354,10 @@ fn openai_responses_and_errors() {
     let e = openai.parse_error(401, &fixture("openai/error_401.json"));
     assert_eq!(e.code, ErrorCode::Auth);
     assert_eq!(e.message, "Incorrect API key provided.");
+    // An exhausted balance arrives as 429 insufficient_quota: waiting does not help.
+    let quota = openai.parse_error(429, &fixture("openai/error_quota.json"));
+    assert_eq!(quota.code, ErrorCode::Payment);
+    assert_eq!(openai.parse_error(429, &Value::Null).code, ErrorCode::RateLimit);
 }
 
 // ── OpenRouter ───────────────────────────────────────────────────────────

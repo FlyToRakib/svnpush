@@ -5,8 +5,8 @@
 use serde_json::{Value, json};
 
 use crate::ai::provider::{
-    Adapter, AdapterMeta, FinishReason, GenerateRequest, GenerateResult, HttpRequest, ParseOutcome,
-    ProviderError, error_from_status, str_at, trim_base, u32_at,
+    Adapter, AdapterMeta, ErrorCode, FinishReason, GenerateRequest, GenerateResult, HttpRequest,
+    ParseOutcome, ProviderError, error_from_status, str_at, trim_base, u32_at,
 };
 
 /// Which field carries the output token ceiling.
@@ -114,7 +114,7 @@ impl Adapter for OpenAiCompatible {
             req.base_url.filter(|b| !b.trim().is_empty()).unwrap_or(self.meta.default_base_url);
         if base.trim().is_empty() {
             return Err(ProviderError::new(
-                crate::ai::provider::ErrorCode::BadRequest,
+                ErrorCode::BadRequest,
                 self.meta.kind,
                 "This provider needs a base URL. Set it under Advanced on the Providers screen.",
             ));
@@ -132,7 +132,14 @@ impl Adapter for OpenAiCompatible {
                 || format!("{} request failed ({status}).", self.meta.label),
                 str::to_owned,
             );
-        error_from_status(status, message, self.meta.kind)
+        let mut e = error_from_status(status, message, self.meta.kind);
+        // OpenAI reports an exhausted balance as 429 `insufficient_quota`, not 402.
+        if str_at(json, "/error/code") == Some("insufficient_quota")
+            || str_at(json, "/error/type") == Some("insufficient_quota")
+        {
+            e.code = ErrorCode::Payment;
+        }
+        e
     }
 }
 
