@@ -28,8 +28,11 @@ impl ProjectLock {
             Ok(()) => Ok(Self { _file: file }),
             Err(TryLockError::WouldBlock) => Err(RunFailure::new(
                 "RUN_LOCKED",
-                "Another SVNpush window is already releasing this plugin.",
-                Some("Wait for that release to finish, or close the other window.".to_owned()),
+                "Another copy of SVNpush is already releasing this plugin.",
+                Some(
+                    "Wait for that release to finish, or close the other copy of SVNpush."
+                        .to_owned(),
+                ),
             )),
             Err(TryLockError::Error(e)) => Err(RunFailure::io("lock", &path, &e)),
         }

@@ -24,7 +24,7 @@ pub struct ProjectSummary {
     pub problem: Option<ErrorView>,
     /// The newest journal, when it has no outcome or still needs its tag.
     pub unfinished: Option<RunJournal>,
-    /// Whether another window is releasing this plugin.
+    /// Whether another copy of SVNpush is releasing this plugin.
     pub locked: bool,
     /// The Vault account that will commit, when one resolves.
     pub account: Option<String>,
@@ -103,8 +103,8 @@ pub fn inspect_folder(folder: &str) -> Result<FolderInspection, ErrorView> {
     })
 }
 
-/// `active` is whether this window is releasing the project: its own run is
-/// then neither "unfinished" nor "locked by another window".
+/// `active` is whether this app is releasing the project: its own run is
+/// then neither "unfinished" nor "locked by another copy of SVNpush".
 fn summarise(paths: &AppPaths, project: Project, active: bool) -> ProjectSummary {
     let effective = project::with_team_config(&project);
     let detected = effective.as_ref().map_err(|e| ErrorView::from_coded(e)).and_then(|p| {
