@@ -110,22 +110,26 @@ fn summarise(paths: &AppPaths, project: Project, active: bool) -> ProjectSummary
         )
         .map_err(|e| ErrorView::from_coded(&e))
     });
-    let unfinished = journal::list(paths, &project.slug)
+    // A run uses the team file's URL and slug, so its journals and lock live
+    // under them; the saved project is still what the settings form edits.
+    let runs_as = effective.as_ref().unwrap_or(&project);
+    let unfinished = journal::list(paths, &runs_as.slug)
         .ok()
         .and_then(|all| all.into_iter().next())
         .filter(|j| !active && !j.discarded && (j.is_interrupted() || j.needs_tag()));
     let accounts = svnpush_core::vault::load_accounts(paths).unwrap_or_default();
     let account = svnpush_core::vault::resolve_account(
         &accounts,
-        &svnpush_core::vault::svn_host(&project.svn_url),
-        project.settings.svn_account.as_deref(),
+        &svnpush_core::vault::svn_host(&runs_as.svn_url),
+        runs_as.settings.svn_account.as_deref(),
     )
     .map(|a| a.username.clone());
     let team_pre_build_command = project::team_pre_build_command(&project).ok().flatten();
+    let locked = !active && ProjectLock::is_held(&paths.runs(&runs_as.slug));
     ProjectSummary {
         account,
         team_pre_build_command,
-        locked: !active && ProjectLock::is_held(&paths.runs(&project.slug)),
+        locked,
         version: detected.as_ref().ok().and_then(|f| f.header.version.clone()),
         problem: detected.err(),
         unfinished,
@@ -387,6 +391,26 @@ mod tests {
         let this_window = &list(&app).await.unwrap()[0];
         assert!(!this_window.locked);
         assert!(this_window.unfinished.is_none());
+    }
+
+    #[tokio::test]
+    async fn unfinished_and_locked_follow_the_team_files_slug() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = app(dir.path());
+        let folder = fixture_copy(dir.path());
+        add(&app, &folder, "https://plugins.svn.wordpress.org/minimal", None).await.unwrap();
+        std::fs::write(
+            Path::new(&folder).join(".svnpush.json"),
+            r#"{"svn_url": "https://plugins.svn.wordpress.org/team-slug"}"#,
+        )
+        .unwrap();
+        RunJournal::start("20260928-101530", "team-slug", &folder, false).save(&app.paths).unwrap();
+        let _lock = ProjectLock::acquire(&app.paths.runs("team-slug")).unwrap();
+
+        let summary = &list(&app).await.unwrap()[0];
+        assert_eq!(summary.project.slug, "minimal");
+        assert!(summary.locked);
+        assert!(summary.unfinished.is_some());
     }
 
     #[tokio::test]

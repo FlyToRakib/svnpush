@@ -11,7 +11,7 @@ use svnpush_core::run::{
     RunObserver, RunState, journal,
 };
 use svnpush_core::svn::Svn;
-use svnpush_core::{settings, tools, vault};
+use svnpush_core::{project, settings, tools, vault};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -373,7 +373,10 @@ pub async fn reset_working_copy(app: &AppState, path: &str) -> Result<(), ErrorV
 pub async fn prune(app: &AppState) {
     if let Ok(list) = projects::list(app).await {
         for summary in list {
-            let _ = journal::prune_snapshots(&app.paths, &summary.project.slug);
+            // Runs keep their journals under the slug of the team file's URL.
+            let slug = project::with_team_config(&summary.project)
+                .map_or(summary.project.slug, |effective| effective.slug);
+            let _ = journal::prune_snapshots(&app.paths, &slug);
         }
     }
 }

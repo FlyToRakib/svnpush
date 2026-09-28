@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- When a project's .svnpush.json sets a different SVN URL, the Projects list shows its unfinished release (with Resume) and whether it is locked, and old snapshots are cleaned up.
 - A file whose name starts with a dash (-logo.png) no longer stops a release when it is an image or when it is removed.
 - On Windows, removing a released file whose name has characters outside your system language now stops the preview with a clear message and the exact command to delete it on WordPress.org, instead of a Subversion error about a file named ??.
 - Resume no longer takes over a tag of the same version that the interrupted release did not create; it says the tag already exists.
