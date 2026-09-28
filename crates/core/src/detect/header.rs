@@ -74,12 +74,11 @@ fn header_regex(name: &str) -> Option<Regex> {
 /// Finds the first occurrence of header `name` in `text`.
 pub fn find(text: &str, name: &str) -> Option<HeaderMatch> {
     let compiled;
-    let pattern = match FIELDS.iter().position(|field| *field == name) {
-        Some(index) => FIELD_PATTERNS[index].as_ref()?,
-        None => {
-            compiled = header_regex(name)?;
-            &compiled
-        }
+    let pattern = if let Some(index) = FIELDS.iter().position(|field| *field == name) {
+        FIELD_PATTERNS[index].as_ref()?
+    } else {
+        compiled = header_regex(name)?;
+        &compiled
     };
     let cut = VALUE_END.as_ref()?;
     let window = scan_window(text);

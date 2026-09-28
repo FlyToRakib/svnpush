@@ -287,7 +287,7 @@ pub fn looks_like_secret(rel: &str) -> bool {
     let name = file_name(rel).to_ascii_lowercase();
     let env_template = [".example", ".dist", ".sample"].iter().any(|ext| name.ends_with(ext));
     let ca_bundle = name == "cacert.pem"
-        || (name.ends_with(".pem")
+        || (has_extension(&name, &[".pem"])
             && (name.starts_with("ca-bundle") || name.starts_with("ca-certificates")));
     (name.starts_with(".env") && !env_template)
         || name == "wp-config.php"
