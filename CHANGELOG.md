@@ -4,6 +4,40 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Project settings keep the spaces you type, so a pre-build command such as npm run build can be typed. "Settings saved." disappears when you change a project's SVN URL.
+- Counts read "1 file" and "2 files" instead of "file(s)".
+- A project that another copy of SVNpush is releasing now says so, instead of "Releasing in another window".
+- Opening or closing an add or edit form or the AI provider picker, and starting or ending a release, keeps keyboard focus in place instead of losing it.
+- With reduced motion turned on in your system, the page no longer scrolls with an animation when a release starts.
+- Long file paths in the SVN preview wrap, and the preview stays open while Publish asks you to confirm it.
+- If a screen fails to draw, it shows the error and a Reload button instead of a blank window.
+- A mistyped or moved SVN URL is reported as a wrong URL, instead of telling you to ask for commit access.
+- A release where a folder became a file of the same name (or the reverse) no longer stops at Preview with a copy error.
+- Dry runs, cancelled releases and Discard no longer fail to clean up the working copy when the plugin has no assets/ folder on WordPress.org yet.
+- An unfinished release is still offered for Resume when another release's record on disk is damaged.
+- Resume after an interrupted or unconfirmed trunk commit tags with the message you confirmed, not the default one.
+- On Windows, cancelling a pre-build command no longer lets the shell run the rest of the command line (such as the part after &).
+- A readme that puts the real name under "=== Plugin Name ===" now has its headers read, and the readme check still reports the placeholder, as WordPress.org's validator does. A line of spaces inside the header block ends it, as on WordPress.org.
+- The draft refuses changelog lines that would start a new readme section (== or ##), and upgrade notice lines starting with = or #.
+- Writing a changelog entry that has sub-headings (such as "#### Added") no longer leaves the old text behind, and the draft is pre-filled with the whole entry. Entries titled "= Version 1.2.0 =" are recognised.
+- Readme headers written in bold Markdown ("**Stable tag:** 1.2.0") are read and updated correctly.
+- A short description with a Markdown link no longer fails the 150-character check when WordPress.org shows it whole.
+- The readme check counts extra sections toward the Description's word limit, as WordPress.org does, and "== Screenshot ==" is recognised when matching screenshots with plugin images.
+- The file check previews a .distignore saved with a byte order mark the same way the build reads it.
+- The main file and version locations must be inside the plugin folder; a shared .svnpush.json can no longer point Write at files elsewhere.
+- Logs no longer hide plugin names that contain "sk-", such as desk-, task- or kiosk- plugins.
+- OpenAI accounts that run out of credit are reported as a billing problem and marked as needing attention, instead of being told to wait and retry.
+- The AI draft includes changes to files whose names contain accented or other non-ASCII letters.
+- A draft whose first answer is badly formed can be retried near Revoye's size limit, instead of failing as a bad request.
+- The AI is told that diffs, commit messages and file text from your repository are data, not instructions.
+- Local models in LM Studio work: SVNpush asks for JSON in a format LM Studio and Ollama both accept.
+- Stopping an AI draft right as it is sent to Revoye cancels the Revoye job, so it no longer runs in your AI account unseen.
+- Falling back from one Revoye provider to a Revoye provider pinned to another AI no longer fails with "idempotency key reused".
+- Renaming a secret file such as .env to a sample name no longer sends its old values to the AI.
+- Accepting the AI privacy notice no longer resets your settings when the settings file cannot be read.
+- If SVNpush cannot open its data folder or AI client at startup, it says why in a message box instead of closing silently.
+- Saving or removing two Vault accounts at once no longer loses one of the changes, and a full SVN URL pasted as the host is saved as its host, so your projects find the account.
+- Settings, projects, providers and accounts are flushed to disk before they replace the old file, so a crash or power cut cannot leave an empty file.
 - Saving a provider while a release uses AI no longer loses that request's count or a "needs attention" mark.
 - When a project's .svnpush.json sets a different SVN URL, the Projects list shows its unfinished release (with Resume) and whether it is locked, and old snapshots are cleaned up.
 - A file whose name starts with a dash (-logo.png) no longer stops a release when it is an image or when it is removed.
