@@ -1,4 +1,4 @@
-import { useState, type SyntheticEvent } from "react";
+import { useRef, useState, type SyntheticEvent } from "react";
 import type { ErrorView } from "../ipc/bindings/ErrorView";
 import type { Project } from "../ipc/bindings/Project";
 import type { ProjectSettings } from "../ipc/bindings/ProjectSettings";
@@ -35,6 +35,11 @@ export function ProjectSettingsForm({
   const [exclude, setExclude] = useState(project.settings.ai_exclude_patterns.join("\n"));
   const [error, setError] = useState<ErrorView | null>(null);
   const [saved, setSaved] = useState(false);
+  // A key per version location, so removing one row does not shift the others' inputs.
+  const nextId = useRef(project.settings.version_locations.length);
+  const [locationIds, setLocationIds] = useState(() =>
+    project.settings.version_locations.map((_, i) => i),
+  );
 
   const change = (next: Partial<ProjectSettings>) => {
     setSettings({ ...settings, ...next });
@@ -117,7 +122,7 @@ export function ProjectSettingsForm({
           <legend className="field__label">{S.projectSettings.versionLocations}</legend>
           <p className="field__hint">{S.projectSettings.versionLocationsHint}</p>
           {settings.version_locations.map((location, index) => (
-            <div key={index} className="location">
+            <div key={locationIds[index]} className="location">
               <input
                 className="input mono"
                 aria-label={`${S.projectSettings.locationPath} ${String(index + 1)}`}
@@ -144,6 +149,7 @@ export function ProjectSettingsForm({
                 type="button"
                 className="btn btn--sm btn--danger"
                 onClick={() => {
+                  setLocationIds(locationIds.filter((_, i) => i !== index));
                   change({
                     version_locations: settings.version_locations.filter((_, i) => i !== index),
                   });
@@ -158,6 +164,7 @@ export function ProjectSettingsForm({
               type="button"
               className="btn btn--sm"
               onClick={() => {
+                setLocationIds([...locationIds, nextId.current++]);
                 change({
                   version_locations: [...settings.version_locations, { path: "", pattern: "" }],
                 });
@@ -282,7 +289,11 @@ export function ProjectSettingsForm({
         />
 
         {error && <ErrorNotice error={error} />}
-        {saved && <p className="notice notice--ok">{S.projectSettings.saved}</p>}
+        {saved && (
+          <p className="notice notice--ok" role="status">
+            {S.projectSettings.saved}
+          </p>
+        )}
         <div className="row row--between">
           <button type="submit" className="btn btn--primary" disabled={disabled}>
             {S.common.save}

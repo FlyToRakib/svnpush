@@ -16,7 +16,7 @@ export function DetectSummary({ state }: DetectSummaryProps) {
     <div className="stack">
       <dl className="facts">
         <dt>{S.detect.mainFile}</dt>
-        <dd className="mono">{facts.main_file}</dd>
+        <dd className="mono break">{facts.main_file}</dd>
         <dt>{S.detect.slug}</dt>
         <dd className="mono">{facts.slug}</dd>
         <dt>{S.detect.textDomain}</dt>
@@ -42,7 +42,7 @@ export function DetectSummary({ state }: DetectSummaryProps) {
           {facts.versions.map((source) => (
             <tr key={`${source.label}-${source.path}-${String(source.line)}`}>
               <td>{source.label}</td>
-              <td className="mono">
+              <td className="mono break">
                 {source.path}
                 {source.line !== null ? `:${String(source.line)}` : ""}
               </td>
