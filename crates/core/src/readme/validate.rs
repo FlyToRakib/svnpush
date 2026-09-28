@@ -105,13 +105,34 @@ fn major_minor(value: &str) -> Option<(u64, u64)> {
 }
 
 /// WordPress.org ignores a WordPress version above the next release (current
-/// branch plus 0.1). Compared by major.minor, the precision readmes use.
+/// branch plus 0.1, as a float: 6.9 + 0.1 is 7.0). Compared by major.minor,
+/// the precision readmes use.
 fn beyond_current(value: &str, current: Option<&str>) -> bool {
     let (Some(value), Some((major, minor))) = (major_minor(value), current.and_then(major_minor))
     else {
         return false;
     };
-    value > (major, minor + 1)
+    let next = if minor == 9 { (major + 1, 0) } else { (major, minor + 1) };
+    value > next
+}
+
+/// A WordPress version header as `class-parser.php` sanitises it: `phrases`
+/// removed case-insensitively (`str_ireplace`), then anything from the first
+/// `-` dropped.
+fn sanitize_wp_version(value: &str, phrases: &[&str]) -> String {
+    let mut out = value.trim().to_owned();
+    for phrase in phrases {
+        let lower = out.to_ascii_lowercase();
+        let mut kept = String::with_capacity(out.len());
+        let mut rest = 0;
+        for (at, _) in lower.match_indices(&phrase.to_ascii_lowercase()) {
+            kept.push_str(&out[rest..at]);
+            rest = at + phrase.len();
+        }
+        kept.push_str(&out[rest..]);
+        out = kept;
+    }
+    out.trim().split('-').next().unwrap_or_default().to_owned()
 }
 
 fn section_name(key: &str) -> &str {
@@ -163,7 +184,10 @@ fn check_license(readme: &Readme, out: &mut Findings) {
 }
 
 fn check_versions(readme: &Readme, current: Option<&str>, out: &mut Findings) {
-    match readme.header("Requires at least").map(|h| h.value.as_str()).filter(|v| !v.is_empty()) {
+    let requires = readme.header("Requires at least").map(|h| {
+        sanitize_wp_version(&h.value, &["WordPress", "WP", "or higher", "and above", "+"])
+    });
+    match requires.as_deref().filter(|v| !v.is_empty()) {
         Some(v) if !wp_version_ok(v) || beyond_current(v, current) => out.add(
             IssueLevel::Warning,
             "requires_header_ignored",
@@ -172,7 +196,9 @@ fn check_versions(readme: &Readme, current: Option<&str>, out: &mut Findings) {
         Some(_) => {}
         None => out.add(IssueLevel::Note, "requires_header_missing", "The Requires at least field is missing. It should be defined here, or in your main plugin file."),
     }
-    match readme.header("Tested up to").map(|h| h.value.as_str()).filter(|v| !v.is_empty()) {
+    let tested =
+        readme.header("Tested up to").map(|h| sanitize_wp_version(&h.value, &["WordPress", "WP"]));
+    match tested.as_deref().filter(|v| !v.is_empty()) {
         Some(v) if !wp_version_ok(v) || beyond_current(v, current) => out.add(
             IssueLevel::Warning,
             "tested_header_ignored",
@@ -376,6 +402,21 @@ First release.
         let ahead = GOOD.replace("Tested up to: 6.8", "Tested up to: 7.1");
         assert!(codes(&validate(&ahead, Some("6.8.2"))).contains(&"tested_header_ignored"));
         assert!(codes(&validate(&GOOD.replace("6.8", "6.9"), Some("6.8.2"))).is_empty());
+    }
+
+    #[test]
+    fn version_headers_are_sanitised_like_class_parser() {
+        let next_major = GOOD.replace("Tested up to: 6.8", "Tested up to: 7.0");
+        assert!(codes(&validate(&next_major, Some("6.9.1"))).is_empty());
+        let beyond = GOOD.replace("Tested up to: 6.8", "Tested up to: 7.1");
+        assert!(codes(&validate(&beyond, Some("6.9.1"))).contains(&"tested_header_ignored"));
+        let worded = GOOD
+            .replace("Tested up to: 6.8", "Tested up to: WordPress 6.8-RC1")
+            .replace("Requires at least: 6.0", "Requires at least: WP 6.0 or higher");
+        assert!(codes(&validate(&worded, Some("6.8.2"))).is_empty(), "{worded}");
+        let plus = GOOD.replace("Requires at least: 6.0", "Requires at least: 6.0+");
+        assert!(codes(&validate(&plus, None)).is_empty());
+        assert_eq!(sanitize_wp_version("wp 5.9 And Above", &["WP", "and above"]), "5.9");
     }
 
     #[test]

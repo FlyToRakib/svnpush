@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Readme check: Tested up to 7.0 is accepted while WordPress 6.9 is current, and values such as "WordPress 6.8", "6.0 or higher" or "6.8-RC1" are read as WordPress.org reads them.
 - readme.txt is read the way WordPress.org reads it: Markdown-style `#`/`##` headings, blank lines inside the header block, `Tested:` and `Requires:` short forms and repeated headers (the last one counts) all work, and a new changelog entry never adds a second Changelog section.
 - Rewriting an existing changelog entry keeps the blank line under its title.
 - Files that end lines with a lone carriage return (old Mac style) are now read line by line, as WordPress reads them, and edits keep that line ending.
