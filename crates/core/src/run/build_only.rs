@@ -13,6 +13,7 @@ use crate::package::{self, Exclusions, Package};
 use crate::project::{AppPaths, Project};
 use crate::report::Reporter;
 use crate::verify::{self, CheckResult};
+use crate::version::Version;
 
 use super::RunFailure;
 use super::hook::run_pre_build;
@@ -63,6 +64,14 @@ pub async fn build_package(
             Some("Add \"Version: 1.0.0\" to the plugin header.".to_owned()),
         )
     })?;
+    // The version names the build folder, so it is checked like a release's.
+    if Version::parse(&version).is_err() {
+        return Err(RunFailure::new(
+            "BUILD_BAD_VERSION",
+            format!("The plugin header's Version \"{version}\" is not a valid version."),
+            Some("Use a version such as 1.2.3 in the plugin header.".to_owned()),
+        ));
+    }
     let package_root = project.package_root();
     if !package_root.is_dir() {
         return Err(RunFailure::new(
@@ -118,5 +127,19 @@ mod tests {
         assert!(!built.blocked, "{:?}", built.checks);
         assert!(Path::new(&built.package.zip_path).is_file());
         assert!(!plugin.join("dist").exists(), "nothing is written into the plugin folder");
+
+        // A header version that is a path never names a folder to replace.
+        let main = plugin.join("minimal.php");
+        let text = std::fs::read_to_string(&main).unwrap();
+        let version = built.version.clone();
+        std::fs::write(&main, text.replace(&version, "../../..")).unwrap();
+        let err = build_package(&project, &paths, &NullReporter, &CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert_eq!(err.error.code, "BUILD_BAD_VERSION");
+        assert!(dir.path().join("appdata").is_dir());
+        let listing = package::list(&plugin, &Exclusions::load(&plugin, &[]).unwrap()).unwrap();
+        let bad = package::build(&listing, &paths.builds(), "minimal", "..").unwrap_err();
+        assert_eq!(crate::error::Coded::code(&bad), "PACKAGE_BAD_FOLDER_NAME");
     }
 }

@@ -80,6 +80,9 @@ pub enum PackageError {
     /// Writing the zip failed.
     #[error("could not write the zip: {reason}")]
     Zip { reason: String },
+    /// The version or slug cannot name a build folder.
+    #[error("\"{value}\" cannot name a build folder")]
+    BadFolderName { value: String },
 }
 
 impl Coded for PackageError {
@@ -91,6 +94,7 @@ impl Coded for PackageError {
             Self::BadDistignore { .. } => "PACKAGE_BAD_DISTIGNORE",
             Self::Io { .. } => "PACKAGE_IO",
             Self::Zip { .. } => "PACKAGE_ZIP",
+            Self::BadFolderName { .. } => "PACKAGE_BAD_FOLDER_NAME",
         }
     }
 
@@ -103,6 +107,9 @@ impl Coded for PackageError {
                 Some(format!("Rename {path} or exclude it in .distignore."))
             }
             Self::BadDistignore { .. } => Some("Correct the pattern in .distignore.".to_owned()),
+            Self::BadFolderName { .. } => {
+                Some("Use a version such as 1.2.3 in the plugin header.".to_owned())
+            }
             Self::Io { .. } | Self::Zip { .. } => None,
         }
     }
@@ -124,6 +131,13 @@ pub fn build(
     slug: &str,
     version: &str,
 ) -> Result<Package, PackageError> {
+    // Both name folders that are replaced wholesale: a `..` or a separator
+    // would point the removal outside the builds folder.
+    for value in [slug, version] {
+        if value.is_empty() || value.starts_with('.') || value.contains(['/', '\\', ':']) {
+            return Err(PackageError::BadFolderName { value: value.to_owned() });
+        }
+    }
     let out = build_dir(builds, slug, version);
     let staged_root = out.join(slug);
     let files = stage(listing, &staged_root)?;
