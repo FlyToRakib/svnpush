@@ -6,16 +6,18 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-/// Shapes of API keys and bearer tokens the log redaction removes.
+/// Shapes of API keys and bearer tokens the log redaction removes. Key
+/// prefixes must start a word, so a slug such as `wp-desk-booking-system`
+/// is not taken for an `sk-` key.
 static SECRET_SHAPES: LazyLock<Option<Regex>> = LazyLock::new(|| {
     Regex::new(concat!(
         r"(?i)(bearer\s+[A-Za-z0-9._~+/=-]{8,}",
-        r"|revoye_sk_(?:live|test)_[A-Za-z0-9]+",
-        r"|sk-ant-[A-Za-z0-9_-]{8,}",
-        r"|sk-or-v1-[A-Za-z0-9]{8,}",
-        r"|sk-[A-Za-z0-9_-]{16,}",
-        r"|pplx-[A-Za-z0-9]{16,}",
-        r"|AIza[0-9A-Za-z_-]{20,}",
+        r"|\brevoye_sk_(?:live|test)_[A-Za-z0-9]+",
+        r"|\bsk-ant-[A-Za-z0-9_-]{8,}",
+        r"|\bsk-or-v1-[A-Za-z0-9]{8,}",
+        r"|\bsk-[A-Za-z0-9_-]{16,}",
+        r"|\bpplx-[A-Za-z0-9]{16,}",
+        r"|\bAIza[0-9A-Za-z_-]{20,}",
         // A header line or its JSON form: `x-api-key: v`, `"x-api-key": "v"`.
         r#"|(?:x-api-key|x-goog-api-key|authorization)"?\s*[:=]\s*"?(?:bearer\s+)?[^\s",]+"?)"#
     ))
@@ -105,6 +107,19 @@ mod tests {
             assert!(!out.contains("pplx-AbC") && !out.contains("k3y-value-1"), "{out}");
         }
         assert_eq!(redact_secrets(r#"{"x": 1}"#), r#"{"x": 1}"#);
+    }
+
+    #[test]
+    fn keeps_words_that_merely_contain_a_key_prefix() {
+        for text in [
+            "svn ls https://plugins.svn.wordpress.org/wp-desk-booking-system-pro/trunk",
+            "Committed kiosk-mode-for-woocommerce-pro 1.2.0",
+            "tags: task-scheduler-and-reminders",
+        ] {
+            assert_eq!(redact_secrets(text), text);
+        }
+        let out = redact_secrets("key=sk-proj-abcdefghijklmnop1234 (sk-or-v1-abcdef123456)");
+        assert!(!out.contains("abcdefghijklmnop") && !out.contains("abcdef123456"), "{out}");
     }
 
     #[test]
