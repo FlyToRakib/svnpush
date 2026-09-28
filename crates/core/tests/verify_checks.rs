@@ -265,6 +265,22 @@ fn v07_fails_on_a_long_short_description() {
 }
 
 #[test]
+fn v07_counts_the_text_wordpress_org_shows() {
+    // WordPress.org renders the Markdown and strips tags before it counts
+    // 150 characters: this one shows 110.
+    let short = format!(
+        "{} [shortcode](https://wordpress.org/documentation/article/shortcode-block/) and **bold** `code` <em>tags</em>.",
+        "x".repeat(80)
+    );
+    let mut case = Case::passing();
+    case.readme(&README.replace("Short and sweet.", &short));
+    let r = case.status("V07");
+    assert_eq!(r.status, CheckStatus::Pass, "{}", r.message);
+    assert!(r.message.contains("110 characters"), "{}", r.message);
+    assert_eq!(case.status("W11").status, CheckStatus::Pass);
+}
+
+#[test]
 fn v08_fails_on_another_text_domain() {
     let mut case = Case::passing();
     case.facts.header.text_domain = Some("demo-plugin".into());

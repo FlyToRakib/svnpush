@@ -5,6 +5,9 @@
 //! (trademarked names, whether contributor usernames exist, how popular a
 //! tag is) are left to the official page, which the app links to.
 
+use std::sync::LazyLock;
+
+use regex::Regex;
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -81,6 +84,26 @@ impl ReadmeReport {
     pub fn at(&self, level: IssueLevel) -> impl Iterator<Item = &ReadmeIssue> {
         self.issues.iter().filter(move |i| i.level == level)
     }
+}
+
+/// HTML tags, then Markdown images and links, as WordPress.org removes or
+/// renders them.
+static TAG: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"<[^>]*>").ok());
+static IMAGE: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"!\[[^\]]*\]\([^)]*\)").ok());
+static LINK: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"\[([^\]]*)\]\([^)]*\)").ok());
+
+/// The number of characters of `text` WordPress.org shows, which is what
+/// its 150-character short description limit counts: tags stripped,
+/// Markdown rendered (images dropped, links reduced to their text, `**`,
+/// `__` and backticks removed).
+pub fn visible_length(text: &str) -> usize {
+    let mut out = text.to_owned();
+    for (re, with) in [(&TAG, ""), (&IMAGE, ""), (&LINK, "$1")] {
+        if let Some(re) = re.as_ref() {
+            out = re.replace_all(&out, with).into_owned();
+        }
+    }
+    out.replace("**", "").replace("__", "").replace('`', "").trim().chars().count()
 }
 
 fn wp_version_ok(value: &str) -> bool {
@@ -264,7 +287,7 @@ fn check_text(readme: &Readme, out: &mut Findings) {
     let short = readme.short_description.trim();
     if short.is_empty() {
         out.add(IssueLevel::Note, "no_short_description_present", "The Short Description is missing. WordPress.org will use the start of your Description instead.");
-    } else if short.chars().count() > SHORT_DESCRIPTION_CHARS {
+    } else if visible_length(short) > SHORT_DESCRIPTION_CHARS {
         out.add(IssueLevel::Warning, "trimmed_short_description", format!("The Short Description is too long and will be cut off. A maximum of {SHORT_DESCRIPTION_CHARS} characters is supported."));
     }
     // As in class-parser.php: Other Notes and every unknown section (under

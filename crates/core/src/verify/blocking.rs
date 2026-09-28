@@ -198,7 +198,7 @@ fn v07(input: &VerifyInput<'_>) -> CheckResult {
     let Some(readme) = &input.facts.readme else {
         return c.fail(README_MISSING, README_FIX);
     };
-    let count = readme.short_description.chars().count();
+    let count = readme::visible_length(&readme.short_description);
     if count == 0 {
         c.fail(
             "The short description is empty.",

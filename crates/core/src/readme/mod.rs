@@ -10,7 +10,9 @@ use ts_rs::TS;
 use crate::error::Coded;
 
 pub use parse::parse;
-pub use validate::{IssueLevel, OFFICIAL_VALIDATOR_URL, ReadmeIssue, ReadmeReport, validate};
+pub use validate::{
+    IssueLevel, OFFICIAL_VALIDATOR_URL, ReadmeIssue, ReadmeReport, validate, visible_length,
+};
 pub use write::{set_header, upsert_changelog_entry, upsert_upgrade_notice};
 
 /// The file name WordPress.org reads.
