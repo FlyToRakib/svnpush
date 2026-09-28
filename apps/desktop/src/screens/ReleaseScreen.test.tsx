@@ -184,6 +184,24 @@ describe("ReleaseScreen", () => {
     );
   });
 
+  it("keeps focus in the release steps when Release and Cancel swap places", async () => {
+    const user = userEvent.setup();
+    open(runState("DryRunComplete", null));
+    tauriMock.handle("start_run", () => {
+      tauriMock.handle("current_run", () => runState("Detecting", "Detect"));
+      return runState("Detecting", "Detect");
+    });
+    await user.click(screen.getByRole("button", { name: "Release" }));
+    const cancel = await screen.findByRole("button", { name: "Cancel" });
+    const steps = screen.getByRole("heading", { name: "2. Release steps" });
+    expect(document.activeElement).toBe(steps);
+    cancel.focus();
+    act(() => {
+      useRunStore.getState().receiveState(PROJECT_PATH, runState("Cancelled", null));
+    });
+    expect(document.activeElement).toBe(steps);
+  });
+
   it("shows Starting and ignores a second click until the start answers", async () => {
     const user = userEvent.setup();
     open(runState("DryRunComplete", null));

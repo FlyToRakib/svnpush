@@ -70,6 +70,8 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
   const [localError, setLocalError] = useState<ErrorView | null>(null);
   const [discarding, setDiscarding] = useState(false);
   const stepsRef = useRef<HTMLElement>(null);
+  const stepsTitle = useRef<HTMLHeadingElement>(null);
+  const wasActive = useRef<boolean | null>(null);
   // The checks are open between releases and folded during one, unless the
   // developer toggled them while in that same state.
   const [beforeToggle, setBeforeToggle] = useState<{ active: boolean; open: boolean } | null>(null);
@@ -89,6 +91,13 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       stepsRef.current?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
     }
+    // Release and Cancel swap places as a run starts or ends, which drops the
+    // focus of the one you pressed: keep it in the steps instead.
+    const swapped = wasActive.current !== null && wasActive.current !== active;
+    if (swapped && document.activeElement === document.body) {
+      stepsTitle.current?.focus({ preventScroll: true });
+    }
+    wasActive.current = active;
   }, [active]);
   const publishResult = state?.publish ?? null;
   const runId = state?.id ?? null;
@@ -312,7 +321,7 @@ export function ReleaseScreen({ onOpenProviders, onOpenHelp }: ReleaseScreenProp
       </section>
 
       <section className="release__group" aria-labelledby="group-steps" ref={stepsRef}>
-        <h2 id="group-steps" className="release__group-title">
+        <h2 id="group-steps" ref={stepsTitle} className="release__group-title" tabIndex={-1}>
           {S.tools.groups.steps}
         </h2>
         {state ? (
