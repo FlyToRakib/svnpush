@@ -160,7 +160,7 @@ fn check_name(readme: &Readme, out: &mut Findings) {
     let looks_like_header = name.split_once(':').is_some_and(|(key, _)| {
         readme.header(key.trim()).is_some() || super::REQUIRED_HEADERS.contains(&key.trim())
     });
-    if name.is_empty() || name.eq_ignore_ascii_case("plugin name") || looks_like_header {
+    if name.is_empty() || readme.name_placeholder || looks_like_header {
         out.add(
             IssueLevel::Error,
             "invalid_plugin_name_header",
@@ -384,9 +384,11 @@ First release.
     }
 
     #[test]
-    fn a_placeholder_name_line_followed_by_the_name_is_valid() {
+    fn a_placeholder_name_line_is_an_error_even_with_the_name_below() {
+        // class-parser.php reads the name and headers, and flags the
+        // placeholder, which class-validator.php reports as an error.
         let text = GOOD.replace("=== Hello Release ===", "=== Plugin Name ===\nHello Release");
-        assert!(validate(&text, None).issues.is_empty(), "{:?}", validate(&text, None));
+        assert_eq!(codes(&validate(&text, None)), ["invalid_plugin_name_header"]);
     }
 
     #[test]

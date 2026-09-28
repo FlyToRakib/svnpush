@@ -72,6 +72,11 @@ pub struct ChangelogEntry {
 pub struct Readme {
     /// The plugin name from the `=== Name ===` line.
     pub name: Option<String>,
+    /// Whether the name line was the `=== Plugin Name ===` placeholder; the
+    /// name then comes from the next line, if anywhere.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub name_placeholder: bool,
     /// The header lines, in file order.
     pub headers: Vec<ReadmeHeader>,
     /// The short description between the headers and the first section.
