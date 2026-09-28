@@ -12,7 +12,7 @@ use svnpush_core::settings;
 use svnpush_core::wporg_assets::{self, AssetReport};
 use tokio_util::sync::CancellationToken;
 
-use crate::service::projects;
+use crate::service::{self, projects};
 use crate::state::AppState;
 
 /// Validates the project's `readme.txt` as WordPress.org would.
@@ -32,7 +32,7 @@ pub async fn check_readme(app: &AppState, path: &str) -> Result<ReadmeReport, Er
 
 /// Builds the release package without releasing. Refused while a release runs.
 pub async fn build_package(app: &AppState, path: &str) -> Result<BuiltPackage, ErrorView> {
-    if app.runs().get(path).is_some_and(|slot| slot.control.is_some()) {
+    if app.is_active(path) {
         return Err(ErrorView::new(
             "RUN_ALREADY_ACTIVE",
             "A release is running for this plugin.",
@@ -40,9 +40,22 @@ pub async fn build_package(app: &AppState, path: &str) -> Result<BuiltPackage, E
         ));
     }
     let project = projects::load(app, path).await?;
-    build_only::build_package(&project, &app.paths, &NullReporter, &CancellationToken::new())
-        .await
-        .map_err(|f| f.error)
+    let paths = app.paths.clone();
+    // Staging, zipping and hashing are synchronous inside the core, so the
+    // build runs on the blocking pool; the runtime still drives the pre-build
+    // command's process I/O.
+    let runtime = tokio::runtime::Handle::current();
+    service::blocking(move || {
+        runtime
+            .block_on(build_only::build_package(
+                &project,
+                &paths,
+                &NullReporter,
+                &CancellationToken::new(),
+            ))
+            .map_err(|f| f.error)
+    })
+    .await
 }
 
 /// The number of `N. caption` lines in the readme's Screenshots section.

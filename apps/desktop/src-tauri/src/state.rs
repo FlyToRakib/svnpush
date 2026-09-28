@@ -57,4 +57,14 @@ impl AppState {
     pub fn runs(&self) -> MutexGuard<'_, HashMap<String, RunSlot>> {
         self.runs.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+
+    /// Whether this window has a release starting or running for `path`.
+    pub fn is_active(&self, path: &str) -> bool {
+        self.runs().get(path).is_some_and(|slot| slot.control.is_some())
+    }
+
+    /// Whether this window has any release starting or running.
+    pub fn any_active(&self) -> bool {
+        self.runs().values().any(|slot| slot.control.is_some())
+    }
 }

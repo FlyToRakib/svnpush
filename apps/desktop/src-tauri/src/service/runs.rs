@@ -7,8 +7,8 @@ use svnpush_core::package::Exclusions;
 use svnpush_core::report::NullReporter;
 use svnpush_core::run::files::FilePreview;
 use svnpush_core::run::{
-    self, Decision, ErrorView, Phase, ReleaseDraft, Run, RunInputs, RunJournal, RunObserver,
-    RunState, journal,
+    self, Decision, ErrorView, Phase, ProjectLock, ReleaseDraft, Run, RunInputs, RunJournal,
+    RunObserver, RunState, journal,
 };
 use svnpush_core::svn::Svn;
 use svnpush_core::{settings, tools, vault};
@@ -16,7 +16,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::events::{EventSink, ProjectObserver};
-use crate::service::projects;
+use crate::service::{self, projects};
 use crate::state::{AppState, RunControl, RunSlot};
 
 async fn inputs(app: &AppState, path: &str, dry_run: bool) -> Result<RunInputs, ErrorView> {
@@ -56,6 +56,38 @@ fn observer(app: &Arc<AppState>, sink: &Arc<dyn EventSink>, path: &str) -> Arc<P
     })
 }
 
+fn already_active() -> ErrorView {
+    ErrorView::new(
+        "RUN_ALREADY_ACTIVE",
+        "A release is already running for this plugin.",
+        Some("Finish or cancel it first.".to_owned()),
+    )
+}
+
+/// Claims the project's slot for a new run before anything is awaited, so a
+/// second start is refused from this moment. Returns the slot it replaced.
+fn claim(
+    app: &AppState,
+    path: &str,
+    state: RunState,
+    control: RunControl,
+) -> Result<Option<RunSlot>, ErrorView> {
+    let mut runs = app.runs();
+    if runs.get(path).is_some_and(|slot| slot.control.is_some()) {
+        return Err(already_active());
+    }
+    Ok(runs.insert(path.to_owned(), RunSlot { state, control: Some(control) }))
+}
+
+/// Gives the slot back after a claimed run failed to start.
+fn unclaim(app: &AppState, path: &str, previous: Option<RunSlot>) {
+    let mut runs = app.runs();
+    match previous {
+        Some(slot) => runs.insert(path.to_owned(), slot),
+        None => runs.remove(path),
+    };
+}
+
 /// Starts a release, an assets-only release, or a dry run of either, and returns its first state.
 pub async fn start(
     app: Arc<AppState>,
@@ -64,24 +96,29 @@ pub async fn start(
     dry_run: bool,
     assets_only: bool,
 ) -> Result<RunState, ErrorView> {
-    if app.runs().get(path).is_some_and(|slot| slot.control.is_some()) {
-        return Err(ErrorView::new(
-            "RUN_ALREADY_ACTIVE",
-            "A release is already running for this plugin.",
-            Some("Finish or cancel it first.".to_owned()),
-        ));
-    }
-    let mut inputs = inputs(&app, path, dry_run).await?;
-    inputs.assets_only = assets_only;
     let (decisions, receiver) = mpsc::channel(4);
     let cancel = CancellationToken::new();
-    let watcher = observer(&app, &sink, path);
-    let run = Run::prepare(inputs, watcher, cancel.clone(), receiver).map_err(|f| f.error)?;
+    let placeholder = RunState::new(String::new(), path.to_owned(), dry_run);
+    let previous =
+        claim(&app, path, placeholder, RunControl { decisions, cancel: cancel.clone() })?;
+    let prepared = async {
+        let mut inputs = inputs(&app, path, dry_run).await?;
+        inputs.assets_only = assets_only;
+        let watcher = observer(&app, &sink, path);
+        Run::prepare(inputs, watcher, cancel, receiver).map_err(|f| f.error)
+    }
+    .await;
+    let run = match prepared {
+        Ok(run) => run,
+        Err(error) => {
+            unclaim(&app, path, previous);
+            return Err(error);
+        }
+    };
     let first = run.state().clone();
-    app.runs().insert(
-        path.to_owned(),
-        RunSlot { state: first.clone(), control: Some(RunControl { decisions, cancel }) },
-    );
+    if let Some(slot) = app.runs().get_mut(path) {
+        slot.state = first.clone();
+    }
 
     let owned_path = path.to_owned();
     tauri::async_runtime::spawn(async move {
@@ -102,11 +139,19 @@ async fn finish(
     if let Err(error) = projects::record_outcome(app, path, journal).await {
         last.notices.push(format!("Could not save the result on the project: {}", error.message));
     }
-    if let Some(slot) = app.runs().get_mut(path) {
-        slot.state = last.clone();
-        slot.control = None;
+    // Only the run that owns the slot may end it: a stale run must never
+    // clear the controls of the run that replaced it.
+    let owned = match app.runs().get_mut(path) {
+        Some(slot) if slot.state.id == last.id => {
+            slot.state = last.clone();
+            slot.control = None;
+            true
+        }
+        _ => false,
+    };
+    if owned {
+        sink.run_state(crate::events::RunStateEvent { project_path: path.to_owned(), state: last });
     }
-    sink.run_state(crate::events::RunStateEvent { project_path: path.to_owned(), state: last });
 }
 
 /// The latest run state for a project, if it has run since the app started.
@@ -149,8 +194,12 @@ pub async fn preview_files(
             Some("Check the package root in project settings.".to_owned()),
         ));
     }
-    run::files::preview(&root, distignore, &[app.paths.builds()])
-        .map_err(|e| ErrorView::from_coded(&e))
+    let distignore = distignore.to_owned();
+    let skip = [app.paths.builds()];
+    service::blocking(move || {
+        run::files::preview(&root, &distignore, &skip).map_err(|e| ErrorView::from_coded(&e))
+    })
+    .await
 }
 
 /// Step 5: the files to release are right. `distignore`, when given, is saved
@@ -255,21 +304,25 @@ pub async fn resume(
     path: &str,
     id: &str,
 ) -> Result<RunState, ErrorView> {
+    if app.is_active(path) {
+        return Err(already_active());
+    }
     let found = journal_by_id(&app, path, id).await?;
     if found.needs_tag() {
-        let inputs = inputs(&app, path, false).await?;
-        let watcher = observer(&app, &sink, path);
         let cancel = CancellationToken::new();
         let (decisions, _) = mpsc::channel(1);
         let mut first = RunState::new(found.id.clone(), path.to_owned(), false);
         first.phase = Phase::Publishing;
-        app.runs().insert(
-            path.to_owned(),
-            RunSlot {
-                state: first.clone(),
-                control: Some(RunControl { decisions, cancel: cancel.clone() }),
-            },
-        );
+        let previous =
+            claim(&app, path, first.clone(), RunControl { decisions, cancel: cancel.clone() })?;
+        let inputs = match inputs(&app, path, false).await {
+            Ok(inputs) => inputs,
+            Err(error) => {
+                unclaim(&app, path, previous);
+                return Err(error);
+            }
+        };
+        let watcher = observer(&app, &sink, path);
         let owned_path = path.to_owned();
         tauri::async_runtime::spawn(async move {
             let (last, journal) = run::resume_tag(inputs, watcher, cancel, found).await;
@@ -294,12 +347,21 @@ pub async fn discard(
     run::discard(&inputs, watcher.as_ref(), found).await.map(|_| ())
 }
 
-/// Deletes and re-checks-out the sparse working copy (the V15 fix).
+/// Deletes and re-checks-out the sparse working copy (the V15 fix). Refused
+/// while a release runs, and holds the project lock throughout.
 pub async fn reset_working_copy(app: &AppState, path: &str) -> Result<(), ErrorView> {
+    if app.is_active(path) {
+        return Err(ErrorView::new(
+            "RUN_ALREADY_ACTIVE",
+            "A release is running for this plugin.",
+            Some("Wait for it to finish, then reset the working copy.".to_owned()),
+        ));
+    }
     let inputs = inputs(app, path, true).await?;
     let Some(bin) = inputs.svn.path.clone().filter(|_| inputs.svn.ok) else {
         return Err(ErrorView::new("TOOLS_SVN_UNAVAILABLE", inputs.svn.message, inputs.svn.fix));
     };
+    let _lock = ProjectLock::acquire(&app.paths.runs(&inputs.project.slug)).map_err(|f| f.error)?;
     let wc = app.paths.working_copy(&inputs.project.slug);
     Svn::new(PathBuf::from(bin), &NullReporter, CancellationToken::new())
         .reset(&inputs.project.svn_url, &wc, None)
@@ -313,5 +375,69 @@ pub async fn prune(app: &AppState) {
         for summary in list {
             let _ = journal::prune_snapshots(&app.paths, &summary.project.slug);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{self, RecordingSink};
+
+    fn control() -> RunControl {
+        let (decisions, _) = mpsc::channel(1);
+        RunControl { decisions, cancel: CancellationToken::new() }
+    }
+
+    #[test]
+    fn a_claimed_slot_refuses_a_second_start_until_it_is_given_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_support::app(dir.path());
+        let state = || RunState::new(String::new(), "/p".into(), false);
+        let previous = claim(&app, "/p", state(), control()).unwrap();
+        assert!(previous.is_none());
+        assert!(app.is_active("/p"));
+        assert_eq!(claim(&app, "/p", state(), control()).unwrap_err().code, "RUN_ALREADY_ACTIVE");
+        unclaim(&app, "/p", previous);
+        assert!(app.runs().get("/p").is_none());
+
+        // A failed start puts the finished run's slot back as it was.
+        app.runs().insert("/p".into(), RunSlot { state: state(), control: None });
+        let previous = claim(&app, "/p", state(), control()).unwrap();
+        unclaim(&app, "/p", previous);
+        assert!(app.runs().get("/p").is_some_and(|s| s.control.is_none()));
+    }
+
+    #[tokio::test]
+    async fn only_the_run_that_owns_the_slot_ends_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_support::app(dir.path());
+        let recorder = Arc::new(RecordingSink::default());
+        let sink: Arc<dyn EventSink> = recorder.clone();
+        test_support::active_run(&app, "/p", "live");
+
+        let stale = RunState::new("stale".into(), "/p".into(), false);
+        let journal = RunJournal::start("stale", "p", "/p", false);
+        finish(&app, &sink, "/p", stale, &journal).await;
+        assert!(app.is_active("/p"));
+        assert!(recorder.0.lock().unwrap().is_empty());
+
+        let live = RunState::new("live".into(), "/p".into(), false);
+        let journal = RunJournal::start("live", "p", "/p", false);
+        finish(&app, &sink, "/p", live, &journal).await;
+        assert!(!app.is_active("/p"));
+        assert_eq!(recorder.0.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn resume_and_reset_are_refused_while_a_run_is_active() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = Arc::new(test_support::app(dir.path()));
+        let sink: Arc<dyn EventSink> = Arc::new(RecordingSink::default());
+        test_support::active_run(&app, "/p", "live");
+        let resumed = resume(app.clone(), sink, "/p", "old").await.unwrap_err();
+        assert_eq!(resumed.code, "RUN_ALREADY_ACTIVE");
+        let reset = reset_working_copy(&app, "/p").await.unwrap_err();
+        assert_eq!(reset.code, "RUN_ALREADY_ACTIVE");
+        assert!(app.is_active("/p"));
     }
 }

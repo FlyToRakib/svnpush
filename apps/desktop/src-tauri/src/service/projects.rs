@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use svnpush_core::clock;
 use svnpush_core::detect::{self, DetectOptions};
-use svnpush_core::project::{self, Project, ProjectSettings};
+use svnpush_core::project::{self, AppPaths, Project, ProjectSettings};
 use svnpush_core::run::{ErrorView, ProjectLock, RunJournal, journal};
 use ts_rs::TS;
 
+use crate::service;
 use crate::state::AppState;
 
 /// A project row in the Projects list.
@@ -91,7 +92,9 @@ pub fn inspect_folder(folder: &str) -> Result<FolderInspection, ErrorView> {
     })
 }
 
-fn summarise(app: &AppState, project: Project) -> ProjectSummary {
+/// `active` is whether this window is releasing the project: its own run is
+/// then neither "unfinished" nor "locked by another window".
+fn summarise(paths: &AppPaths, project: Project, active: bool) -> ProjectSummary {
     let effective = project::with_team_config(&project);
     let detected = effective.as_ref().map_err(|e| ErrorView::from_coded(e)).and_then(|p| {
         detect::detect(
@@ -104,11 +107,11 @@ fn summarise(app: &AppState, project: Project) -> ProjectSummary {
         )
         .map_err(|e| ErrorView::from_coded(&e))
     });
-    let unfinished = journal::list(&app.paths, &project.slug)
+    let unfinished = journal::list(paths, &project.slug)
         .ok()
         .and_then(|all| all.into_iter().next())
-        .filter(|j| !j.discarded && (j.is_interrupted() || j.needs_tag()));
-    let accounts = svnpush_core::vault::load_accounts(&app.paths).unwrap_or_default();
+        .filter(|j| !active && !j.discarded && (j.is_interrupted() || j.needs_tag()));
+    let accounts = svnpush_core::vault::load_accounts(paths).unwrap_or_default();
     let account = svnpush_core::vault::resolve_account(
         &accounts,
         &svnpush_core::vault::svn_host(&project.svn_url),
@@ -117,7 +120,7 @@ fn summarise(app: &AppState, project: Project) -> ProjectSummary {
     .map(|a| a.username.clone());
     ProjectSummary {
         account,
-        locked: ProjectLock::is_held(&app.paths.runs(&project.slug)),
+        locked: !active && ProjectLock::is_held(&paths.runs(&project.slug)),
         version: detected.as_ref().ok().and_then(|f| f.header.version.clone()),
         problem: detected.err(),
         unfinished,
@@ -127,9 +130,17 @@ fn summarise(app: &AppState, project: Project) -> ProjectSummary {
 
 /// Every project with its current version and unfinished runs.
 pub async fn list(app: &AppState) -> Result<Vec<ProjectSummary>, ErrorView> {
-    let _guard = app.projects_lock.lock().await;
-    let projects = project::load_projects(&app.paths).map_err(|e| ErrorView::from_coded(&e))?;
-    Ok(projects.into_iter().map(|p| summarise(app, p)).collect())
+    let projects = {
+        let _guard = app.projects_lock.lock().await;
+        project::load_projects(&app.paths).map_err(|e| ErrorView::from_coded(&e))?
+    };
+    // Detection, journals and lock checks read the disk for every project.
+    let active: Vec<bool> = projects.iter().map(|p| app.is_active(&p.path)).collect();
+    let paths = app.paths.clone();
+    service::blocking(move || {
+        Ok(projects.into_iter().zip(active).map(|(p, a)| summarise(&paths, p, a)).collect())
+    })
+    .await
 }
 
 /// Adds a project after checking the folder detects with this SVN URL.
@@ -168,7 +179,7 @@ pub async fn add(
     };
     projects.push(project.clone());
     project::save_projects(&app.paths, &projects).map_err(|e| ErrorView::from_coded(&e))?;
-    Ok(summarise(app, project))
+    Ok(summarise(&app.paths, project, false))
 }
 
 /// Saves a project's SVN URL and settings.
@@ -191,7 +202,7 @@ pub async fn update(
     project.settings = settings;
     let updated = project.clone();
     project::save_projects(&app.paths, &projects).map_err(|e| ErrorView::from_coded(&e))?;
-    Ok(summarise(app, updated))
+    Ok(summarise(&app.paths, updated, app.is_active(path)))
 }
 
 /// Removes a project from the list. Files, journals and the working copy stay on disk.
@@ -329,6 +340,25 @@ mod tests {
         let mut keys: Vec<&String> = json.as_object().unwrap().keys().collect();
         keys.sort();
         assert_eq!(keys, ["code", "fix", "message"]);
+    }
+
+    #[tokio::test]
+    async fn this_windows_own_run_is_neither_unfinished_nor_locked() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = app(dir.path());
+        let folder = fixture_copy(dir.path());
+        add(&app, &folder, "https://plugins.svn.wordpress.org/minimal", None).await.unwrap();
+        RunJournal::start("20260928-101530", "minimal", &folder, false).save(&app.paths).unwrap();
+        let _lock = ProjectLock::acquire(&app.paths.runs("minimal")).unwrap();
+
+        let other_window = &list(&app).await.unwrap()[0];
+        assert!(other_window.locked);
+        assert!(other_window.unfinished.is_some());
+
+        crate::test_support::active_run(&app, &folder, "20260928-101530");
+        let this_window = &list(&app).await.unwrap()[0];
+        assert!(!this_window.locked);
+        assert!(this_window.unfinished.is_none());
     }
 
     #[tokio::test]
