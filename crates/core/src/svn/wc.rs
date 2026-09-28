@@ -53,8 +53,10 @@ impl Svn<'_> {
 
     /// Makes sure `wc` is a sparse working copy of `url` and up to date.
     ///
-    /// An existing copy is reused and repaired with `svn cleanup`; if that
-    /// fails, or the copy points elsewhere, it is checked out again.
+    /// An existing copy is reused: repaired with `svn cleanup` and reverted,
+    /// so nothing an interrupted run left behind (added or copied files)
+    /// leaks into this one. If that fails, or the copy points elsewhere, it
+    /// is checked out again.
     pub async fn ensure_working_copy(
         &self,
         url: &str,
@@ -66,7 +68,7 @@ impl Svn<'_> {
                 .working_copy_url(wc)
                 .await
                 .is_ok_and(|found| found.trim_end_matches('/') == url.trim_end_matches('/'));
-        if !reusable || self.cleanup(wc).await.is_err() {
+        if !reusable || self.revert(wc).await.is_err() {
             self.reporter.info("Checking out a fresh sparse working copy.");
             return self.checkout(url, wc, credentials).await;
         }
@@ -165,8 +167,10 @@ impl Svn<'_> {
     }
 
     /// Undoes every local change in `trunk/` and `assets/`, including files a
-    /// sync added, so the next run starts clean.
+    /// sync added or copied, so the next run starts clean. `svn cleanup`
+    /// first releases the locks a killed `svn` leaves behind.
     pub async fn revert(&self, wc: &Path) -> Result<(), SvnError> {
+        self.cleanup(wc).await?;
         let folders = Self::deep_folders(wc);
         if folders.is_empty() {
             return Ok(());
@@ -174,19 +178,21 @@ impl Svn<'_> {
         let mut args = os(&["revert", "--recursive"]);
         args.extend(folders.iter().map(|f| f.as_os_str().to_owned()));
         self.local(args).await?;
-        for entry in self.status(wc).await? {
-            if entry.item != StatusItem::Unversioned {
-                continue;
-            }
-            let path = wc.join(&entry.path);
-            let removed = if path.is_dir() {
-                std::fs::remove_dir_all(&path)
-            } else {
-                std::fs::remove_file(&path)
-            };
-            removed.map_err(|e| io_error("remove", &path, e))?;
-        }
+        // `svn revert` keeps added files on disk; remove every unversioned
+        // and ignored file so none can pass for a server copy later.
+        let mut args = os(&["cleanup", "--remove-unversioned", "--remove-ignored"]);
+        args.extend(folders.iter().map(|f| f.as_os_str().to_owned()));
+        self.local(args).await?;
         Ok(())
+    }
+
+    /// Status of everything under `folder`, ignored files included, with
+    /// paths relative to `folder`.
+    pub(crate) async fn folder_status(&self, folder: &Path) -> Result<Vec<StatusEntry>, SvnError> {
+        let mut args = os(&["status", "--xml", "--no-ignore"]);
+        args.push(folder.as_os_str().to_owned());
+        let output = self.exec(args, None, false).await?;
+        status::parse(&output.stdout, folder)
     }
 
     /// The local diff of everything under `folder`, split per file. Keys are

@@ -2,6 +2,7 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -41,7 +42,108 @@ fn join_url(base: &str, path: &str) -> String {
     format!("{}/{}", base.trim_end_matches('/'), path.trim_start_matches('/'))
 }
 
+/// Log messages compare equal whatever their line endings and outer blank space.
+fn normalise(message: &str) -> String {
+    message.replace("\r\n", "\n").trim().to_owned()
+}
+
+/// The revision and message of the first entry of `svn log --xml`.
+fn first_log_entry(xml: &str) -> Result<Option<(u64, String)>, SvnError> {
+    let doc =
+        roxmltree::Document::parse(xml).map_err(|e| SvnError::Parse { detail: e.to_string() })?;
+    let Some(entry) = doc.descendants().find(|n| n.has_tag_name("logentry")) else {
+        return Ok(None);
+    };
+    let revision = entry
+        .attribute("revision")
+        .and_then(|r| r.parse().ok())
+        .ok_or_else(|| SvnError::Parse { detail: "log entry without a revision".to_owned() })?;
+    let message = entry
+        .children()
+        .find(|c| c.has_tag_name("msg"))
+        .and_then(|m| m.text())
+        .unwrap_or_default()
+        .to_owned();
+    Ok(Some((revision, message)))
+}
+
+/// Entry names in `svn list --xml` output; folders end with `/`.
+fn list_entries(xml: &str) -> Result<Vec<String>, SvnError> {
+    let doc =
+        roxmltree::Document::parse(xml).map_err(|e| SvnError::Parse { detail: e.to_string() })?;
+    Ok(doc
+        .descendants()
+        .filter(|n| n.has_tag_name("entry"))
+        .filter_map(|entry| {
+            let name = entry.children().find(|c| c.has_tag_name("name"))?.text()?;
+            let slash = if entry.attribute("kind") == Some("dir") { "/" } else { "" };
+            Some(format!("{name}{slash}"))
+        })
+        .collect())
+}
+
+/// A commit message in a UTF-8 file for `--file … --encoding UTF-8`. On
+/// Windows, `--message` passes the text through the ANSI code page, which
+/// corrupts other characters in the log for good.
+struct MessageFile(PathBuf);
+
+impl MessageFile {
+    fn write(message: &str) -> Result<Self, SvnError> {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("svnpush-message-{}-{n}.txt", std::process::id()));
+        std::fs::write(&path, message).map_err(|e| super::io_error("write", &path, e))?;
+        Ok(Self(path))
+    }
+
+    fn args(&self) -> [OsString; 4] {
+        ["--file".into(), self.0.clone().into_os_string(), "--encoding".into(), "UTF-8".into()]
+    }
+}
+
+impl Drop for MessageFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 impl Svn<'_> {
+    /// The revision `url` last changed in; `None` when it does not exist.
+    pub async fn last_changed_revision(
+        &self,
+        url: &str,
+        credentials: Option<&Credentials>,
+    ) -> Result<Option<u64>, SvnError> {
+        let args =
+            vec!["info".into(), "--show-item".into(), "last-changed-revision".into(), url.into()];
+        match self.network(args, credentials, false).await {
+            Ok(output) => output.stdout.trim().parse().map(Some).map_err(|_| SvnError::Parse {
+                detail: format!("unexpected revision {:?}", output.stdout.trim()),
+            }),
+            Err(SvnError::NotFound { .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The revision of a commit with `message` under `url`, newer than
+    /// `since` when that is known: whether a commit that reported an error,
+    /// or was interrupted, reached the server. Reads `svn log --xml`, which
+    /// does not depend on the language of `svn`'s messages.
+    pub async fn find_commit(
+        &self,
+        url: &str,
+        since: Option<u64>,
+        message: &str,
+        credentials: Option<&Credentials>,
+    ) -> Result<Option<u64>, SvnError> {
+        let args = vec!["log".into(), "--xml".into(), "--limit".into(), "1".into(), url.into()];
+        let output = self.network(args, credentials, false).await?;
+        let Some((revision, found)) = first_log_entry(&output.stdout)? else { return Ok(None) };
+        let ours = normalise(&found) == normalise(message) && since.is_none_or(|s| revision > s);
+        Ok(ours.then_some(revision))
+    }
+
     /// Commits `trunk/` and `assets/` with `message`. `None` when nothing changed.
     pub async fn commit(
         &self,
@@ -55,21 +157,32 @@ impl Svn<'_> {
     }
 
     /// Commits only the given working-copy folders (an assets-only release).
+    /// Cancel does not interrupt a commit once it has started.
     pub async fn commit_paths(
         &self,
         paths: &[PathBuf],
         message: &str,
         credentials: &Credentials,
     ) -> Result<Option<u64>, SvnError> {
-        let mut args: Vec<OsString> = vec!["commit".into(), "--message".into(), message.into()];
+        let file = MessageFile::write(message)?;
+        let mut args: Vec<OsString> = vec!["commit".into()];
+        args.extend(file.args());
         args.extend(paths.iter().map(|p| p.as_os_str().to_owned()));
-        let output = self.network(args, Some(credentials), true).await?;
+        let output = self.shielded().network(args, Some(credentials), true).await?;
         if output.stdout.trim().is_empty() {
             return Ok(None);
         }
-        committed_revision(&output.stdout)
+        if let Some(revision) = committed_revision(&output.stdout) {
+            return Ok(Some(revision));
+        }
+        // Localised output (Windows builds may ignore LC_MESSAGES): ask the server.
+        let no_revision = || SvnError::Parse { detail: "no revision in commit output".to_owned() };
+        let root = paths.first().and_then(|p| p.parent()).ok_or_else(no_revision)?;
+        let url = self.working_copy_url(root).await?;
+        self.find_commit(&url, None, message, Some(credentials))
+            .await?
             .map(Some)
-            .ok_or_else(|| SvnError::Parse { detail: "no revision in commit output".to_owned() })
+            .ok_or_else(no_revision)
     }
 
     /// Server-side copy of `trunk` (at `revision` when known) to `tags/<version>`.
@@ -90,15 +203,17 @@ impl Svn<'_> {
             Some(rev) => format!("{}@{rev}", join_url(url, "trunk")),
             None => join_url(url, "trunk"),
         };
-        let args: Vec<OsString> = vec![
-            "copy".into(),
-            trunk.into(),
-            join_url(url, &format!("tags/{version}")).into(),
-            "--message".into(),
-            message.into(),
-        ];
-        let output = self.network(args, Some(credentials), true).await?;
-        committed_revision(&output.stdout)
+        let tag_url = join_url(url, &format!("tags/{version}"));
+        let file = MessageFile::write(message)?;
+        let mut args: Vec<OsString> = vec!["copy".into(), trunk.into(), tag_url.clone().into()];
+        args.extend(file.args());
+        // Cancel does not interrupt a copy once it has started.
+        let output = self.shielded().network(args, Some(credentials), true).await?;
+        if let Some(revision) = committed_revision(&output.stdout) {
+            return Ok(revision);
+        }
+        self.last_changed_revision(&tag_url, Some(credentials))
+            .await?
             .ok_or_else(|| SvnError::Parse { detail: "no revision in copy output".to_owned() })
     }
 
@@ -108,14 +223,10 @@ impl Svn<'_> {
         url: &str,
         credentials: Option<&Credentials>,
     ) -> Result<Vec<String>, SvnError> {
-        let output = self.network(vec!["list".into(), url.into()], credentials, false).await?;
-        Ok(output
-            .stdout
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .map(str::to_owned)
-            .collect())
+        // XML is always UTF-8; plain output is in the console code page on Windows.
+        let args = vec!["list".into(), "--xml".into(), url.into()];
+        let output = self.network(args, credentials, false).await?;
+        list_entries(&output.stdout)
     }
 
     /// Folder names under `tags/`, without the trailing `/`.
@@ -203,6 +314,21 @@ mod tests {
         let out = "Sending        trunk/a.php\nTransmitting file data .done\nCommitting transaction...\nCommitted revision 42.\n";
         assert_eq!(committed_revision(out), Some(42));
         assert_eq!(committed_revision("nothing"), None);
+    }
+
+    #[test]
+    fn lists_names_with_folder_slashes() {
+        let xml = "<?xml version=\"1.0\"?>\n<lists><list path=\"x\">\n<entry kind=\"dir\"><name>inc</name></entry>\n<entry kind=\"file\"><name>日本.php</name><size>1</size></entry>\n</list></lists>";
+        assert_eq!(list_entries(xml).unwrap(), ["inc/", "日本.php"]);
+    }
+
+    #[test]
+    fn reads_the_first_log_entry() {
+        let xml = "<?xml version=\"1.0\"?>\n<log>\n<logentry revision=\"7\">\n<author>a</author>\n<msg>Release 1.0.1\n</msg>\n</logentry>\n</log>";
+        let (revision, message) = first_log_entry(xml).unwrap().unwrap();
+        assert_eq!(revision, 7);
+        assert_eq!(normalise(&message), normalise("Release 1.0.1\r\n"));
+        assert!(first_log_entry("<log></log>").unwrap().is_none());
     }
 
     #[test]

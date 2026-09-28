@@ -194,7 +194,8 @@ local changes are rolled back.
    pass.
 2. The staged tree is mirrored into `trunk/`, and the assets folder into
    `assets/`: new files are added, changed files overwritten, and removed
-   files deleted, in batches of 100 paths.
+   files deleted. Files an interrupted run left in the working copy are
+   removed first, and a folder renamed only in case is replaced.
 3. Added, modified and deleted lists for trunk and assets are shown, with a
    diff per file (2 MB in total), the tag URL and the default commit
    messages.

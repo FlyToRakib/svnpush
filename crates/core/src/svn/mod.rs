@@ -78,6 +78,9 @@ pub enum SvnError {
     /// A URL does not exist on the server.
     #[error("not found on the server: {detail}")]
     NotFound { detail: String },
+    /// `svn` refused a local path as a target (E200009).
+    #[error("svn could not use a path: {detail}")]
+    InvalidPath { detail: String },
     /// `tags/<version>` already exists.
     #[error("tags/{version} already exists on the server")]
     TagExists { version: String },
@@ -107,6 +110,7 @@ impl Coded for SvnError {
             Self::OutOfDate { .. } => "SVN_OUT_OF_DATE",
             Self::WorkingCopy { .. } => "SVN_WORKING_COPY",
             Self::NotFound { .. } => "SVN_NOT_FOUND",
+            Self::InvalidPath { .. } => "SVN_INVALID_PATH",
             Self::TagExists { .. } => "SVN_TAG_EXISTS",
             Self::Failed { .. } => "SVN_FAILED",
             Self::Cancelled => "CANCELLED",
@@ -129,6 +133,9 @@ impl Coded for SvnError {
                 Some("Reset the working copy and run the release again.".to_owned())
             }
             Self::NotFound { .. } => Some("Check the project's SVN URL.".to_owned()),
+            Self::InvalidPath { .. } => Some(
+                "Rename the file named in the log (Subversion on Windows cannot handle some characters), or leave it out in .distignore.".to_owned(),
+            ),
             Self::TagExists { .. } => Some("Release a new version number.".to_owned()),
             Self::Process(_) => Some(crate::tools::svn_install_instructions().to_owned()),
             Self::Failed { .. } | Self::Cancelled | Self::Io { .. } | Self::Parse { .. } => None,
@@ -162,9 +169,21 @@ impl<'a> Svn<'a> {
         Self { bin: bin.into(), reporter, cancel }
     }
 
+    /// The same client, but a cancel no longer interrupts it. Used for
+    /// commits and copies: killing one mid-flight leaves it unknown whether
+    /// it reached the server.
+    fn shielded(&self) -> Svn<'a> {
+        Svn { bin: self.bin.clone(), reporter: self.reporter, cancel: CancellationToken::new() }
+    }
+
     /// Runs `svn <args>` locally (no server contact).
     async fn local(&self, args: Vec<OsString>) -> Result<ProcessOutput, SvnError> {
         self.exec(args, None, true).await
+    }
+
+    /// Runs `svn <args>` locally with `dir` as the working directory.
+    async fn local_in(&self, dir: &Path, args: Vec<OsString>) -> Result<ProcessOutput, SvnError> {
+        self.exec_in(Some(dir), args, None, true).await
     }
 
     /// Runs `svn <args>` against the server, with credentials over stdin when given.
@@ -187,6 +206,16 @@ impl<'a> Svn<'a> {
 
     async fn exec(
         &self,
+        args: Vec<OsString>,
+        credentials: Option<&Credentials>,
+        log_output: bool,
+    ) -> Result<ProcessOutput, SvnError> {
+        self.exec_in(None, args, credentials, log_output).await
+    }
+
+    async fn exec_in(
+        &self,
+        cwd: Option<&Path>,
         mut args: Vec<OsString>,
         credentials: Option<&Credentials>,
         log_output: bool,
@@ -196,7 +225,7 @@ impl<'a> Svn<'a> {
         let spec = ProcessSpec {
             program: &self.bin,
             args,
-            cwd: None,
+            cwd,
             stdin: credentials.map(|c| &c.password),
             log_output,
         };
@@ -213,12 +242,18 @@ impl<'a> Svn<'a> {
         }
     }
 
-    /// Runs `svn <command> <fixed args> <paths>` in batches.
-    async fn batched(&self, command: &[&str], paths: &[PathBuf]) -> Result<(), SvnError> {
-        for chunk in paths.chunks(TARGETS_PER_CALL) {
+    /// Runs `svn <command> <fixed args> <paths>` in batches, in `base`, with
+    /// `rels` relative to it.
+    async fn batched(
+        &self,
+        command: &[&str],
+        base: &Path,
+        rels: &[String],
+    ) -> Result<(), SvnError> {
+        for chunk in rels.chunks(TARGETS_PER_CALL) {
             let mut args: Vec<OsString> = command.iter().map(OsString::from).collect();
-            args.extend(chunk.iter().map(|p| p.as_os_str().to_owned()));
-            self.local(args).await?;
+            args.extend(chunk.iter().map(|rel| path_target(rel)));
+            self.local_in(base, args).await?;
         }
         Ok(())
     }
@@ -228,6 +263,13 @@ impl<'a> Svn<'a> {
     pub async fn ping(&self, url: &str, credentials: Option<&Credentials>) -> Result<(), SvnError> {
         self.network(vec!["info".into(), url.into()], credentials, false).await.map(|_| ())
     }
+}
+
+/// A local path as an `svn` target. `svn` reads the last `@` in a file name
+/// as a peg revision (`logo@2x.png` fails with E200009), and a trailing `@`
+/// ends the name explicitly.
+pub(crate) fn path_target(rel: &str) -> OsString {
+    format!("{rel}@").into()
 }
 
 /// Maps `svn` error codes (locale-independent) to typed errors.
@@ -249,8 +291,12 @@ fn classify(command: &str, stderr: &str, username: String) -> SvnError {
         SvnError::OutOfDate { detail }
     } else if has(&["E155004", "E155037", "E155015", "E155007", "E155016"]) {
         SvnError::WorkingCopy { detail }
-    } else if has(&["E160013", "E170000", "E200009", "E180001"]) {
+    } else if has(&["E160013", "W160013", "E170000", "W170000", "E180001"]) {
         SvnError::NotFound { detail }
+    } else if has(&["E200009"]) {
+        // "Illegal target": a peg revision in a file name, or a path svn
+        // cannot find. Only a missing URL (above) means "not found".
+        SvnError::InvalidPath { detail }
     } else if has(&[
         "E170013", "E175002", "E670002", "E670008", "E731001", "E730", "E120", "E175012",
     ]) {
@@ -290,6 +336,14 @@ mod tests {
             String::new(),
         );
         assert_eq!(e.code(), "SVN_NOT_FOUND");
+
+        let e = classify(
+            "add",
+            "svn: E200009: 'logo@2x.png': a peg revision is not allowed here\n",
+            String::new(),
+        );
+        assert_eq!(e.code(), "SVN_INVALID_PATH");
+        assert!(e.fix().unwrap().contains("Rename"));
 
         let e = classify("update", "svn: E155004: Working copy locked\n", String::new());
         assert_eq!(e.code(), "SVN_WORKING_COPY");
