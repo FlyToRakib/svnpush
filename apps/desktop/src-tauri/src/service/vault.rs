@@ -1,6 +1,7 @@
 //! The Vault screen: SVN accounts with passwords in the keychain.
 
 use std::path::PathBuf;
+use std::sync::{MutexGuard, PoisonError};
 
 use serde::Serialize;
 use svnpush_core::report::NullReporter;
@@ -41,6 +42,12 @@ fn coded(e: &impl svnpush_core::Coded) -> ErrorView {
     ErrorView::from_coded(e)
 }
 
+/// Held from reading `accounts.json` to writing it back, so two saves or
+/// removes cannot each write a list missing the other's change.
+fn lock_accounts(app: &AppState) -> MutexGuard<'_, ()> {
+    app.accounts_lock.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Every account.
 pub fn view(app: &AppState) -> Result<VaultView, ErrorView> {
     let accounts = vault::load_accounts(&app.paths).map_err(|e| coded(&e))?;
@@ -74,6 +81,7 @@ pub fn save(
             Some("Use plugins.svn.wordpress.org and your WordPress.org username.".to_owned()),
         ));
     }
+    let guard = lock_accounts(app);
     let mut accounts = vault::load_accounts(&app.paths).map_err(|e| coded(&e))?;
     let account = SvnAccount { host, username };
     let exists = accounts.contains(&account);
@@ -91,16 +99,19 @@ pub fn save(
         accounts.push(account);
         vault::save_accounts(&app.paths, &accounts).map_err(|e| coded(&e))?;
     }
+    drop(guard);
     view(app)
 }
 
 /// Removes an account and its keychain entry.
 pub fn remove(app: &AppState, host: &str, username: &str) -> Result<VaultView, ErrorView> {
+    let guard = lock_accounts(app);
     let mut accounts = vault::load_accounts(&app.paths).map_err(|e| coded(&e))?;
     let account = SvnAccount { host: host.to_owned(), username: username.to_owned() };
     app.vault.delete(&account.key()).map_err(|e| coded(&e))?;
     accounts.retain(|a| a != &account);
     vault::save_accounts(&app.paths, &accounts).map_err(|e| coded(&e))?;
+    drop(guard);
     view(app)
 }
 
@@ -155,5 +166,52 @@ mod tests {
         assert!(unchanged.accounts[0].has_password);
         assert!(remove(&app, "plugins.svn.wordpress.org", "bob").unwrap().accounts.is_empty());
         assert!(app.vault.get("svn:plugins.svn.wordpress.org:bob").unwrap().is_none());
+    }
+
+    /// A keychain slow enough that a second remove reads `accounts.json`
+    /// before the first one writes it back.
+    struct SlowVault;
+
+    impl vault::CredentialStore for SlowVault {
+        fn get(&self, _key: &str) -> Result<Option<Secret>, vault::VaultError> {
+            Ok(None)
+        }
+
+        fn set(&self, _key: &str, _secret: &Secret) -> Result<(), vault::VaultError> {
+            Ok(())
+        }
+
+        fn delete(&self, _key: &str) -> Result<(), vault::VaultError> {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn two_removes_at_once_both_stay_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = svnpush_core::project::AppPaths::new(dir.path());
+        let accounts: Vec<SvnAccount> = ["a", "b", "c"]
+            .into_iter()
+            .map(|u| SvnAccount { host: "h".into(), username: u.into() })
+            .collect();
+        vault::save_accounts(&paths, &accounts).unwrap();
+        let app = std::sync::Arc::new(AppState::new(
+            paths.clone(),
+            std::sync::Arc::new(SlowVault),
+            svnpush_core::ai::client::AiClient::new().unwrap(),
+        ));
+        let removers: Vec<_> = ["a", "b"]
+            .into_iter()
+            .map(|user| {
+                let app = app.clone();
+                std::thread::spawn(move || remove(&app, "h", user).unwrap())
+            })
+            .collect();
+        for remover in removers {
+            remover.join().unwrap();
+        }
+        let left = vault::load_accounts(&paths).unwrap();
+        assert_eq!(left, [SvnAccount { host: "h".into(), username: "c".into() }]);
     }
 }

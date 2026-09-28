@@ -38,6 +38,8 @@ pub struct AppState {
     pub ai: AiClient,
     /// Serialises reads and writes of `projects.json`.
     pub projects_lock: tokio::sync::Mutex<()>,
+    /// Serialises reads and writes of `accounts.json`.
+    pub accounts_lock: Mutex<()>,
     runs: Mutex<HashMap<String, RunSlot>>,
 }
 
@@ -49,6 +51,7 @@ impl AppState {
             vault,
             ai,
             projects_lock: tokio::sync::Mutex::new(()),
+            accounts_lock: Mutex::new(()),
             runs: Mutex::new(HashMap::new()),
         }
     }
