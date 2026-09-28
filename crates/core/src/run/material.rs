@@ -117,6 +117,13 @@ pub fn split_git_diff(output: &str) -> BTreeMap<String, String> {
     files
 }
 
+/// The path a rename or copy diff came from, read from its header.
+fn renamed_from(diff: &str) -> Option<&str> {
+    diff.lines().take_while(|line| !line.starts_with("--- ") && !line.starts_with("@@")).find_map(
+        |line| line.strip_prefix("rename from ").or_else(|| line.strip_prefix("copy from ")),
+    )
+}
+
 /// A text file, unless it is binary or too large to diff.
 fn text_of(root: &Path, rel: &str) -> Option<String> {
     let size = std::fs::metadata(root.join(rel)).ok()?.len();
@@ -187,6 +194,15 @@ pub async fn from_git(
         .await?
         .unwrap_or_default();
     let mut diffs = split_git_diff(&output);
+    // A rename's diff holds the old file's lines. When the old file is
+    // withheld (a quoted name cannot be checked), send only the new file's text.
+    for (path, diff) in &mut diffs {
+        if renamed_from(diff).is_some_and(|from| from.starts_with('"') || filter.excludes(from)) {
+            *diff = text_of(project_root, path)
+                .map(|text| unified_diff(path, "", &text))
+                .unwrap_or_default();
+        }
+    }
     for file in changes.files.iter().filter(|f| f.kind == ChangeKind::Added) {
         if !diffs.contains_key(&file.path)
             && !filter.excludes(&file.path)
@@ -275,6 +291,10 @@ mod tests {
         assert!(files["a.php"].starts_with("diff --git a/a.php"));
         assert!(files["a.php"].ends_with("+y\n"));
         assert_eq!(files["inc/b.js"], "diff --git a/inc/b.js b/inc/b.js\n+z\n");
+
+        let renamed = "diff --git a/old.php b/new.php\nsimilarity index 90%\nrename from old.php\nrename to new.php\n--- a/old.php\n+++ b/new.php\n-rename from x\n";
+        assert_eq!(renamed_from(renamed), Some("old.php"));
+        assert_eq!(renamed_from(&files["a.php"]), None);
     }
 
     #[test]
@@ -328,38 +348,68 @@ mod tests {
         assert!(material.stat.contains("added: bundle.js"));
     }
 
-    #[tokio::test]
-    async fn git_diffs_of_non_ascii_names_are_kept() {
-        let repo = tempfile::tempdir().unwrap();
-        let git = |args: &[&str]| {
-            let out = std::process::Command::new("git")
-                .args(["-c", "user.email=test@example.org", "-c", "user.name=Test"])
-                .args(args)
-                .current_dir(repo.path())
-                .output()
-                .unwrap();
-            assert!(out.status.success(), "git {args:?}");
-        };
-        std::fs::write(repo.path().join("café.php"), "<?php\n").unwrap();
-        git(&["init", "-q"]);
-        git(&["add", "."]);
-        git(&["commit", "-q", "-m", "First"]);
-        git(&["tag", "v1.0.0"]);
-        std::fs::write(repo.path().join("café.php"), "<?php\n// changed\n").unwrap();
+    fn git(repo: &Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .args(["-c", "user.email=test@example.org", "-c", "user.name=Test"])
+            .args(args)
+            .current_dir(repo)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}");
+    }
 
+    /// A repository holding `files`, tagged `v1.0.0`.
+    fn tagged_repo(files: &[(&str, &str)]) -> tempfile::TempDir {
+        let repo = tempfile::tempdir().unwrap();
+        for (name, text) in files {
+            std::fs::write(repo.path().join(name), text).unwrap();
+        }
+        git(repo.path(), &["init", "-q"]);
+        git(repo.path(), &["add", "."]);
+        git(repo.path(), &["commit", "-q", "-m", "First"]);
+        git(repo.path(), &["tag", "v1.0.0"]);
+        repo
+    }
+
+    /// The material for `path` since `v1.0.0`, with the default exclude patterns.
+    async fn material_since_tag(repo: &Path, path: &str) -> Material {
         let bin =
             crate::tools::discover_git(None).await.path.map(std::path::PathBuf::from).unwrap();
         let cancel = tokio_util::sync::CancellationToken::new();
-        let runner = Git::new(&bin, repo.path(), &crate::report::NullReporter, &cancel);
+        let runner = Git::new(&bin, repo, &crate::report::NullReporter, &cancel);
         let changes = ChangeSet {
             source: ChangeSource::Git,
             base: Some("v1.0.0".into()),
-            files: vec![ChangedFile { path: "café.php".into(), kind: ChangeKind::Modified }],
+            files: vec![ChangedFile { path: path.into(), kind: ChangeKind::Modified }],
             commits: vec![],
         };
-        let material = from_git(&runner, repo.path(), &changes, &Filter::new(&[])).await.unwrap();
+        let filter = Filter::new(&crate::project::default_ai_exclude_patterns());
+        from_git(&runner, repo, &changes, &filter).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn git_diffs_of_non_ascii_names_are_kept() {
+        let repo = tagged_repo(&[("café.php", "<?php\n")]);
+        std::fs::write(repo.path().join("café.php"), "<?php\n// changed\n").unwrap();
+
+        let material = material_since_tag(repo.path(), "café.php").await;
         assert_eq!(material.diffs.len(), 1, "the diff was dropped");
         assert_eq!(material.diffs[0].0, "café.php");
         assert!(material.diffs[0].1.contains("+// changed"));
+    }
+
+    #[tokio::test]
+    async fn a_file_renamed_from_a_secret_never_shows_the_secret() {
+        let settings = "DB_HOST=localhost\nDB_NAME=shop\nDB_USER=shop\nDB_PREFIX=wp_\n";
+        let repo = tagged_repo(&[(".env", &format!("{settings}DB_PASSWORD=hunter2\n"))]);
+        git(repo.path(), &["mv", ".env", "settings-sample.txt"]);
+        let sample = format!("{settings}DB_PASSWORD=\n");
+        std::fs::write(repo.path().join("settings-sample.txt"), sample).unwrap();
+
+        let material = material_since_tag(repo.path(), "settings-sample.txt").await;
+        assert_eq!(material.diffs.len(), 1);
+        let diff = &material.diffs[0].1;
+        assert!(!diff.contains("hunter2"), "{diff}");
+        assert!(diff.contains("+DB_PASSWORD="), "the new file is still sent: {diff}");
     }
 }
