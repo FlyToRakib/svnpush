@@ -335,12 +335,17 @@ pub async fn resume(
 }
 
 /// Discards an unfinished run, restoring files and the working copy.
+/// Refused while a run is active: a resume that is starting would save its
+/// journal over the discarded one.
 pub async fn discard(
     app: &Arc<AppState>,
     sink: &Arc<dyn EventSink>,
     path: &str,
     id: &str,
 ) -> Result<(), ErrorView> {
+    if app.is_active(path) {
+        return Err(already_active());
+    }
     let found = journal_by_id(app, path, id).await?;
     let inputs = inputs(app, path, false).await?;
     let watcher: Arc<dyn RunObserver> = observer(app, sink, path);
@@ -432,13 +437,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resume_and_reset_are_refused_while_a_run_is_active() {
+    async fn resume_discard_and_reset_are_refused_while_a_run_is_active() {
         let dir = tempfile::tempdir().unwrap();
         let app = Arc::new(test_support::app(dir.path()));
         let sink: Arc<dyn EventSink> = Arc::new(RecordingSink::default());
         test_support::active_run(&app, "/p", "live");
-        let resumed = resume(app.clone(), sink, "/p", "old").await.unwrap_err();
+        let resumed = resume(app.clone(), sink.clone(), "/p", "old").await.unwrap_err();
         assert_eq!(resumed.code, "RUN_ALREADY_ACTIVE");
+        let discarded = discard(&app, &sink, "/p", "old").await.unwrap_err();
+        assert_eq!(discarded.code, "RUN_ALREADY_ACTIVE");
         let reset = reset_working_copy(&app, "/p").await.unwrap_err();
         assert_eq!(reset.code, "RUN_ALREADY_ACTIVE");
         assert!(app.is_active("/p"));

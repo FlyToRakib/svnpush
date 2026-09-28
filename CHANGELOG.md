@@ -13,7 +13,7 @@ All notable changes to SVNpush are listed here, newest first.
 - Build package refuses a plugin header version that is not a valid version, instead of using it as a folder name.
 - Closing the window while a release runs now asks first, because closing stops the release halfway. Install update waits until no release is running.
 - Opening SVNpush a second time brings the open window to the front instead of starting a second copy that could overwrite your projects, accounts and providers.
-- Reset working copy is refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
+- Reset working copy and Discard are refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
 - A release running in this window no longer shows as unfinished or locked in the Projects list.
 - Testing an SVN account makes one small request instead of listing every plugin on WordPress.org.
 - If SVNpush cannot start, it says why in a message box instead of closing silently.
