@@ -62,7 +62,7 @@ pub async fn build_package(app: &AppState, path: &str) -> Result<BuiltPackage, E
 fn screenshot_captions(project_path: &Path) -> Option<usize> {
     let text = edit::read_text(project_path, README_FILE).ok()?;
     let parsed = readme::parse(&text);
-    let section = parsed.sections.iter().find(|s| s.title.eq_ignore_ascii_case("Screenshots"))?;
+    let section = parsed.section("Screenshots")?;
     Some(
         section
             .body
@@ -97,4 +97,21 @@ pub async fn create_assets_folder(app: &AppState, path: &str) -> Result<AssetRep
         )
     })?;
     check_assets(app, path).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn screenshot_captions_reads_the_singular_section_title_too() {
+        let dir = tempfile::tempdir().unwrap();
+        for title in ["Screenshots", "Screenshot"] {
+            let readme = format!(
+                "=== Demo ===\nStable tag: 1.0\n\n== {title} ==\n\n1. The settings page.\n2. The editor.\n"
+            );
+            std::fs::write(dir.path().join(README_FILE), readme).unwrap();
+            assert_eq!(screenshot_captions(dir.path()), Some(2), "== {title} ==");
+        }
+    }
 }
