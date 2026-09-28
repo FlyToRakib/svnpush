@@ -8,6 +8,7 @@ use tokio_util::sync::CancellationToken;
 use crate::error::Coded;
 
 use super::client::ClientError;
+use super::prompts::truncate_chars;
 use super::provider::FinishReason;
 use super::records::{ProviderRecord, ProvidersFile};
 use super::router::{Ask, RouteEvent, Routed, Router};
@@ -81,6 +82,9 @@ pub struct Answer<T> {
 /// against it, so it is well above what the answer itself needs.
 pub const JSON_MAX_TOKENS: u32 = 16_000;
 
+/// Characters of the validation error sent back with the retry.
+const RETRY_REASON_CHARS: usize = 2_000;
+
 /// Asks `ask`, validates against `schema`, and retries once with the error.
 pub async fn ask_json<T: DeserializeOwned>(
     router: &Router<'_>,
@@ -98,13 +102,20 @@ pub async fn ask_json<T: DeserializeOwned>(
         Err(TaskError::Invalid { reason, .. }) => reason,
         Err(other) => return Err(other),
     };
-    let retry_user = format!(
-        "{}\n\nYour previous answer could not be used. {first_error} Reply again with only the JSON object.",
-        ask.user
-    );
+    let retry_user = retry_user(ask.user, &first_error);
     let retry = Ask { user: &retry_user, ..*ask };
     let retried = router.generate(file, &answered.provider, &retry, cancel, on_event).await?;
     check(&retried, schema).map(|value| Answer { value, routed: retried })
+}
+
+/// The prompt for the one retry. The reason is capped: a schema error can
+/// quote the whole wrong value, which would push the retry past a
+/// provider's prompt limit (Revoye's 100,000 characters).
+fn retry_user(user: &str, reason: &str) -> String {
+    let reason = truncate_chars(reason, RETRY_REASON_CHARS);
+    format!(
+        "{user}\n\nYour previous answer could not be used. {reason} Reply again with only the JSON object."
+    )
 }
 
 fn check<T: DeserializeOwned>(routed: &Routed, schema: &Value) -> Result<T, TaskError> {
@@ -126,4 +137,23 @@ fn check<T: DeserializeOwned>(routed: &Routed, schema: &Value) -> Result<T, Task
         raw_text: routed.result.text.clone(),
         provider: provider(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_retry_prompt_carries_at_most_a_capped_reason() {
+        let reason =
+            format!("The JSON did not match the schema: {} at /summary.", "é".repeat(50_000));
+        let prompt = retry_user("Ask.", &reason);
+        assert!(prompt.starts_with("Ask.\n\nYour previous answer could not be used. The JSON"));
+        assert!(prompt.ends_with("Reply again with only the JSON object."));
+        assert!(prompt.chars().count() < 2_200, "{}", prompt.chars().count());
+        assert_eq!(
+            retry_user("Ask.", "Short."),
+            "Ask.\n\nYour previous answer could not be used. Short. Reply again with only the JSON object."
+        );
+    }
 }
