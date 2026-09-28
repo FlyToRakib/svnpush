@@ -229,10 +229,13 @@ pub async fn confirm_files(
 /// Step 2 and Step 4 AI actions: generate (or Change provider), accept the
 /// privacy notice, write by hand, apply suggested fixes, stop.
 pub async fn ai_decision(app: &AppState, path: &str, decision: Decision) -> Result<(), ErrorView> {
-    if matches!(decision, Decision::Approve { .. } | Decision::Publish { .. }) {
+    if matches!(
+        decision,
+        Decision::Approve { .. } | Decision::ConfirmFiles { .. } | Decision::Publish { .. }
+    ) {
         return Err(ErrorView::new(
             "RUN_WRONG_DECISION",
-            "Approve and Publish have their own confirmations.",
+            "Approve, the file check and Publish have their own confirmations.",
             None,
         ));
     }
@@ -434,6 +437,18 @@ mod tests {
         finish(&app, &sink, "/p", live, &journal).await;
         assert!(!app.is_active("/p"));
         assert_eq!(recorder.0.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn ai_decision_refuses_the_decisions_with_their_own_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_support::app(dir.path());
+        test_support::active_run(&app, "/p", "live");
+        app.runs().get_mut("/p").unwrap().state.phase = Phase::Verifying;
+        let files = Decision::ConfirmFiles { distignore: Some("[".into()) };
+        assert_eq!(ai_decision(&app, "/p", files).await.unwrap_err().code, "RUN_WRONG_DECISION");
+        let publish = Decision::Publish { trunk_message: "t".into(), tag_message: "t".into() };
+        assert_eq!(ai_decision(&app, "/p", publish).await.unwrap_err().code, "RUN_WRONG_DECISION");
     }
 
     #[tokio::test]
