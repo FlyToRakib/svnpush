@@ -65,7 +65,8 @@ pub(super) fn section_key(title: &str) -> String {
 }
 
 /// A `Name: value` line, read like `parse_possible_header`: any line with a
-/// colon that does not start with `#` or `=`. The name is trimmed of ` \t*-`.
+/// colon that does not start with `#` or `=`. The name is trimmed of ` \t*-`
+/// and the value also of `<>`, so `**Stable tag:** 1.0` reads `1.0`.
 fn header_line(line: &Line<'_>) -> Option<(String, Range<usize>)> {
     let content = line.content.trim_start_matches(BOM);
     let bom_len = line.content.len() - content.len();
@@ -75,11 +76,12 @@ fn header_line(line: &Line<'_>) -> Option<(String, Range<usize>)> {
     let colon = content.find(':')?;
     let name = content[..colon].trim_matches([' ', '\t', '*', '-']);
     let after = &content[colon + 1..];
-    let value = after.trim();
+    let marks = |c: char| c.is_whitespace() || matches!(c, '*' | '-' | '<' | '>');
+    let value = after.trim_matches(marks);
     let value_start = if value.is_empty() {
         line.start + bom_len + colon + 1 + after.len()
     } else {
-        line.start + bom_len + colon + 1 + (after.len() - after.trim_start().len())
+        line.start + bom_len + colon + 1 + (after.len() - after.trim_start_matches(marks).len())
     };
     Some((name.to_owned(), value_start..value_start + value.len()))
 }

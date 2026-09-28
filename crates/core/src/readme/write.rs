@@ -165,6 +165,18 @@ Old notice.
     }
 
     #[test]
+    fn sets_a_bold_markdown_header_value() {
+        let text = "# P\n\n**Stable tag:** 1.1.0\n**License URI:** <https://x.org>\n\nShort.\n";
+        let readme = parse(text);
+        assert_eq!(readme.header("Stable tag").unwrap().value, "1.1.0");
+        assert_eq!(readme.header("License URI").unwrap().value, "https://x.org");
+        let out = set_header(text, "Stable tag", "1.2.0").unwrap();
+        assert_eq!(out, text.replace("1.1.0", "1.2.0"));
+        let empty = set_header("# P\n**Stable tag:**\n", "Stable tag", "1.2.0").unwrap();
+        assert_eq!(empty, "# P\n**Stable tag:** 1.2.0\n");
+    }
+
+    #[test]
     fn missing_header_is_an_error() {
         let err = set_header(SAMPLE, "Tested up to", "6.6").unwrap_err();
         assert!(matches!(err, ReadmeError::HeaderMissing { .. }));
