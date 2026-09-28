@@ -27,12 +27,20 @@ pub struct OpenAiCompatible {
     token_field: TokenField,
     output_cap: Option<u32>,
     renamed: &'static [(&'static str, &'static str)],
+    schema_format: bool,
 }
 
 impl OpenAiCompatible {
     /// A factory instance.
     pub const fn new(meta: AdapterMeta, token_field: TokenField) -> Self {
-        Self { meta, token_field, output_cap: None, renamed: &[] }
+        Self { meta, token_field, output_cap: None, renamed: &[], schema_format: false }
+    }
+
+    /// Asks for JSON with `response_format: json_schema` instead of
+    /// `json_object`, for servers that accept only the former (LM Studio).
+    #[must_use]
+    pub const fn with_json_schema_format(self) -> Self {
+        Self { schema_format: true, ..self }
     }
 
     /// Caps the output ceiling for an API that rejects a larger one.
@@ -74,8 +82,15 @@ impl OpenAiCompatible {
         if let Some(t) = req.temperature {
             body["temperature"] = json!(t);
         }
-        if req.json_schema.is_some() {
-            body["response_format"] = json!({ "type": "json_object" });
+        if let Some(schema) = req.json_schema {
+            body["response_format"] = if self.schema_format {
+                json!({
+                    "type": "json_schema",
+                    "json_schema": { "name": "answer", "schema": schema, "strict": false }
+                })
+            } else {
+                json!({ "type": "json_object" })
+            };
         }
         let mut headers = vec![("content-type".to_owned(), "application/json".to_owned())];
         if let Some(key) = req.api_key.filter(|k| !k.is_empty()) {
@@ -260,7 +275,8 @@ pub static OPENAI_COMPATIBLE: OpenAiCompatible = OpenAiCompatible::new(
     TokenField::MaxTokens,
 );
 
-/// Ollama or LM Studio on this machine.
+/// Ollama or LM Studio on this machine. LM Studio rejects a `json_object`
+/// response format; both accept `json_schema` (Ollama from 0.5).
 pub static LOCAL: OpenAiCompatible = OpenAiCompatible::new(
     meta(
         "local",
@@ -273,4 +289,5 @@ pub static LOCAL: OpenAiCompatible = OpenAiCompatible::new(
         "Default: gemma3. Enter a model you have pulled.",
     ),
     TokenField::MaxTokens,
-);
+)
+.with_json_schema_format();

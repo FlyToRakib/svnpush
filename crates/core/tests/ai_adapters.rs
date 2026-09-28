@@ -329,6 +329,20 @@ fn openai_family_requests_differ_only_where_they_must() {
     let local = adapter("local").build_request(&local_req).unwrap();
     assert_eq!(local.url, "http://localhost:11434/v1/chat/completions");
     assert!(header(&local, "authorization").is_none());
+    // LM Studio rejects json_object; it and Ollama take a json_schema format.
+    assert_eq!(
+        local.body.unwrap()["response_format"],
+        json!({
+            "type": "json_schema",
+            "json_schema": { "name": "answer", "schema": schema, "strict": false }
+        })
+    );
+    for kind in ["deepseek", "qwen", "perplexity", "openai_compatible"] {
+        let mut kind_req = req;
+        kind_req.base_url = Some("https://gateway.example/v1");
+        let body = adapter(kind).build_request(&kind_req).unwrap().body.unwrap();
+        assert_eq!(body["response_format"], json!({ "type": "json_object" }), "{kind}");
+    }
 
     assert_eq!(
         adapter("openai_compatible").build_request(&req).unwrap_err().code,
