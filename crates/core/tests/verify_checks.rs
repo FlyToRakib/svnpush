@@ -447,6 +447,14 @@ fn w04_warns_on_mismatched_screenshots() {
 }
 
 #[test]
+fn w04_reads_the_screenshot_section_under_its_alias() {
+    let mut case = Case::passing();
+    case.readme(&README.replace("== Screenshots ==", "== Screenshot =="));
+    let r = case.status("W04");
+    assert_eq!(r.status, CheckStatus::Pass, "{}", r.message);
+}
+
+#[test]
 fn w05_warns_on_large_files() {
     let mut case = Case::passing();
     case.files.push(("assets/video.mp4".into(), 3 * 1024 * 1024));

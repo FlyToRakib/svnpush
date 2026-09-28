@@ -124,9 +124,7 @@ fn w04(input: &VerifyInput<'_>) -> CheckResult {
         return c.skip("readme.txt is missing.");
     };
     let listed: BTreeSet<u32> = readme
-        .sections
-        .iter()
-        .find(|s| s.title.eq_ignore_ascii_case("Screenshots"))
+        .section("Screenshots")
         .map(|s| {
             s.body.lines().filter_map(|line| line.trim().split_once('.')?.0.parse().ok()).collect()
         })

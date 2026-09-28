@@ -103,8 +103,13 @@ impl Readme {
     /// Whether a section titled `title` exists (case-insensitive, with
     /// WordPress.org's aliases such as `Change Log`).
     pub fn has_section(&self, title: &str) -> bool {
+        self.section(title).is_some()
+    }
+
+    /// The first section titled `title`, matched like [`Readme::has_section`].
+    pub fn section(&self, title: &str) -> Option<&Section> {
         let key = parse::section_key(title);
-        self.sections.iter().any(|s| parse::section_key(&s.title) == key)
+        self.sections.iter().find(|s| parse::section_key(&s.title) == key)
     }
 }
 
