@@ -339,25 +339,30 @@ const MACHINE_SPECIFIC: [&str; 2] = ["svn_account", "ai_provider"];
 /// [`team_pre_build_command`] for offering the team's.
 const TEAM_COMMAND: &str = "pre_build_command";
 
-/// Checks that a folder setting stays inside the project folder: no
-/// absolute path, drive, or `..`. `Err` holds the reason.
-fn check_inside(field: &str, value: &str) -> Result<(), String> {
+/// Checks that a path setting stays inside the project folder: no absolute
+/// path, drive, or `..`. `example` names what belongs there. `Err` holds the
+/// reason.
+fn check_inside(field: &str, value: &str, example: &str) -> Result<(), String> {
     let escapes = Path::new(value).is_absolute()
         || value.starts_with(['/', '\\'])
         || value.contains(':')
         || value.split(['/', '\\']).any(|part| part == "..");
-    if escapes {
-        Err(format!("{field} \"{value}\" must be a folder inside the project, such as dist"))
-    } else {
-        Ok(())
-    }
+    if escapes { Err(format!("{field} \"{value}\" must be {example}")) } else { Ok(()) }
 }
 
-/// Checks the folder settings: the package root and the assets folder must
-/// stay inside the project folder. `Err` holds the reason, for the UI.
+/// Checks the path settings: the package root, the assets folder, the main
+/// file and every version location must stay inside the project folder, as
+/// Write edits the last two. `Err` holds the reason, for the UI.
 pub fn validate_settings(settings: &ProjectSettings) -> Result<(), String> {
-    check_inside("package_root", settings.package_root.trim().trim_matches(['/', '\\']))?;
-    check_inside("assets_folder", settings.assets_folder.as_deref().unwrap_or_default())
+    const FOLDER: &str = "a folder inside the project, such as dist";
+    const FILE: &str = "a file inside the plugin folder, such as my-plugin.php";
+    check_inside("package_root", settings.package_root.trim().trim_matches(['/', '\\']), FOLDER)?;
+    check_inside("assets_folder", settings.assets_folder.as_deref().unwrap_or_default(), FOLDER)?;
+    check_inside("main_file", settings.main_file.as_deref().unwrap_or_default(), FILE)?;
+    for location in &settings.version_locations {
+        check_inside("version location", &location.path, FILE)?;
+    }
+    Ok(())
 }
 
 /// The pre-build command `.svnpush.json` proposes, when it differs from the
@@ -490,12 +495,18 @@ mod tests {
             r#"{"settings": {"package_root": "../../elsewhere"}}"#,
             r#"{"settings": {"assets_folder": "/etc"}}"#,
             r#"{"settings": {"assets_folder": "C:\\Windows"}}"#,
+            r#"{"settings": {"main_file": "../../other/other.php"}}"#,
+            r#"{"settings": {"main_file": "/home/me/.bashrc"}}"#,
+            r#"{"settings": {"version_locations": [{"path": "../../.bashrc", "pattern": "(x)"}]}}"#,
             r#"{"svn_url": "https://plugins.svn.wordpress.org/"}"#,
         ] {
             std::fs::write(&team, bad).unwrap();
             assert_eq!(with_team_config(&p).unwrap_err().code(), "CONFIG_INVALID", "{bad}");
         }
         let mut settings = ProjectSettings { package_root: "/dist/".into(), ..Default::default() };
+        settings.main_file = Some("inc/main.php".into());
+        settings.version_locations =
+            vec![VersionLocation { path: "package.json".into(), pattern: "(x)".into() }];
         assert!(validate_settings(&settings).is_ok());
         settings.assets_folder = Some("assets/../..".into());
         assert!(validate_settings(&settings).unwrap_err().contains("assets_folder"));

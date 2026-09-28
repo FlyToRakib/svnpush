@@ -57,6 +57,14 @@ fn not_found(path: &str) -> ErrorView {
     )
 }
 
+fn invalid_settings(reason: &str) -> ErrorView {
+    ErrorView::new(
+        "CONFIG_INVALID",
+        format!("{reason}."),
+        Some("Use a path relative to the plugin folder.".to_owned()),
+    )
+}
+
 fn slug_or_error(svn_url: &str) -> Result<String, ErrorView> {
     detect::slug_from_svn_url(svn_url).ok_or_else(|| {
         ErrorView::new(
@@ -162,6 +170,7 @@ pub async fn add(
     let svn_url = svn_url.trim();
     let slug = slug_or_error(svn_url)?;
     let settings = ProjectSettings { main_file, ..ProjectSettings::default() };
+    project::validate_settings(&settings).map_err(|reason| invalid_settings(&reason))?;
     let facts = detect::detect(
         Path::new(folder),
         DetectOptions { svn_url, main_file: settings.main_file.as_deref(), version_locations: &[] },
@@ -199,13 +208,7 @@ pub async fn update(
     settings: ProjectSettings,
 ) -> Result<ProjectSummary, ErrorView> {
     let slug = slug_or_error(svn_url.trim())?;
-    project::validate_settings(&settings).map_err(|reason| {
-        ErrorView::new(
-            "CONFIG_INVALID",
-            format!("{reason}."),
-            Some("Use a folder path relative to the plugin folder.".to_owned()),
-        )
-    })?;
+    project::validate_settings(&settings).map_err(|reason| invalid_settings(&reason))?;
     for location in &settings.version_locations {
         svnpush_core::version::validate_location(location)
             .map_err(|e| ErrorView::from_coded(&e))?;
@@ -334,6 +337,11 @@ mod tests {
         let escapes = ProjectSettings { package_root: "../elsewhere".into(), ..Default::default() };
         let url = "https://plugins.svn.wordpress.org/renamed";
         assert_eq!(update(&app, &folder, url, escapes).await.unwrap_err().code, "CONFIG_INVALID");
+        let outside = ProjectSettings {
+            main_file: Some("../other/other.php".into()),
+            ..added.project.settings.clone()
+        };
+        assert_eq!(update(&app, &folder, url, outside).await.unwrap_err().code, "CONFIG_INVALID");
 
         std::fs::write(
             Path::new(&folder).join(".svnpush.json"),
