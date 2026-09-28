@@ -8,6 +8,7 @@
 use serde::Serialize;
 use ts_rs::TS;
 
+use super::parse::section_key;
 use super::{Readme, parse};
 
 /// The official validator's page.
@@ -111,16 +112,6 @@ fn beyond_current(value: &str, current: Option<&str>) -> bool {
         return false;
     };
     value > (major, minor + 1)
-}
-
-fn section_key(title: &str) -> String {
-    let key = title.trim().to_ascii_lowercase().replace(' ', "_");
-    match key.as_str() {
-        "frequently_asked_questions" => "faq".to_owned(),
-        "change_log" => "changelog".to_owned(),
-        "screenshot" => "screenshots".to_owned(),
-        _ => key,
-    }
 }
 
 fn section_name(key: &str) -> &str {

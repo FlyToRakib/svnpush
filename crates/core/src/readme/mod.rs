@@ -85,14 +85,19 @@ pub struct Readme {
 }
 
 impl Readme {
-    /// The value of header `name`, matched case-insensitively.
+    /// The value of header `name`, matched case-insensitively and with the
+    /// short forms `Tested` and `Requires`. Like WordPress.org, the last of
+    /// repeated headers wins.
     pub fn header(&self, name: &str) -> Option<&ReadmeHeader> {
-        self.headers.iter().find(|h| h.name.eq_ignore_ascii_case(name))
+        let key = parse::header_key(name);
+        self.headers.iter().rev().find(|h| parse::header_key(&h.name) == key)
     }
 
-    /// Whether a section titled `title` exists (case-insensitive).
+    /// Whether a section titled `title` exists (case-insensitive, with
+    /// WordPress.org's aliases such as `Change Log`).
     pub fn has_section(&self, title: &str) -> bool {
-        self.sections.iter().any(|s| s.title.eq_ignore_ascii_case(title))
+        let key = parse::section_key(title);
+        self.sections.iter().any(|s| parse::section_key(&s.title) == key)
     }
 }
 

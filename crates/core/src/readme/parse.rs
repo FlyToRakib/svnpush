@@ -7,31 +7,73 @@ use crate::version;
 
 use super::{ChangelogEntry, Readme, ReadmeHeader, Section};
 
-/// A `=`-delimited heading: level 3 is the name line, 2 a section, 1 an entry.
-pub(super) fn heading(content: &str) -> Option<(usize, &str)> {
-    let trimmed = content.trim_start_matches(BOM).trim();
-    let leading = trimmed.len() - trimmed.trim_start_matches('=').len();
-    let trailing = trimmed.len() - trimmed.trim_end_matches('=').len();
-    if leading == 0 || trailing == 0 || leading + trailing >= trimmed.len() {
-        return None;
-    }
-    let title = trimmed.trim_matches('=').trim();
-    (!title.is_empty()).then_some((leading, title))
+/// The headers WordPress.org reads, lower-cased, with their aliases.
+const KNOWN_HEADERS: [&str; 11] = [
+    "tested",
+    "tested up to",
+    "requires",
+    "requires at least",
+    "requires php",
+    "tags",
+    "contributors",
+    "donate link",
+    "stable tag",
+    "license",
+    "license uri",
+];
+
+fn trimmed(content: &str) -> &str {
+    content.trim_start_matches(BOM).trim()
 }
 
-/// A `Name: value` header line, where the name is letters and spaces.
+/// A section heading as `class-parser.php` sees it: a line starting with
+/// `==`, or with `##` but not `###`. Closing marks are optional.
+pub(super) fn section_title(content: &str) -> Option<&str> {
+    let t = trimmed(content);
+    let markdown = t.starts_with("##") && t.len() > 2 && !t[2..].starts_with('#');
+    (t.starts_with("==") || markdown).then(|| t.trim_matches(['#', '=', ' ', '\t']))
+}
+
+/// An entry heading inside a section: any other line starting with `=` or `#`.
+pub(super) fn entry_title(content: &str) -> Option<&str> {
+    let t = trimmed(content);
+    let mark = t.chars().next().filter(|c| matches!(c, '=' | '#'))?;
+    let title = t.trim_matches([mark, ' ', '\t']);
+    (section_title(content).is_none() && !title.is_empty()).then_some(title)
+}
+
+/// The key a header name is matched by: lower-cased, with WordPress.org's
+/// short forms `Tested` and `Requires` mapped to the full names.
+pub(super) fn header_key(name: &str) -> String {
+    let key = name.trim_matches([' ', '\t', '*', '-']).to_ascii_lowercase();
+    match key.as_str() {
+        "tested" => "tested up to".to_owned(),
+        "requires" => "requires at least".to_owned(),
+        _ => key,
+    }
+}
+
+/// The key a section title is matched by, with WordPress.org's aliases.
+pub(super) fn section_key(title: &str) -> String {
+    let key = title.trim().to_ascii_lowercase().replace(' ', "_");
+    match key.as_str() {
+        "frequently_asked_questions" => "faq".to_owned(),
+        "change_log" => "changelog".to_owned(),
+        "screenshot" => "screenshots".to_owned(),
+        _ => key,
+    }
+}
+
+/// A `Name: value` line, read like `parse_possible_header`: any line with a
+/// colon that does not start with `#` or `=`. The name is trimmed of ` \t*-`.
 fn header_line(line: &Line<'_>) -> Option<(String, Range<usize>)> {
     let content = line.content.trim_start_matches(BOM);
     let bom_len = line.content.len() - content.len();
-    let colon = content.find(':')?;
-    let name = content[..colon].trim();
-    let valid_name = !name.is_empty()
-        && name.len() <= 40
-        && name.starts_with(|c: char| c.is_ascii_alphabetic())
-        && name.chars().all(|c| c.is_ascii_alphabetic() || c == ' ');
-    if !valid_name {
+    if content.starts_with(['#', '=']) {
         return None;
     }
+    let colon = content.find(':')?;
+    let name = content[..colon].trim_matches([' ', '\t', '*', '-']);
     let after = &content[colon + 1..];
     let value = after.trim();
     let value_start = if value.is_empty() {
@@ -77,42 +119,62 @@ impl<'a> Layout<'a> {
     pub fn scan(text: &'a str) -> Self {
         let lines = text::lines(text);
         let count = lines.len();
-        let is_blank = |i: usize| lines[i].content.trim_start_matches(BOM).trim().is_empty();
+        let is_blank = |i: usize| trimmed(lines[i].content).is_empty();
+        let known = |line: &Line<'_>| {
+            header_line(line)
+                .is_some_and(|(n, _)| KNOWN_HEADERS.contains(&n.to_ascii_lowercase().as_str()))
+        };
         let mut i = 0;
 
+        // The first non-blank line is the name, unless it is already a header.
         while i < count && is_blank(i) {
             i += 1;
         }
         let mut name = None;
-        if i < count
-            && let Some((level, title)) = heading(lines[i].content)
-            && level >= 3
-        {
-            name = Some(title);
+        if i < count && !known(&lines[i]) {
+            name =
+                Some(trimmed(lines[i].content).trim_matches(['#', '=', ' ', '\t', '\0', '\x0B']));
             i += 1;
-        }
-        while i < count && is_blank(i) {
-            i += 1;
+            // A Markdown `====` underline below the name.
+            if i < count && trimmed(lines[i].content).trim_matches(['=', '-']).is_empty() {
+                i += 1;
+            }
         }
 
+        // Blank lines inside the block are skipped; an unknown header after a
+        // blank line, or any other line, starts the short description.
         let mut headers = Vec::new();
-        while i < count && heading(lines[i].content).is_none() {
+        let mut after_blank = false;
+        while i < count {
+            if is_blank(i) {
+                after_blank = true;
+                i += 1;
+                continue;
+            }
             let Some((header_name, value)) = header_line(&lines[i]) else {
                 break;
             };
-            headers.push(HeaderSpan { name: header_name, value, line: i });
+            if after_blank && !known(&lines[i]) {
+                break;
+            }
+            if !header_name.is_empty() {
+                headers.push(HeaderSpan { name: header_name, value, line: i });
+            }
+            after_blank = false;
             i += 1;
         }
 
         let description_start = i;
-        while i < count && !matches!(heading(lines[i].content), Some((2, _))) {
+        let any_heading =
+            |i: usize| ["==", "##"].iter().any(|m| trimmed(lines[i].content).starts_with(m));
+        while i < count && !any_heading(i) {
             i += 1;
         }
         let description_lines = description_start..i;
 
         let mut sections: Vec<SectionSpan<'a>> = Vec::new();
         while i < count {
-            if let Some((2, title)) = heading(lines[i].content) {
+            if let Some(title) = section_title(lines[i].content) {
                 if let Some(previous) = sections.last_mut() {
                     previous.end_line = i;
                 }
@@ -125,13 +187,13 @@ impl<'a> Layout<'a> {
     }
 
     pub fn section(&self, title: &str) -> Option<&SectionSpan<'a>> {
-        self.sections.iter().find(|s| s.title.eq_ignore_ascii_case(title))
+        self.sections.iter().find(|s| section_key(s.title) == section_key(title))
     }
 
     pub fn entries(&self, section: &SectionSpan<'a>) -> Vec<EntrySpan<'a>> {
         let mut entries: Vec<EntrySpan<'a>> = Vec::new();
         for index in section.title_line + 1..section.end_line {
-            if let Some((1, title)) = heading(self.lines[index].content) {
+            if let Some(title) = entry_title(self.lines[index].content) {
                 if let Some(previous) = entries.last_mut() {
                     previous.end_line = index;
                 }
@@ -286,11 +348,56 @@ Recommended.
     }
 
     #[test]
-    fn heading_levels() {
-        assert_eq!(heading("=== A ==="), Some((3, "A")));
-        assert_eq!(heading("== B =="), Some((2, "B")));
-        assert_eq!(heading(" = 1.0 = "), Some((1, "1.0")));
-        assert_eq!(heading("===="), None);
-        assert_eq!(heading("a = b"), None);
+    fn headings_follow_class_parser() {
+        assert_eq!(section_title("=== A ==="), Some("A"));
+        assert_eq!(section_title("== B"), Some("B"));
+        assert_eq!(section_title("## C ##"), Some("C"));
+        assert_eq!(section_title("### 1.0"), None);
+        assert_eq!(section_title("= 1.0 ="), None);
+        assert_eq!(entry_title(" = 1.0 = "), Some("1.0"));
+        assert_eq!(entry_title("### 1.0"), Some("1.0"));
+        assert_eq!(entry_title("# 1.0"), Some("1.0"));
+        assert_eq!(entry_title("== B =="), None);
+        assert_eq!(entry_title("a = b"), None);
+    }
+
+    #[test]
+    fn blank_lines_inside_the_header_block_are_skipped() {
+        let text = "=== P ===\nContributors: a\n\nStable tag: 1.0\n\nDonate: no\nShort.\n";
+        let readme = parse(text);
+        assert_eq!(readme.header("Stable tag").unwrap().value, "1.0");
+        assert!(readme.header("Donate").is_none());
+        assert_eq!(readme.short_description, "Donate: no Short.");
+    }
+
+    #[test]
+    fn reads_markdown_style_readmes() {
+        let text = "# My Plugin\n\n* Contributors: a\n- Tested: 6.6\n\nShort.\n\n## Changelog\n\n### 1.1\n* B.\n\n=== FAQ ===\n\n= Q =\nA.\n";
+        let readme = parse(text);
+        assert_eq!(readme.name.as_deref(), Some("My Plugin"));
+        assert_eq!(readme.header("contributors").unwrap().value, "a");
+        assert_eq!(readme.header("Tested up to").unwrap().value, "6.6");
+        assert_eq!(readme.short_description, "Short.");
+        let titles: Vec<&str> = readme.sections.iter().map(|s| s.title.as_str()).collect();
+        assert_eq!(titles, ["Changelog", "FAQ"]);
+        assert_eq!(readme.changelog[0].version.as_deref(), Some("1.1"));
+        assert_eq!(readme.changelog[0].body, "* B.");
+    }
+
+    #[test]
+    fn the_name_line_needs_no_closing_marks_and_may_be_missing() {
+        assert_eq!(parse("== My Plugin\nStable tag: 1.0\n").name.as_deref(), Some("My Plugin"));
+        let headless = parse("Stable tag: 1.0\n\nShort.\n");
+        assert_eq!(headless.name, None);
+        assert_eq!(headless.header("Stable tag").unwrap().value, "1.0");
+        let underlined = parse("My Plugin\n=========\nStable tag: 1.0\n");
+        assert_eq!(underlined.name.as_deref(), Some("My Plugin"));
+        assert_eq!(underlined.header("Stable tag").unwrap().line, 3);
+    }
+
+    #[test]
+    fn the_last_of_repeated_headers_wins() {
+        let readme = parse("=== P ===\nStable tag: 1.0\nStable Tag: 1.1\n");
+        assert_eq!(readme.header("stable tag").unwrap().value, "1.1");
     }
 }
