@@ -209,10 +209,8 @@ impl AiClient {
         } else {
             GENERATE_TIMEOUT
         };
-        let response = tokio::select! {
-            () = cancel.cancelled() => return Err(ClientError::Cancelled),
-            r = self.send(&http, timeout, kind) => r?,
-        };
+        let api_key = request.api_key.unwrap_or_default();
+        let response = self.submit(adapter, &http, timeout, api_key, cancel).await?;
         let json = Self::check(adapter, response)?;
         let (job_id, status, queue_position) = match adapter.parse_response(&json)? {
             ParseOutcome::Complete(result) => return Ok(result),
@@ -228,7 +226,6 @@ impl AiClient {
             )
             .into());
         };
-        let api_key = request.api_key.unwrap_or_default();
         on_pending(&Pending { job_id: job_id.clone(), status, queue_position });
 
         let started = Instant::now();
@@ -291,6 +288,33 @@ impl AiClient {
                     on_pending(&Pending { job_id: id, status, queue_position });
                 }
             }
+        }
+    }
+
+    /// Sends the request that starts a generation. When a cancel arrives while
+    /// a job is being submitted, the server may already hold the job, so the
+    /// submit is allowed to finish and the job it created is cancelled.
+    async fn submit(
+        &self,
+        adapter: &dyn Adapter,
+        http: &HttpRequest,
+        timeout: Duration,
+        api_key: &str,
+        cancel: &CancellationToken,
+    ) -> Result<Response, ClientError> {
+        let mut sent = Box::pin(self.send(http, timeout, adapter.meta().kind));
+        tokio::select! {
+            () = cancel.cancelled() => {
+                if adapter.poll().is_some()
+                    && let Ok(response) = sent.await
+                    && let Ok(json) = Self::check(adapter, response)
+                    && let Ok(ParseOutcome::Pending { job_id, .. }) = adapter.parse_response(&json)
+                {
+                    self.cancel_job(adapter, api_key, &job_id).await;
+                }
+                Err(ClientError::Cancelled)
+            }
+            r = &mut sent => Ok(r?),
         }
     }
 

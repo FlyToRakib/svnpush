@@ -161,6 +161,43 @@ async fn cancelling_a_pending_job_deletes_it_on_the_server() {
 }
 
 #[tokio::test]
+async fn cancelling_while_the_job_is_submitted_still_deletes_it() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/completions"))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_json(job("queued", &Value::Null, json!({})))
+                .set_delay(Duration::from_millis(500)),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path(format!("/v1/completions/{JOB}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(job(
+            "cancelled",
+            &Value::Null,
+            json!({}),
+        )))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let cancel = CancellationToken::new();
+    let trigger = cancel.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        trigger.cancel();
+    });
+    let messages = [Message { role: Role::User, content: "Hi".into() }];
+    let err = revoye_client(&server)
+        .generate(&REVOYE, &revoye_request(&messages), &cancel, &|_| {})
+        .await
+        .unwrap_err();
+    assert_eq!(err, ClientError::Cancelled);
+}
+
+#[tokio::test]
 async fn a_poll_rate_limit_waits_for_retry_after_once() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
