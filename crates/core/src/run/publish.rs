@@ -344,8 +344,9 @@ async fn confirm_commit(
     ))
 }
 
-/// The tag's revision: an existing `tags/<version>` is recorded (it was
-/// created before the interruption), otherwise trunk is copied now.
+/// The tag's revision: an existing `tags/<version>` is recorded when this
+/// run's copy was in flight (it was created before the interruption), and
+/// refused otherwise; without one, trunk is copied now.
 async fn resume_copy(
     inputs: &RunInputs,
     observer: &dyn RunObserver,
@@ -356,6 +357,9 @@ async fn resume_copy(
 ) -> Result<u64, RunFailure> {
     let url = &inputs.project.svn_url;
     if let Some(existing) = svn.last_changed_revision(&tag_url(url, version), Some(creds)).await? {
+        if journal.in_flight != Some(InFlight::Tag) {
+            return Err(SvnError::TagExists { version: version.to_owned() }.into());
+        }
         observer.info(&format!("tags/{version} already exists; checking it."));
         return Ok(existing);
     }

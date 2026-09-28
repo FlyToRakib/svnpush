@@ -4,6 +4,7 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Resume no longer takes over a tag of the same version that the interrupted release did not create; it says the tag already exists.
 - Publishing no longer mistakes an older commit for this release's, or misses this release's commit when someone committed after it. If SVNpush cannot read the plugin's current revision, it stops before committing, and after an unclear commit error it keeps your files and offers Resume instead of rolling back.
 - Working copies and built packages are kept in the local app data folder, so a roaming Windows profile no longer syncs them. They are recreated on the next release.
 - Build package refuses a plugin header version that is not a valid version, instead of using it as a folder name.

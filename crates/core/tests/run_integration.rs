@@ -310,6 +310,27 @@ async fn a_commit_error_after_sending_keeps_the_in_flight_marker() {
 }
 
 #[tokio::test]
+async fn resume_refuses_a_tag_it_did_not_create() {
+    let env = env();
+    let mut journal = stopped_before_the_commit(&env).await;
+    let svn = Svn::new("svn", &NullReporter, CancellationToken::new());
+    let wc = env.paths.working_copy("minimal");
+    let trunk = svn.commit(&wc, "Release 1.0.0", &creds()).await.unwrap();
+    // tags/1.0.0 exists, but this run never started a copy.
+    svn.tag(&env.project.svn_url, "1.0.0", trunk, "Tag 1.0.0", &creds()).await.unwrap();
+    journal.revisions.trunk = trunk;
+    journal.in_flight = None;
+    journal.save(&env.paths).unwrap();
+
+    let observer = Arc::new(NullObserver);
+    let (state, journal) =
+        run::resume_tag(inputs(&env, false).await, observer, CancellationToken::new(), journal)
+            .await;
+    assert_eq!(state.error.unwrap().code, "SVN_TAG_EXISTS");
+    assert!(journal.revisions.tag.is_none());
+}
+
+#[tokio::test]
 async fn resume_does_not_guess_without_the_starting_revision() {
     let env = env();
     let mut journal = stopped_before_the_commit(&env).await;
