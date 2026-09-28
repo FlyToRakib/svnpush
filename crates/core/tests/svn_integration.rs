@@ -484,3 +484,24 @@ async fn a_file_replaced_by_a_folder_of_the_same_name() {
     let listed = client(&env).list(&format!("{}/trunk", env.url), None).await.unwrap();
     assert_eq!(listed, ["lib/", "minimal.php", "readme.txt"]);
 }
+
+#[tokio::test]
+async fn a_dry_run_reverts_an_assets_folder_the_server_does_not_have() {
+    let env = env("minimal");
+    run("svn", &["rm", "-m", "No assets", &format!("{}/assets", env.url), "-q"]);
+    let plugin = fixture_copy(&env, "minimal");
+    std::fs::create_dir_all(plugin.join(".wordpress-org")).unwrap();
+    std::fs::write(plugin.join(".wordpress-org/icon-128x128.png"), "png").unwrap();
+    let (_, assets) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert_eq!(assets.added, ["icon-128x128.png"]);
+
+    let wc = env.root.join("wc/minimal");
+    client(&env).revert(&wc).await.unwrap();
+    assert!(client(&env).status(&wc).await.unwrap().is_empty());
+    assert!(!wc.join("assets").exists());
+    let (_, again) = preview(&env, &plugin, "minimal", "1.0.0").await;
+    assert_eq!(again, assets);
+    publish(&env, "minimal", "1.0.0", "minimal.php").await;
+    let listed = client(&env).list(&format!("{}/assets", env.url), None).await.unwrap();
+    assert_eq!(listed, ["icon-128x128.png"]);
+}

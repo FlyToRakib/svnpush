@@ -179,9 +179,11 @@ impl Svn<'_> {
         args.extend(folders.iter().map(|f| f.as_os_str().to_owned()));
         self.local(args).await?;
         // `svn revert` keeps added files on disk; remove every unversioned
-        // and ignored file so none can pass for a server copy later.
+        // and ignored file so none can pass for a server copy later. From
+        // the root: an `assets/` the mirror created (the server has none) is
+        // itself unversioned now, and `svn cleanup` refuses it as a target.
         let mut args = os(&["cleanup", "--remove-unversioned", "--remove-ignored"]);
-        args.extend(folders.iter().map(|f| f.as_os_str().to_owned()));
+        args.push(wc.as_os_str().to_owned());
         self.local(args).await?;
         Ok(())
     }
