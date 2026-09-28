@@ -210,10 +210,14 @@ on screen.
    and change counts.
 2. The SVN password is read from the OS keychain at that moment. It reaches
    `svn` over stdin (`--password-from-stdin`) with `--no-auth-cache`.
-3. `svn commit` of trunk and assets. The revision is recorded in the journal
-   immediately.
-4. A server-side `svn copy` of trunk at that revision to `tags/<version>`.
-   An existing tag is refused rather than nested.
+3. `svn commit` of trunk and assets. The journal marks the commit as in
+   flight before it starts, and records the revision immediately after. The
+   message travels in a UTF-8 file. Once started, a commit is not
+   interrupted by Cancel; Cancel takes effect after it. If `svn` reports an
+   error, the plugin's newest log entry decides whether the commit landed.
+4. A server-side `svn copy` of trunk at that revision to `tags/<version>`,
+   marked in flight the same way. An existing tag is refused rather than
+   nested.
 5. Verification: `svn ls` of the tag and `svn cat` of its main file, retried
    three times over thirty seconds. If the tag cannot be verified, the run
    ends as *Published, not yet verified*.
@@ -224,10 +228,19 @@ on screen.
 
 - **Before the trunk commit**, Cancel or a failure restores the snapshot and
   reverts the working copy. A cancelled Build, Preview or Publish also
-  removes the staged build.
+  removes the staged build. A file you edited during the run is not
+  restored; a notice names it and where its original is.
 - **After the trunk commit**, nothing on the server is undone. The journal
   records the trunk revision, and the project page offers **Resume: create
-  tag**, which retries only the tag copy and its verification.
+  tag**, which retries only the tag copy and its verification. A tag that
+  already exists (created before the interruption) is recorded and verified
+  instead of refused.
+- **When it is not known whether a commit or copy landed** (the app closed
+  during it, or the server could not be asked after an error), nothing is
+  rolled back. Resume asks the server: a landed commit is recorded and the
+  tag created; a commit that never landed is rolled back and the run ends
+  with `RESUME_NOT_COMMITTED`. Discard asks too, and keeps your files when
+  the commit landed.
 - **After an interruption before the trunk commit**, Resume rolls the old
   run back and starts a fresh one of the same kind. Discard rolls it back
   and marks the journal discarded.
