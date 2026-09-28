@@ -384,6 +384,12 @@ First release.
     }
 
     #[test]
+    fn a_placeholder_name_line_followed_by_the_name_is_valid() {
+        let text = GOOD.replace("=== Hello Release ===", "=== Plugin Name ===\nHello Release");
+        assert!(validate(&text, None).issues.is_empty(), "{:?}", validate(&text, None));
+    }
+
+    #[test]
     fn header_values_follow_the_official_patterns() {
         let text = GOOD
             .replace("Tested up to: 6.8", "Tested up to: 6.8 (latest)")

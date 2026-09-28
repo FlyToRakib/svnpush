@@ -84,6 +84,14 @@ fn header_line(line: &Line<'_>) -> Option<(String, Range<usize>)> {
     Some((name.to_owned(), value_start..value_start + value.len()))
 }
 
+/// Whether `content` starts with a known header name and a colon, like
+/// class-parser.php's `~^(tested|…|license uri)\s*:~i` check.
+fn starts_with_header(content: &str) -> bool {
+    content.split_once(':').is_some_and(|(name, _)| {
+        KNOWN_HEADERS.contains(&name.trim_end().to_ascii_lowercase().as_str())
+    })
+}
+
 /// A header line's position.
 pub(super) struct HeaderSpan {
     pub name: String,
@@ -138,6 +146,22 @@ impl<'a> Layout<'a> {
             // A Markdown `====` underline below the name.
             if i < count && trimmed(lines[i].content).trim_matches(['=', '-']).is_empty() {
                 i += 1;
+            }
+            // `=== Plugin Name ===` with the real name on the next line. As in
+            // class-parser.php, a line over 50 bytes or one that starts with a
+            // known header is not a name, and the readme then has none.
+            if name.is_some_and(|n| n.eq_ignore_ascii_case("plugin name")) {
+                while i < count && is_blank(i) {
+                    i += 1;
+                }
+                name = None;
+                if i < count
+                    && lines[i].content.len() <= 50
+                    && !starts_with_header(lines[i].content)
+                {
+                    name = Some(trimmed(lines[i].content));
+                    i += 1;
+                }
             }
         }
 
@@ -393,6 +417,20 @@ Recommended.
         let underlined = parse("My Plugin\n=========\nStable tag: 1.0\n");
         assert_eq!(underlined.name.as_deref(), Some("My Plugin"));
         assert_eq!(underlined.header("Stable tag").unwrap().line, 3);
+    }
+
+    #[test]
+    fn a_placeholder_name_line_takes_the_name_from_the_next_line() {
+        let readme = parse("=== Plugin Name ===\n\nHello Release\nStable tag: 1.0\n\nShort.\n");
+        assert_eq!(readme.name.as_deref(), Some("Hello Release"));
+        assert_eq!(readme.header("Stable tag").unwrap().value, "1.0");
+        assert_eq!(readme.short_description, "Short.");
+        // The next line is a header, or too long to be a name: no name.
+        let header_next = parse("=== Plugin Name ===\nStable tag: 1.0\n\nShort.\n");
+        assert_eq!(header_next.name, None);
+        assert_eq!(header_next.header("Stable tag").unwrap().value, "1.0");
+        let long_next = parse(&format!("=== Plugin Name ===\n{}\n", "x".repeat(51)));
+        assert_eq!(long_next.name, None);
     }
 
     #[test]
