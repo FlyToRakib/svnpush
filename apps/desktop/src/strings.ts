@@ -52,7 +52,7 @@ export const S = {
     open: "Open",
     neverReleased: "Not released yet",
     unfinished: "Unfinished release",
-    locked: "Releasing in another window",
+    locked: "Releasing in another copy of SVNpush",
     addTitle: "Add a project",
     chooseFolder: "Choose folder",
     folder: "Plugin folder",
