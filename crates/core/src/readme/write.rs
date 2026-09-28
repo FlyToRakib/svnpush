@@ -6,15 +6,18 @@
 use crate::text;
 
 use super::ReadmeError;
-use super::parse::Layout;
+use super::parse::{Layout, header_key};
 
-/// Replaces the value of header `name`.
+/// Replaces the value of header `name`, the last one when it is repeated
+/// (the one WordPress.org reads).
 pub fn set_header(content: &str, name: &str, value: &str) -> Result<String, ReadmeError> {
     let layout = Layout::scan(content);
+    let key = header_key(name);
     let span = layout
         .headers
         .iter()
-        .find(|h| h.name.eq_ignore_ascii_case(name))
+        .rev()
+        .find(|h| header_key(&h.name) == key)
         .map(|h| h.value.clone())
         .ok_or_else(|| ReadmeError::HeaderMissing { name: name.to_owned() })?;
     let mut out = String::with_capacity(content.len() + value.len());
@@ -75,7 +78,10 @@ fn upsert_entry(
 
     if let Some(existing) = entries.iter().find(|e| e.version.as_deref() == Some(version)) {
         let title = &layout.lines[existing.title_line];
-        let body_start = existing.title_line + 1;
+        // Keep any blank lines between the title and the old body.
+        let body_start = (existing.title_line + 1..existing.end_line)
+            .find(|&i| !layout.lines[i].content.trim().is_empty())
+            .unwrap_or(existing.end_line);
         let body_end = layout.content_end(body_start..existing.end_line);
         if body_end > body_start {
             let range = layout.lines[body_start].start..layout.lines[body_end - 1].content_end;
@@ -111,7 +117,7 @@ fn upsert_entry(
 fn append_block(content: &str, block: &str, eol: &str) -> String {
     let mut out = content.to_owned();
     if !out.is_empty() {
-        if !out.ends_with('\n') {
+        if !out.ends_with(['\n', '\r']) {
             out.push_str(eol);
         }
         out.push_str(eol);
@@ -179,6 +185,46 @@ Old notice.
     fn replaces_the_body_of_an_existing_entry() {
         let out = upsert_changelog_entry(SAMPLE, "1.1.0", "* Rewritten.");
         assert_eq!(out, SAMPLE.replace("* Old.", "* Rewritten."));
+    }
+
+    #[test]
+    fn keeps_the_blank_line_after_an_existing_title() {
+        let text = SAMPLE.replace("= 1.1.0 =\n* Old.", "= 1.1.0 =\n\n* Old.");
+        let out = upsert_changelog_entry(&text, "1.1.0", "* Rewritten.");
+        assert_eq!(out, text.replace("* Old.", "* Rewritten."));
+    }
+
+    #[test]
+    fn sets_the_last_repeated_header_and_short_forms() {
+        let text = "=== P ===\nStable tag: 1.0\nTested: 6.5\nStable tag: 1.0\n";
+        let out = set_header(text, "Stable tag", "1.1").unwrap();
+        assert_eq!(out, "=== P ===\nStable tag: 1.0\nTested: 6.5\nStable tag: 1.1\n");
+        let out = set_header(text, "Tested up to", "6.6").unwrap();
+        assert_eq!(out, text.replace("6.5", "6.6"));
+    }
+
+    #[test]
+    fn finds_markdown_and_triple_equals_changelogs() {
+        for (text, entry) in [
+            ("# P\n\nShort.\n\n## Changelog\n\n### 1.0\n* A.\n", "### 1.0\n* A."),
+            ("=== P ===\n\nShort.\n\n=== Changelog ===\n\n= 1.0 =\n* A.\n", "= 1.0 =\n* A."),
+        ] {
+            let out = upsert_changelog_entry(text, "1.1", "* B.");
+            assert_eq!(out, text.replace(entry, &format!("= 1.1 =\n* B.\n\n{entry}")));
+            let out = upsert_changelog_entry(text, "1.0", "* C.");
+            assert_eq!(out, text.replace("* A.", "* C."));
+        }
+    }
+
+    #[test]
+    fn keeps_cr_only_line_endings() {
+        let cr = SAMPLE.replace('\n', "\r");
+        let out = upsert_changelog_entry(&cr, "1.2.0", "* New.");
+        assert_eq!(out, cr.replacen("= 1.1.0 =\r", "= 1.2.0 =\r* New.\r\r= 1.1.0 =\r", 1));
+        assert_eq!(
+            set_header(&cr, "Stable tag", "1.2.0").unwrap(),
+            cr.replace("1.1.0\rLicense", "1.2.0\rLicense")
+        );
     }
 
     #[test]

@@ -17,17 +17,18 @@ pub struct Line<'a> {
 }
 
 /// Splits `text` into lines, keeping exact offsets so edits can splice bytes.
+/// CRLF, LF and a lone CR each end a line, as in WordPress's `get_file_data`.
 pub fn lines(text: &str) -> Vec<Line<'_>> {
     let mut out = Vec::new();
     let mut start = 0;
     let bytes = text.as_bytes();
     while start < text.len() {
-        let newline = bytes[start..].iter().position(|&b| b == b'\n');
+        let newline = bytes[start..].iter().position(|&b| b == b'\n' || b == b'\r');
         let (content_end, end) = match newline {
             Some(offset) => {
-                let nl = start + offset;
-                let content_end = if nl > start && bytes[nl - 1] == b'\r' { nl - 1 } else { nl };
-                (content_end, nl + 1)
+                let at = start + offset;
+                let crlf = bytes[at] == b'\r' && bytes.get(at + 1) == Some(&b'\n');
+                (at, if crlf { at + 2 } else { at + 1 })
             }
             None => (text.len(), text.len()),
         };
@@ -37,16 +38,24 @@ pub fn lines(text: &str) -> Vec<Line<'_>> {
     out
 }
 
-/// The line ending used most in `text`: `"\r\n"` when CRLF outnumbers LF.
+/// The line ending used most in `text`: `"\r\n"` or a lone `"\r"` when it
+/// outnumbers LF, otherwise `"\n"`.
 pub fn dominant_eol(text: &str) -> &'static str {
     let crlf = text.matches("\r\n").count();
     let lf = text.matches('\n').count() - crlf;
-    if crlf > lf { "\r\n" } else { "\n" }
+    let cr = text.matches('\r').count() - crlf;
+    if crlf > lf && crlf >= cr {
+        "\r\n"
+    } else if cr > lf {
+        "\r"
+    } else {
+        "\n"
+    }
 }
 
 /// Rewrites every line ending in `text` to `eol`.
 pub fn with_eol(text: &str, eol: &str) -> String {
-    text.replace("\r\n", "\n").replace('\n', eol)
+    text.replace("\r\n", "\n").replace('\r', "\n").replace('\n', eol)
 }
 
 /// Line-ending facts about a text, used by warning W09.
@@ -95,10 +104,22 @@ mod tests {
     }
 
     #[test]
+    fn a_lone_cr_ends_a_line() {
+        let text = "a\rbb\r\n\rc";
+        let ls = lines(text);
+        let contents: Vec<&str> = ls.iter().map(|l| l.content).collect();
+        assert_eq!(contents, ["a", "bb", "", "c"]);
+        assert_eq!(&text[ls[1].start..ls[1].end], "bb\r\n");
+        assert_eq!(&text[ls[2].start..ls[2].end], "\r");
+    }
+
+    #[test]
     fn dominant_eol_prefers_the_majority() {
         assert_eq!(dominant_eol("a\r\nb\r\nc\n"), "\r\n");
         assert_eq!(dominant_eol("a\nb\n"), "\n");
         assert_eq!(dominant_eol("single"), "\n");
+        assert_eq!(dominant_eol("a\rb\rc\r\n"), "\r");
+        assert_eq!(with_eol("a\rb\r\nc\n", "\r"), "a\rb\rc\r");
     }
 
     #[test]

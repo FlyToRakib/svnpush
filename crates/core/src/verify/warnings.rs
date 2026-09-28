@@ -111,7 +111,7 @@ fn screenshot_number(name: &str) -> Option<u32> {
     let lower = name.to_ascii_lowercase();
     let rest = lower.strip_prefix("screenshot-")?;
     let (number, ext) = rest.split_once('.')?;
-    let image = matches!(ext, "png" | "jpg" | "jpeg" | "gif" | "webp");
+    let image = matches!(ext, "png" | "jpg" | "jpeg" | "gif");
     image.then(|| number.parse().ok())?
 }
 
@@ -311,7 +311,7 @@ pub fn assets_check(report: &AssetReport) -> CheckResult {
         .collect();
     c.fail(
         detail.join(" "),
-        "Rename or resize these files. WordPress.org uses icon-128x128/icon-256x256, banner-772x250/banner-1544x500 and screenshot-N files in PNG or JPG.",
+        "Rename or resize these files. WordPress.org uses icon-128x128/icon-256x256, banner-772x250/banner-1544x500 and screenshot-N files in PNG, JPG or GIF.",
     )
     .with_paths(bad.iter().map(|f| f.name.clone()).collect())
 }

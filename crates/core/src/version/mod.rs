@@ -14,8 +14,9 @@ pub use sources::{
 
 /// A plugin version: `x.y` or `x.y.z` with an optional pre-release suffix.
 ///
-/// Comparison normalises `1.0` to `1.0.0`; the text is kept exactly as
-/// written because it names the tag folder.
+/// Comparison normalises `1.0` to `1.0.0` and orders pre-release suffixes the
+/// way PHP's `version_compare` does (`beta9` < `beta10` < `RC1`); the text is
+/// kept exactly as written because it names the tag folder.
 #[derive(Debug, Clone)]
 pub struct Version {
     raw: String,
@@ -83,7 +84,8 @@ impl Version {
         let (patch, raw) = if self.is_prerelease() {
             (v.patch, format!("{}.{}.{}", v.major, v.minor, v.patch))
         } else {
-            (v.patch + 1, format!("{}.{}.{}", v.major, v.minor, v.patch + 1))
+            let patch = v.patch.saturating_add(1);
+            (patch, format!("{}.{}.{}", v.major, v.minor, patch))
         };
         Self { raw, semver: semver::Version::new(v.major, v.minor, patch) }
     }
@@ -91,7 +93,7 @@ impl Version {
 
 impl PartialEq for Version {
     fn eq(&self, other: &Self) -> bool {
-        self.semver == other.semver
+        self.cmp(other) == Ordering::Equal
     }
 }
 
@@ -105,7 +107,73 @@ impl PartialOrd for Version {
 
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.semver.cmp(&other.semver)
+        let (a, b) = (&self.semver, &other.semver);
+        (a.major, a.minor, a.patch)
+            .cmp(&(b.major, b.minor, b.patch))
+            .then_with(|| compare_suffix(&canonical(&a.pre), &canonical(&b.pre)))
+    }
+}
+
+/// A suffix split the way `version_compare` canonicalises it: at `.`, `-`,
+/// `_`, `+` and wherever digits and letters meet.
+fn canonical(text: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    for (i, c) in text.char_indices() {
+        let kind_changes =
+            text[start..i].chars().last().is_some_and(|p| p.is_ascii_digit() != c.is_ascii_digit());
+        if !c.is_ascii_alphanumeric() || kind_changes {
+            if start < i {
+                parts.push(&text[start..i]);
+            }
+            start = if c.is_ascii_alphanumeric() { i } else { i + c.len_utf8() };
+        }
+    }
+    if start < text.len() {
+        parts.push(&text[start..]);
+    }
+    parts
+}
+
+/// `version_compare`'s rank for a word: `dev` < `alpha`/`a` < `beta`/`b` <
+/// `RC` < a number (`#`) < `pl`/`p`. PHP matches by prefix; any other word
+/// ranks lowest.
+fn rank(part: &str) -> i8 {
+    const FORMS: [(&str, i8); 8] =
+        [("dev", 0), ("alpha", 1), ("a", 1), ("beta", 2), ("b", 2), ("rc", 3), ("#", 4), ("p", 5)];
+    let lower = part.to_ascii_lowercase();
+    FORMS.iter().find(|(form, _)| lower.starts_with(form)).map_or(-6, |&(_, r)| r)
+}
+
+fn is_number(part: &str) -> bool {
+    part.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn compare_numbers(a: &str, b: &str) -> Ordering {
+    let (a, b) = (a.trim_start_matches('0'), b.trim_start_matches('0'));
+    a.len().cmp(&b.len()).then_with(|| a.cmp(b))
+}
+
+/// Compares two canonical suffixes part by part, as `version_compare` does.
+/// A missing part counts as a number, so `1.0-beta1` < `1.0` < `1.0-pl1`.
+fn compare_suffix(a: &[&str], b: &[&str]) -> Ordering {
+    let word = |part: &str| if is_number(part) { rank("#") } else { rank(part) };
+    for (x, y) in a.iter().zip(b) {
+        let order = if is_number(x) && is_number(y) {
+            compare_numbers(x, y)
+        } else {
+            word(x).cmp(&word(y))
+        };
+        if order != Ordering::Equal {
+            return order;
+        }
+    }
+    match (a.get(b.len()), b.get(a.len())) {
+        (Some(x), _) if is_number(x) => Ordering::Greater,
+        (Some(x), _) => rank(x).cmp(&rank("#")),
+        (_, Some(y)) if is_number(y) => Ordering::Less,
+        (_, Some(y)) => rank("#").cmp(&rank(y)),
+        _ => Ordering::Equal,
     }
 }
 
@@ -214,6 +282,24 @@ mod tests {
         assert_eq!(v("1.2").next_patch().as_str(), "1.2.1");
         assert_eq!(v("1.2.3").next_patch().as_str(), "1.2.4");
         assert_eq!(v("1.3.0-beta1").next_patch().as_str(), "1.3.0");
+        let top = format!("1.0.{}", u64::MAX);
+        assert_eq!(v(&top).next_patch().as_str(), top);
+    }
+
+    #[test]
+    fn orders_pre_releases_like_php_version_compare() {
+        assert!(v("1.0-beta10") > v("1.0-beta9"));
+        assert!(v("1.0-RC1") > v("1.0-beta2"));
+        assert!(v("1.0-rc1") > v("1.0-b3"));
+        assert!(v("1.0-alpha2") > v("1.0-dev"));
+        assert!(v("1.0-dev") > v("1.0-foo"));
+        assert!(v("1.0") > v("1.0-RC2"));
+        assert!(v("1.0-pl1") > v("1.0"));
+        assert!(v("1.0-beta.2") > v("1.0-beta1"));
+        assert_eq!(v("1.0-beta1"), v("1.0-beta.1"));
+        assert_eq!(v("1.0-Beta1"), v("1.0.0-beta1"));
+        let tags = ["1.0-beta9", "1.0-beta10", "1.0-alpha11"];
+        assert_eq!(newest(tags).unwrap().as_str(), "1.0-beta10");
     }
 
     #[test]

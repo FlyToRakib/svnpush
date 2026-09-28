@@ -29,6 +29,16 @@ All notable changes to SVNpush are listed here, newest first.
 - Double-clicking Save no longer adds a provider twice; models loaded for a provider you switched away from are ignored.
 - Errors that were silently ignored (removing a project, saving the fallback order, installing Subversion, copying to the clipboard, loading plugin images) are now shown.
 - Projects, Vault, Settings and plugin images show that they are loading, and long file paths wrap instead of widening the page.
+- Plugin images: names are checked with WordPress.org's own rules, so GIF banners and screenshots, .jpeg files, uppercase names, -rtl screenshots and locales such as -de_DE_formal are accepted. A .webp screenshot is no longer counted, because WordPress.org ignores it.
+- Plugin images: the size of a JPEG saved with large metadata (for example from Photoshop) is now read correctly.
+- Environment templates (.env.example, .env.dist, .env.sample) and public certificate bundles such as Composer's cacert.pem no longer stop a release as secret files.
+- The direct-access check (V09) also accepts `if ( ! function_exists( 'add_action' ) )` as a guard.
+- Filling an empty Version header written on one line, such as `/* Version: */`, now puts the version inside the comment instead of after it, which broke the PHP file.
+- Readme check: Tested up to 7.0 is accepted while WordPress 6.9 is current, and values such as "WordPress 6.8", "6.0 or higher" or "6.8-RC1" are read as WordPress.org reads them.
+- readme.txt is read the way WordPress.org reads it: Markdown-style `#`/`##` headings, blank lines inside the header block, `Tested:` and `Requires:` short forms and repeated headers (the last one counts) all work, and a new changelog entry never adds a second Changelog section.
+- Rewriting an existing changelog entry keeps the blank line under its title.
+- Files that end lines with a lone carriage return (old Mac style) are now read line by line, as WordPress reads them, and edits keep that line ending.
+- Pre-release versions are now ordered the way WordPress.org and PHP order them: 1.0-beta10 is newer than 1.0-beta9, and 1.0-RC1 is newer than 1.0-beta2.
 - Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
 - Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
 - Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.

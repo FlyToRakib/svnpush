@@ -3,7 +3,7 @@
 //! Names, sizes, formats and size limits follow the official plugin-assets
 //! handbook (developer.wordpress.org/plugins/wordpress-org/plugin-assets/).
 
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -71,14 +71,16 @@ impl AssetReport {
 
 const MB: u64 = 1024 * 1024;
 
+// The importer (`class-import.php`) accepts any case, PNG, JPG, JPEG or GIF,
+// an optional `-rtl` and then an optional locale such as `-de_DE_formal`.
+const SUFFIX: &str = r"(-rtl)?(-[a-z]{2,3}(_[a-z]{2})?(_[a-z0-9]+)?)?\.(png|jpg|jpeg|gif)$";
+
 static ICON: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r"^icon-(128x128|256x256)\.(png|jpg|gif)$").ok());
-static BANNER: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"^banner-(772x250|1544x500)(-rtl|-[a-z]{2,3}(_[A-Z]{2})?)?\.(png|jpg)$").ok()
-});
-static SCREENSHOT: LazyLock<Option<Regex>> = LazyLock::new(|| {
-    Regex::new(r"^screenshot-([1-9][0-9]*)(-[a-z]{2,3}(_[A-Z]{2})?)?\.(png|jpg)$").ok()
-});
+    LazyLock::new(|| Regex::new(r"(?i)^icon-(128x128|256x256)\.(png|jpg|jpeg|gif)$").ok());
+static BANNER: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(&format!(r"(?i)^banner-(772x250|1544x500){SUFFIX}")).ok());
+static SCREENSHOT: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(&format!(r"(?i)^screenshot-([0-9]+){SUFFIX}")).ok());
 
 fn matches(re: &LazyLock<Option<Regex>>, name: &str) -> Option<Vec<String>> {
     re.as_ref()?
@@ -88,9 +90,9 @@ fn matches(re: &LazyLock<Option<Regex>>, name: &str) -> Option<Vec<String>> {
 
 /// Width and height of a PNG, GIF or JPEG, read from its header.
 pub fn image_size(path: &Path) -> Option<(u32, u32)> {
+    let mut file = std::fs::File::open(path).ok()?;
     let mut head = Vec::new();
-    std::fs::File::open(path).ok()?.take(256 * 1024).read_to_end(&mut head).ok()?;
-    let be16 = |i: usize| Some(u32::from(u16::from_be_bytes([*head.get(i)?, *head.get(i + 1)?])));
+    file.by_ref().take(24).read_to_end(&mut head).ok()?;
     if head.starts_with(b"\x89PNG\r\n\x1a\n") {
         let be32 = |i: usize| Some(u32::from_be_bytes(head.get(i..i + 4)?.try_into().ok()?));
         return Some((be32(16)?, be32(20)?));
@@ -101,19 +103,41 @@ pub fn image_size(path: &Path) -> Option<(u32, u32)> {
         return Some((le16(6)?, le16(8)?));
     }
     if head.starts_with(&[0xFF, 0xD8]) {
-        let mut i = 2;
-        while i + 9 < head.len() {
-            if head[i] != 0xFF {
-                i += 1;
-                continue;
+        return jpeg_size(&mut file);
+    }
+    None
+}
+
+/// Walks a JPEG's segments to the frame header, seeking past each one, so
+/// large metadata (Photoshop's APP1/APP2) before it does not matter.
+fn jpeg_size(file: &mut std::fs::File) -> Option<(u32, u32)> {
+    let len = file.metadata().ok()?.len();
+    let be16 = |b: [u8; 2]| u32::from(u16::from_be_bytes(b));
+    let mut segment = [0_u8; 9];
+    let mut pos: u64 = 2;
+    while pos + 9 <= len {
+        file.seek(SeekFrom::Start(pos)).ok()?;
+        file.read_exact(&mut segment).ok()?;
+        let marker = segment[1];
+        if segment[0] != 0xFF {
+            return None;
+        }
+        match marker {
+            // A fill byte, or a marker without a length.
+            0xFF => pos += 1,
+            0x01 | 0xD0..=0xD7 => pos += 2,
+            // Scan data or the end: no frame header came first.
+            0xD9 | 0xDA => return None,
+            0xC0..=0xCF if !matches!(marker, 0xC4 | 0xC8 | 0xCC) => {
+                return Some((be16([segment[7], segment[8]]), be16([segment[5], segment[6]])));
             }
-            let marker = head[i + 1];
-            let length = usize::try_from(be16(i + 2)?).ok()?;
-            let is_frame = (0xC0..=0xCF).contains(&marker) && !matches!(marker, 0xC4 | 0xC8 | 0xCC);
-            if is_frame {
-                return Some((be16(i + 7)?, be16(i + 5)?));
+            _ => {
+                let length = be16([segment[2], segment[3]]);
+                if length < 2 {
+                    return None;
+                }
+                pos += 2 + u64::from(length);
             }
-            i += 2 + length;
         }
     }
     None
@@ -124,7 +148,7 @@ fn classify(name: &str, is_dir: bool) -> (AssetKind, Option<(u32, u32)>, u64) {
         let kind = if name == "blueprints" { AssetKind::Blueprints } else { AssetKind::Unknown };
         return (kind, None, 0);
     }
-    if name == "icon.svg" {
+    if name.eq_ignore_ascii_case("icon.svg") {
         return (AssetKind::IconSvg, None, MB);
     }
     if let Some(c) = matches(&ICON, name) {
@@ -140,18 +164,13 @@ fn classify(name: &str, is_dir: bool) -> (AssetKind, Option<(u32, u32)>, u64) {
 }
 
 fn parse_dims(text: &str) -> Option<(u32, u32)> {
-    let (w, h) = text.split_once('x')?;
+    let (w, h) = text.split_once(['x', 'X'])?;
     Some((w.parse().ok()?, h.parse().ok()?))
 }
 
-fn unknown_problem(name: &str, is_dir: bool) -> String {
-    let lower = name.to_ascii_lowercase();
+fn unknown_problem(is_dir: bool) -> String {
     if is_dir {
         "WordPress.org ignores folders here, except blueprints/.".to_owned()
-    } else if lower != name && classify(&lower, false).0 != AssetKind::Unknown {
-        format!("Names must be lowercase: rename it to {lower}.")
-    } else if Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("jpeg")) {
-        "Use the .jpg extension: WordPress.org does not read .jpeg.".to_owned()
     } else {
         "WordPress.org ignores this file. Use a name such as icon-256x256.png, banner-772x250.png or screenshot-1.png.".to_owned()
     }
@@ -165,7 +184,7 @@ fn inspect_file(folder: &Path, name: &str, is_dir: bool) -> AssetFile {
         .then(|| image_size(&path))
         .flatten();
     let problem = match (kind, expected, size) {
-        (AssetKind::Unknown, ..) => Some(unknown_problem(name, is_dir)),
+        (AssetKind::Unknown, ..) => Some(unknown_problem(is_dir)),
         (_, Some((w, h)), Some((aw, ah))) if (w, h) != (aw, ah) => {
             Some(format!("It is {aw}×{ah} pixels; it must be exactly {w}×{h}."))
         }
@@ -294,6 +313,23 @@ mod tests {
     }
 
     #[test]
+    fn reads_jpeg_sizes_after_large_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut bytes = vec![0xFF, 0xD8];
+        for _ in 0..6 {
+            bytes.extend([0xFF, 0xE2, 0xFF, 0xFF]);
+            bytes.extend(vec![0; 0xFFFF - 2]);
+        }
+        bytes.extend(&jpg(772, 250)[2..]);
+        let path = dir.path().join("big.jpg");
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(bytes.len() > 256 * 1024);
+        assert_eq!(image_size(&path), Some((772, 250)));
+        std::fs::write(&path, &bytes[..bytes.len() - 20]).unwrap();
+        assert_eq!(image_size(&path), None);
+    }
+
+    #[test]
     fn names_sizes_and_suggestions_follow_the_handbook() {
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();
@@ -316,13 +352,33 @@ mod tests {
         assert_eq!(problem("screenshot-1.png"), None);
         assert_eq!(problem("blueprints"), None);
         assert!(problem("banner-772x250.png").unwrap().contains("800×300"));
-        assert!(problem("Screenshot-2.png").unwrap().contains("lowercase"));
-        assert!(problem("screenshot-3.jpeg").unwrap().contains(".jpg"));
+        // The importer's rules: any case, .jpeg and GIF, -rtl then a locale.
+        assert_eq!(problem("Screenshot-2.png"), None);
+        assert_eq!(problem("screenshot-3.jpeg"), None);
         assert!(problem("logo.png").unwrap().contains("ignores"));
         assert!(!report.files.iter().any(|f| f.name == ".DS_Store"));
-        assert_eq!(report.problems().count(), 4);
+        assert_eq!(report.problems().count(), 2);
         assert!(report.suggestions.iter().any(|s| s.contains("2 screenshot caption(s)")));
         assert!(!report.suggestions.iter().any(|s| s.contains("Add an icon")));
+    }
+
+    #[test]
+    fn names_follow_the_importer_pattern() {
+        for name in [
+            "banner-772x250.gif",
+            "banner-1544x500.JPEG",
+            "banner-772x250-rtl-he_IL.png",
+            "screenshot-1-rtl.png",
+            "screenshot-2-de_DE_formal.jpg",
+            "ICON-128X128.PNG",
+            "Icon.svg",
+        ] {
+            assert_ne!(classify(name, false).0, AssetKind::Unknown, "{name}");
+        }
+        assert_eq!(classify("ICON-128X128.PNG", false).1, Some((128, 128)));
+        for name in ["screenshot-1.webp", "banner-772x250-de-rtl.png", "banner-100x100.png"] {
+            assert_eq!(classify(name, false).0, AssetKind::Unknown, "{name}");
+        }
     }
 
     #[test]
