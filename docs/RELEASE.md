@@ -54,7 +54,7 @@ signing, the installers work but the operating systems warn:
   `APPLE_PASSWORD` (an app-specific password) and `APPLE_TEAM_ID` secrets,
   and pass them as environment variables to the `tauri-action` step in
   `.github/workflows/build.yml`.
-- **Linux**: AppImage and `.deb` need no signing.
+- **Linux**: AppImage, `.deb` and `.rpm` need no signing.
 
 Updater signatures (above) are separate from code signing and are always
 required.
@@ -84,7 +84,7 @@ required.
 
 6. **Let the build run.** The `build` workflow starts on the `v*` tag. For
    Windows (NSIS and MSI), macOS (a universal DMG and app bundle) and Linux
-   (AppImage and `.deb`), `tauri-action` builds the installers, signs the
+   (AppImage, `.deb` and `.rpm`), `tauri-action` builds the installers, signs the
    updater artifacts, and uploads everything to a **draft** GitHub release
    named `SVNpush vX.Y.Z`. It also uploads `latest.json`, the updater
    manifest, which lists each platform's download URL and signature. On
