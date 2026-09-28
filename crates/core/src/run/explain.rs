@@ -11,6 +11,7 @@ use crate::ai::schemas::{self, ExplainAnswer, SuggestedFix};
 use crate::ai::task::{Answer, TaskError};
 use crate::edit::{self, EditSet};
 use crate::readme::README_FILE;
+use crate::text::plural;
 use crate::verify::CheckStatus;
 
 use super::RunFailure;
@@ -246,7 +247,10 @@ impl Run {
             self.state.diffs.push(diff);
         }
         self.save_journal();
-        self.state.notices.push(format!("Applied {applied} suggested fix(es) to readme.txt."));
+        self.state.notices.push(format!(
+            "Applied {} to readme.txt.",
+            plural(applied, "suggested fix", "suggested fixes")
+        ));
         self.state.facts = Some(self.detect_facts()?);
         Ok(true)
     }

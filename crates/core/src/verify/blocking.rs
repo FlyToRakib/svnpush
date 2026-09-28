@@ -1,6 +1,7 @@
 //! Blocking checks V01–V17 (plan §5.4; V17 added for the readme validator).
 
 use crate::readme::{self, IssueLevel, README_FILE, REQUIRED_HEADERS};
+use crate::text::plural;
 use crate::version::Version;
 
 use super::{CheckResult, Severity, VerifyInput, WorkingCopyState};
@@ -314,7 +315,10 @@ fn v11(input: &VerifyInput<'_>) -> CheckResult {
         c.pass("No forbidden paths.")
     } else {
         c.fail(
-            format!("{} forbidden path(s) in the package.", offending.len()),
+            format!(
+                "{} in the package.",
+                plural(offending.len(), "forbidden path", "forbidden paths")
+            ),
             "These must never be published: version-control data, archives, or files that hold secrets such as .env, private keys or wp-config.php. Add them to .distignore.",
         )
         .with_paths(offending)
@@ -340,7 +344,7 @@ fn v12(input: &VerifyInput<'_>) -> CheckResult {
         c.pass("No archives, executables or version-control folders.")
     } else {
         c.fail(
-            format!("{} file(s) WordPress.org does not accept.", offending.len()),
+            format!("{} WordPress.org does not accept.", plural(offending.len(), "file", "files")),
             "Exclude them in .distignore. A .phar can be allowed in project settings.",
         )
         .with_paths(offending)
@@ -396,11 +400,14 @@ pub fn v15(working_copy: &WorkingCopyState) -> CheckResult {
         }
         WorkingCopyState::Clean => c.pass("No conflicts, nothing newer on the server."),
         WorkingCopyState::Conflicts(paths) => c
-            .fail(format!("{} conflicted path(s).", paths.len()), "Reset the working copy.")
+            .fail(
+                format!("{}.", plural(paths.len(), "conflicted path", "conflicted paths")),
+                "Reset the working copy.",
+            )
             .with_paths(paths.clone()),
         WorkingCopyState::OutOfDate(paths) => c
             .fail(
-                format!("{} path(s) changed on the server.", paths.len()),
+                format!("{} changed on the server.", plural(paths.len(), "path", "paths")),
                 "Update the working copy, or reset it.",
             )
             .with_paths(paths.clone()),

@@ -296,13 +296,10 @@ describe("ProvidersScreen", () => {
     const user = userEvent.setup();
     expect(await screen.findByText("Needs attention: The key was rejected.")).toBeTruthy();
     expect(screen.getByText("3 requests this month")).toBeTruthy();
-    tauriMock.handle(
-      "test_provider",
-      () => "Connected. 1 of 1 device(s) online, 1 of 1 agents free.",
-    );
+    tauriMock.handle("test_provider", () => "Connected. 1 of 1 device online, 1 of 1 agent free.");
     await user.click(screen.getByRole("button", { name: "Test" }));
     expect(
-      await screen.findByText("Connected. 1 of 1 device(s) online, 1 of 1 agents free."),
+      await screen.findByText("Connected. 1 of 1 device online, 1 of 1 agent free."),
     ).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: "Remove" }));

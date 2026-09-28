@@ -11,6 +11,8 @@ use regex::Regex;
 use serde::Serialize;
 use ts_rs::TS;
 
+use crate::text::plural;
+
 /// What a file in the assets folder is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -264,7 +266,11 @@ pub fn inspect(folder: Option<&Path>, readme_screenshots: Option<usize>) -> Asse
         })
         .count();
     if let Some(captions) = readme_screenshots.filter(|c| *c != shots) {
-        suggestions.push(format!("readme.txt has {captions} screenshot caption(s) and the folder has {shots} screenshot(s). Add one screenshot-N file per caption."));
+        suggestions.push(format!(
+            "readme.txt has {} and the folder has {}. Add one screenshot-N file per caption.",
+            plural(captions, "screenshot caption", "screenshot captions"),
+            plural(shots, "screenshot", "screenshots")
+        ));
     }
     AssetReport { folder: Some(shown), exists: true, files, suggestions }
 }
@@ -358,7 +364,7 @@ mod tests {
         assert!(problem("logo.png").unwrap().contains("ignores"));
         assert!(!report.files.iter().any(|f| f.name == ".DS_Store"));
         assert_eq!(report.problems().count(), 2);
-        assert!(report.suggestions.iter().any(|s| s.contains("2 screenshot caption(s)")));
+        assert!(report.suggestions.iter().any(|s| s.contains("has 2 screenshot captions and")));
         assert!(!report.suggestions.iter().any(|s| s.contains("Add an icon")));
     }
 

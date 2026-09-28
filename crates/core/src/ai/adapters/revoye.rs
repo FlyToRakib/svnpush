@@ -13,6 +13,7 @@ use crate::ai::provider::{
     GenerateRequest, GenerateResult, HttpRequest, ListModels, Method, ModelList, ParseOutcome,
     Poll, ProviderError, Role, error_from_status, str_at, u32_at,
 };
+use crate::text::plural;
 
 const KIND: &str = "revoye";
 /// Fixed on purpose: never taken from the user.
@@ -159,8 +160,8 @@ fn parse_job(job: &Value) -> Result<ParseOutcome, ProviderError> {
         "failed" => Err(err(
             ErrorCode::Server,
             format!(
-                "The Revoye job failed after {} attempt(s).",
-                u32_at(job, "/attempts").unwrap_or(1)
+                "The Revoye job failed after {}.",
+                plural(u32_at(job, "/attempts").unwrap_or(1), "attempt", "attempts")
             ),
         )
         .with_status(502)),
@@ -253,7 +254,10 @@ impl Adapter for Revoye {
             "JOB_TIMEOUT" => made(ErrorCode::Server, "The Revoye job is still running and was not abandoned.".to_owned()),
             "JOB_FAILED" => made(
                 ErrorCode::Server,
-                format!("The Revoye job failed after {} attempt(s).", detail_u32("attempts").unwrap_or(1)),
+                format!(
+                    "The Revoye job failed after {}.",
+                    plural(detail_u32("attempts").unwrap_or(1), "attempt", "attempts")
+                ),
             ),
             "JOB_CANCELLED" => made(ErrorCode::Server, "The Revoye job was cancelled.".to_owned()),
             "NOT_FOUND" => made(ErrorCode::Server, "The Revoye job was not found.".to_owned()),

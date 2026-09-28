@@ -11,6 +11,7 @@ use crate::edit::{self, EditSet};
 use crate::package::{self, Exclusions};
 use crate::readme::{self, README_FILE};
 use crate::svn::SvnError;
+use crate::text::plural;
 use crate::vault;
 use crate::verify::{self, CheckResult, CheckStatus, FileRef, VerifyInput, WorkingCopyState};
 use crate::version::{self, Version};
@@ -112,11 +113,11 @@ impl Run {
             .max();
 
         let summary = format!(
-            "{} {} · {} · {} tag(s) on the server",
+            "{} {} · {} · {} on the server",
             facts.name,
             facts.header.version.as_deref().unwrap_or("(no version)"),
             facts.slug,
-            self.state.server_tags.len()
+            plural(self.state.server_tags.len(), "tag", "tags")
         );
         self.state.previous = previous.map(|p| p.to_string());
         self.state.facts = Some(facts);
@@ -172,7 +173,11 @@ impl Run {
 
         let draft = self.decide_draft(&facts, &material, &version).await?;
         self.journal.version = Some(draft.version.clone());
-        let summary = format!("Version {} approved · {files} changed file(s)", draft.version);
+        let summary = format!(
+            "Version {} approved · {}",
+            draft.version,
+            plural(files, "changed file", "changed files")
+        );
         self.state.draft = Some(draft);
         self.done(Step::Draft, summary);
         Ok(())
@@ -234,7 +239,7 @@ impl Run {
         self.journal.diffs.clone_from(&diffs);
         self.state.diffs = diffs;
         self.state.facts = Some(self.detect_facts()?);
-        self.done(Step::Write, format!("{} file(s) written", changed.len()));
+        self.done(Step::Write, format!("{} written", plural(changed.len(), "file", "files")));
         Ok(())
     }
 
@@ -364,7 +369,10 @@ impl Run {
         if blocked {
             return Ok(false);
         }
-        self.done(Step::Verify, format!("All blocking checks passed · {failed} warning(s)"));
+        self.done(
+            Step::Verify,
+            format!("All blocking checks passed · {}", plural(failed, "warning", "warnings")),
+        );
         Ok(true)
     }
 }

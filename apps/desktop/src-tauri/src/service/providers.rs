@@ -10,6 +10,7 @@ use svnpush_core::ai::registry;
 use svnpush_core::clock;
 use svnpush_core::run::ErrorView;
 use svnpush_core::secret::Secret;
+use svnpush_core::text::plural;
 use svnpush_core::vault;
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
@@ -347,8 +348,11 @@ pub async fn test(app: &AppState, id: &str) -> Result<String, ErrorView> {
             .await
             .map_err(|e| coded(&e))?;
         format!(
-            "Connected. {} of {} device(s) online, {} of {} agents free.",
-            fleet.devices_online, fleet.devices_total, fleet.agents_idle, fleet.agents_total
+            "Connected. {} of {} online, {} of {} free.",
+            fleet.devices_online,
+            plural(fleet.devices_total, "device", "devices"),
+            fleet.agents_idle,
+            plural(fleet.agents_total, "agent", "agents")
         )
     } else {
         let messages =

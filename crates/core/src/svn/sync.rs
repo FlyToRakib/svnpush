@@ -5,6 +5,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::package::{self, Exclusions, PackageError, PackagedFile};
+use crate::text::plural;
 
 use super::status::StatusItem;
 use super::{Delta, Svn, SvnError, io_error, slash};
@@ -241,8 +242,10 @@ impl Svn<'_> {
             self.batched(&["delete", "--force"], target, &replaced).await?;
         }
         if !to_delete.is_empty() {
-            self.reporter
-                .info(&format!("Deleting {} file(s) no longer in the package.", to_delete.len()));
+            self.reporter.info(&format!(
+                "Deleting {} no longer in the package.",
+                plural(to_delete.len(), "file", "files")
+            ));
             self.batched(&["delete", "--force"], target, &to_delete).await?;
         }
 
@@ -259,7 +262,8 @@ impl Svn<'_> {
             // One folder-level add: it takes any file name (an argument
             // cannot carry characters outside the Windows code page) and has
             // no command-line length limit.
-            self.reporter.info(&format!("Adding {} new file(s).", delta.added.len()));
+            self.reporter
+                .info(&format!("Adding {}.", plural(delta.added.len(), "new file", "new files")));
             let args =
                 ["add", "--force", "--depth", "infinity", "--no-auto-props", "--no-ignore", "."];
             self.local_in(target, args.iter().map(OsString::from).collect()).await?;

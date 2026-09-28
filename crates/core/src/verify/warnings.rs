@@ -53,8 +53,8 @@ fn w01(input: &VerifyInput<'_>) -> CheckResult {
         Some(paths) => c
             .fail(
                 format!(
-                    "{} uncommitted change(s): the release will not match any commit.",
-                    paths.len()
+                    "{}: the release will not match any commit.",
+                    text::plural(paths.len(), "uncommitted change", "uncommitted changes")
                 ),
                 "Commit or stash your changes before releasing.",
             )
@@ -103,7 +103,7 @@ fn w03(input: &VerifyInput<'_>) -> CheckResult {
         )
         .with_paths(vec![README_FILE.to_owned()])
     } else {
-        c.pass(format!("{count} tag(s)."))
+        c.pass(format!("{}.", text::plural(count, "tag", "tags")))
     }
 }
 
@@ -135,7 +135,9 @@ fn w04(input: &VerifyInput<'_>) -> CheckResult {
     let no_caption: Vec<String> =
         files.difference(&listed).map(|n| format!("screenshot-{n}")).collect();
     if no_file.is_empty() && no_caption.is_empty() {
-        return c.pass(format!("{} screenshot(s) match.", listed.len()));
+        let verb = if listed.len() == 1 { "matches" } else { "match" };
+        return c
+            .pass(format!("{} {verb}.", text::plural(listed.len(), "screenshot", "screenshots")));
     }
     let mut parts = Vec::new();
     if !no_file.is_empty() {
@@ -164,7 +166,8 @@ fn w05(input: &VerifyInput<'_>) -> CheckResult {
         parts.push(format!("the package is {}", megabytes(total)));
     }
     if !large.is_empty() {
-        parts.push(format!("{} file(s) are over 2 MB", large.len()));
+        let verb = if large.len() == 1 { "is" } else { "are" };
+        parts.push(format!("{} {verb} over 2 MB", text::plural(large.len(), "file", "files")));
     }
     c.fail(
         format!("Large package: {}.", parts.join(", ")),
@@ -223,8 +226,9 @@ fn w08(input: &VerifyInput<'_>) -> CheckResult {
     } else {
         c.fail(
             format!(
-                "{} packaged file(s) are git-ignored, probably build output.",
-                input.gitignored.len()
+                "{} {} git-ignored, probably build output.",
+                text::plural(input.gitignored.len(), "packaged file", "packaged files"),
+                if input.gitignored.len() == 1 { "is" } else { "are" }
             ),
             "If they are needed, keep them; otherwise add them to .distignore.",
         )
@@ -301,7 +305,7 @@ pub fn assets_check(report: &AssetReport) -> CheckResult {
     }
     let bad: Vec<&crate::wporg_assets::AssetFile> = report.problems().collect();
     if bad.is_empty() {
-        return c.pass(format!("{} file(s) checked.", report.files.len()));
+        return c.pass(format!("{} checked.", text::plural(report.files.len(), "file", "files")));
     }
     let detail: Vec<String> = bad
         .iter()

@@ -10,6 +10,7 @@ use crate::ai::prompts::{DIFF_BUDGET_CHARS, FILE_DIFF_BUDGET_CHARS, truncate_cha
 use crate::detect::git::Git;
 use crate::edit;
 use crate::readme::README_FILE;
+use crate::text::plural;
 use crate::tools::ProcessError;
 use crate::verify;
 
@@ -160,8 +161,8 @@ fn finish(changes: &ChangeSet, filter: &Filter, mut diffs: BTreeMap<String, Stri
     }
     if !material.withheld.is_empty() {
         stat.push(format!(
-            "({} file(s) withheld from the AI by the exclude patterns)",
-            material.withheld.len()
+            "({} withheld from the AI by the exclude patterns)",
+            plural(material.withheld.len(), "file", "files")
         ));
     }
     material.stat = stat.join("\n");

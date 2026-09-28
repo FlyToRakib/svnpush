@@ -6,6 +6,7 @@ use crate::detect::PluginFacts;
 use crate::package::{self, Exclusions, Package};
 use crate::project::ProjectSettings;
 use crate::svn::{self, Delta};
+use crate::text::plural;
 use crate::vault;
 use crate::verify::{self, FileRef, VerifyInput, WorkingCopyState};
 
@@ -101,7 +102,7 @@ impl Run {
             &package_root,
             &Exclusions::load(&package_root, std::slice::from_ref(&builds))?,
         )?;
-        self.observer.info(&format!("Staging {} file(s).", listing.files.len()));
+        self.observer.info(&format!("Staging {}.", plural(listing.files.len(), "file", "files")));
         let built = package::build(&listing, &builds, &slug, &version)?;
         self.package = Some(built.clone());
 
@@ -127,8 +128,8 @@ impl Run {
         self.done(
             Step::Build,
             format!(
-                "{} file(s) · {} · SHA-256 {}",
-                built.files.len(),
+                "{} · {} · SHA-256 {}",
+                plural(built.files.len(), "file", "files"),
                 human_size(built.total_size),
                 &built.sha256[..12]
             ),

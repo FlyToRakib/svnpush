@@ -1,4 +1,7 @@
-//! Byte-preserving text helpers shared by the header and readme editors.
+//! Byte-preserving text helpers shared by the header and readme editors, and
+//! the counted wording used in messages.
+
+use std::fmt::Display;
 
 /// The UTF-8 byte order mark.
 pub const BOM: char = '\u{feff}';
@@ -87,6 +90,16 @@ pub fn line_number(index: usize) -> u32 {
     u32::try_from(index + 1).unwrap_or(u32::MAX)
 }
 
+/// `1 file`, `2 files`: a count with the noun that fits it, worded as the
+/// UI's `plural` helper words it.
+pub fn plural<N>(count: N, one: &str, many: &str) -> String
+where
+    N: Copy + Display + PartialEq + From<u8>,
+{
+    let noun = if count == N::from(1) { one } else { many };
+    format!("{count} {noun}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +146,13 @@ mod tests {
     #[test]
     fn with_eol_normalises() {
         assert_eq!(with_eol("a\nb\r\nc", "\r\n"), "a\r\nb\r\nc");
+    }
+
+    #[test]
+    fn plural_fits_the_noun_to_the_count() {
+        assert_eq!(plural(1_usize, "file", "files"), "1 file");
+        assert_eq!(plural(2_usize, "file", "files"), "2 files");
+        assert_eq!(plural(0_u32, "fix", "fixes"), "0 fixes");
+        assert_eq!(plural(1_u64, "attempt", "attempts"), "1 attempt");
     }
 }
