@@ -106,6 +106,12 @@ impl Readme {
     }
 }
 
+/// Whether `line` starts a `== Section ==` in WordPress.org's parser
+/// (`==`, or `##` but not `###`).
+pub fn is_section_heading(line: &str) -> bool {
+    parse::section_title(line).is_some()
+}
+
 /// A readme edit that could not be made.
 #[derive(Debug, thiserror::Error)]
 pub enum ReadmeError {

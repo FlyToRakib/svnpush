@@ -2,6 +2,7 @@
 //! developer approves.
 
 use crate::detect::PluginFacts;
+use crate::readme;
 use crate::version::Version;
 
 use super::changes::ChangeSet;
@@ -69,11 +70,23 @@ pub fn validate_draft(draft: &ReleaseDraft) -> Result<(), ErrorView> {
             Some("Describe what changed in this release.".to_owned()),
         ));
     }
-    if draft.changelog_markdown.lines().any(|l| l.trim_start().starts_with("==")) {
+    // Written into readme.txt, such a line would end the Changelog section
+    // and start a new one.
+    if draft.changelog_markdown.lines().any(readme::is_section_heading) {
         return Err(ErrorView::new(
             "DRAFT_HEADING_IN_CHANGELOG",
             "The changelog entry contains a readme section heading.",
-            Some("Remove lines that start with ==.".to_owned()),
+            Some("Remove lines that start with == or ## (### is fine).".to_owned()),
+        ));
+    }
+    // WordPress.org starts a new notice at every line of the Upgrade Notice
+    // that begins with = or #, so the text below one would not belong to
+    // this version.
+    if draft.upgrade_notice.lines().any(|l| l.trim_start().starts_with(['=', '#'])) {
+        return Err(ErrorView::new(
+            "DRAFT_HEADING_IN_UPGRADE_NOTICE",
+            "The upgrade notice contains a heading line.",
+            Some("Remove lines that start with = or #.".to_owned()),
         ));
     }
     Ok(())
@@ -141,5 +154,30 @@ mod tests {
         assert_eq!(validate_draft(&d).unwrap_err().code, "DRAFT_EMPTY_CHANGELOG");
         d.changelog_markdown = "* a\n== FAQ ==".into();
         assert_eq!(validate_draft(&d).unwrap_err().code, "DRAFT_HEADING_IN_CHANGELOG");
+    }
+
+    #[test]
+    fn any_readme_section_heading_is_refused() {
+        let mut d = prefill(&facts("1.0", ""), "1.0.1", &changes(&["x"]));
+        // `## ` starts a section in WordPress.org's parser; `### ` does not.
+        d.changelog_markdown = "## Added\n* a".into();
+        assert_eq!(validate_draft(&d).unwrap_err().code, "DRAFT_HEADING_IN_CHANGELOG");
+        d.changelog_markdown = "### Added\n* a".into();
+        assert!(validate_draft(&d).is_ok());
+    }
+
+    #[test]
+    fn heading_lines_in_the_upgrade_notice_are_refused() {
+        let mut d = prefill(&facts("1.0", ""), "1.0.1", &changes(&["x"]));
+        for notice in ["Update.\n== FAQ ==", "Update.\n### Why\nSecurity.", " = Note =\nText."] {
+            d.upgrade_notice = notice.into();
+            assert_eq!(
+                validate_draft(&d).unwrap_err().code,
+                "DRAFT_HEADING_IN_UPGRADE_NOTICE",
+                "{notice}"
+            );
+        }
+        d.upgrade_notice = "Update now: fixes #12.".into();
+        assert!(validate_draft(&d).is_ok());
     }
 }
