@@ -135,6 +135,8 @@ async fn kill_tree(pid: Option<u32>) {
     };
     #[cfg(not(windows))]
     let mut command = {
+        // `/bin/kill` on macOS (FreeBSD's, in shell_cmds) skips a `--` after
+        // the signal, and util-linux/procps need it before a negative pid.
         let mut command = tokio::process::Command::new("kill");
         command.args(["-KILL", "--", &format!("-{pid}")]);
         command
