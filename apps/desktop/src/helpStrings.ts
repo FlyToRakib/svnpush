@@ -1,3 +1,5 @@
+import { plural } from "./format";
+
 /**
  * The Help screen's copy, reached as `S.help` from `strings.ts` (kept in its
  * own file so the string table stays readable). Short, factual, second person.
@@ -27,19 +29,19 @@ export const HELP = {
     title: "WordPress.org SVN account",
     missing:
       "Add your WordPress.org username and SVN password (Profile → Account & Security → Subversion password). It is not your GitHub password.",
-    ready: (count: number) => `${String(count)} account(s) in Vault.`,
+    ready: (count: number) => `${plural(count, "account", "accounts")} in Vault.`,
     open: "Open Vault",
   },
   ai: {
     title: "AI provider",
     missing: "Optional. Add one to have release notes drafted for you, or write them yourself.",
-    ready: (count: number) => `${String(count)} provider(s) set up.`,
+    ready: (count: number) => `${plural(count, "provider", "providers")} set up.`,
     open: "Open Providers",
   },
   project: {
     title: "Your plugin",
     missing: "Add your plugin folder and its WordPress.org SVN URL.",
-    ready: (count: number) => `${String(count)} plugin(s) added.`,
+    ready: (count: number) => `${plural(count, "plugin", "plugins")} added.`,
     open: "Open Projects",
   },
   howTitle: "How a release works",

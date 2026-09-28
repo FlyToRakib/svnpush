@@ -2,6 +2,7 @@
  * Every user-visible string in SVNpush. Short, factual, second person.
  * Buttons are verbs. No exclamation marks.
  */
+import { plural } from "./format";
 import { HELP } from "./helpStrings";
 import { TOOLS } from "./toolStrings";
 
@@ -149,7 +150,7 @@ export const S = {
     missing: "missing",
     git: "Git",
     branch: (branch: string) => `branch ${branch}`,
-    dirty: (count: number) => `${count} uncommitted change(s)`,
+    dirty: (count: number) => plural(count, "uncommitted change", "uncommitted changes"),
     noGit: "Not a git repository, or git is not installed",
   },
   changes: {
@@ -193,7 +194,7 @@ export const S = {
         : `Waiting in the Revoye queue, position ${String(position)}.`,
     jobStatus: (status: string) => `Revoye job ${status}.`,
     fleet: (online: number, total: number, idle: number, waiting: number) =>
-      `${String(online)} of ${String(total)} device(s) online · ${String(idle)} agent(s) free · ${String(waiting)} job(s) waiting`,
+      `${String(online)} of ${plural(total, "device", "devices")} online · ${plural(idle, "agent", "agents")} free · ${plural(waiting, "job", "jobs")} waiting`,
     startDesk:
       "No device is online. Start Revoye Desk on your machine; the job stays queued until then.",
     summaries: (done: number, total: number) =>
@@ -250,7 +251,7 @@ export const S = {
   build: {
     files: "Files",
     size: "Size",
-    total: (count: number, size: string) => `${count} file(s), ${size}`,
+    total: (count: number, size: string) => `${plural(count, "file", "files")}, ${size}`,
     zip: "Zip",
     checksum: "SHA-256",
     reveal: "Show zip",
@@ -266,10 +267,10 @@ export const S = {
         "Some files or folders were not in the last release. Check they belong in the plugin.",
     },
     summary: (count: number, size: string, left: number) =>
-      `${String(count)} file(s), ${size}, will be released · ${String(left)} left out`,
+      `${plural(count, "file", "files")}, ${size}, will be released · ${String(left)} left out`,
     released: "Will be released",
     leftOut: "Left out",
-    fileCount: (count: number) => `${String(count)} file(s)`,
+    fileCount: (count: number) => plural(count, "file", "files"),
     more: (count: number) => `and ${String(count)} more`,
     newBadge: "New",
     rules: "Rules (.distignore)",
@@ -380,7 +381,7 @@ export const S = {
     emptyBody: "Revoye is recommended. A local model works without an API key.",
     defaultBadge: "Default",
     needsAttention: (why: string) => `Needs attention: ${why}`,
-    requests: (count: number) => `${count.toString()} request(s) this month`,
+    requests: (count: number) => `${plural(count, "request", "requests")} this month`,
     test: "Test",
     setDefault: "Set as default",
     edit: "Edit",
@@ -398,7 +399,7 @@ export const S = {
     model: "Model",
     loadModels: "Load the models this account can use",
     loadingModels: "Loading models…",
-    modelsLoaded: (count: number) => `${count.toString()} model(s) enabled on this account.`,
+    modelsLoaded: (count: number) => `${plural(count, "model", "models")} enabled on this account.`,
     apiKey: "API key",
     keyUnchanged: "Unchanged — paste a new key to replace it",
     keyHint: "Stored in your operating system keychain. Never written to a file.",
@@ -413,9 +414,9 @@ export const S = {
     fleetNoDevice: (total: number) =>
       `No device online, ${total.toString()} paired. Jobs wait until one connects.`,
     fleetOnline: (online: number, total: number, idle: number, agents: number, queued: number) =>
-      `${online.toString()} of ${total.toString()} device(s) online · ${idle.toString()} of ${agents.toString()} agents free` +
-      (queued > 0 ? ` · ${queued.toString()} job(s) queued` : ""),
-    agentsFree: (count: number) => ` — ${count.toString()} agent(s) free`,
+      `${online.toString()} of ${plural(total, "device", "devices")} online · ${idle.toString()} of ${plural(agents, "agent", "agents")} free` +
+      (queued > 0 ? ` · ${plural(queued, "job", "jobs")} queued` : ""),
+    agentsFree: (count: number) => ` — ${plural(count, "agent", "agents")} free`,
     agentsBusy: " — all agents busy",
     disabledKind: " — disabled",
     fallbackTitle: "Automatic fallback",
@@ -426,7 +427,7 @@ export const S = {
     saveFallback: "Save fallback order",
     fallbackSaved: (count: number) =>
       count > 0
-        ? `Fallback saved: ${count.toString()} provider(s) in order.`
+        ? `Fallback saved: ${plural(count, "provider", "providers")} in order.`
         : "Fallback is off. Failures will be shown instead of switching AI.",
   },
   vault: {

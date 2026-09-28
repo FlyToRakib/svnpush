@@ -1,3 +1,5 @@
+import { plural } from "./format";
+
 /**
  * Copy for the project page's tools, reached as `S.tools` from `strings.ts`
  * (kept in its own file so the string table stays under 500 lines).
@@ -15,7 +17,7 @@ export const TOOLS = {
     clean: "No problems found. WordPress.org will read this readme as written.",
     level: { Error: "Error", Warning: "Warning", Note: "Note" },
     counts: (errors: number, warnings: number, notes: number) =>
-      `${String(errors)} error(s), ${String(warnings)} warning(s), ${String(notes)} note(s)`,
+      `${plural(errors, "error", "errors")}, ${plural(warnings, "warning", "warnings")}, ${plural(notes, "note", "notes")}`,
   },
   assets: {
     title: "Plugin images (icon, banner, screenshots)",
@@ -78,7 +80,7 @@ export const TOOLS = {
     rebuild: "Build again",
     building: "Building…",
     blocked: "A package check failed, so a release would stop at Build. Fix it before you release.",
-    ready: (files: number) => `Built ${String(files)} file(s). Nothing was published.`,
+    ready: (files: number) => `Built ${plural(files, "file", "files")}. Nothing was published.`,
     builtVersion: (version: string) => `Version ${version}`,
   },
   flow: {

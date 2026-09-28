@@ -43,7 +43,7 @@ describe("Project tools", () => {
     const user = userEvent.setup();
     open();
     await user.click(await screen.findByRole("button", { name: "Check readme.txt" }));
-    expect(await screen.findByText("1 error(s), 1 warning(s), 1 note(s)")).toBeTruthy();
+    expect(await screen.findByText("1 error, 1 warning, 1 note")).toBeTruthy();
     expect(screen.getByText("The License field appears to be invalid.")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Open the official validator" }));
     expect(tauriMock.opened).toEqual([
@@ -81,7 +81,7 @@ describe("Project tools", () => {
     open();
     await user.click(await screen.findByRole("button", { name: "Build package" }));
     expect(
-      await screen.findByText(/Version 1.0.0. Built 1 file\(s\). Nothing was published./),
+      await screen.findByText(/Version 1.0.0. Built 1 file. Nothing was published./),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Build again" })).toBeTruthy();
     expect(screen.getByText("C:/app/builds/demo/1.0.0/demo.zip")).toBeTruthy();

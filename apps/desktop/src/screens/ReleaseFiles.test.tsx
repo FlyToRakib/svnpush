@@ -58,7 +58,7 @@ describe("Release file check", () => {
     open(runState("AwaitingFileReview", "Build", { file_review: review() }));
     expect(await screen.findByText(/has no .distignore yet/)).toBeTruthy();
     expect(screen.getByText(/first release/)).toBeTruthy();
-    expect(screen.getByText("4 file(s), 2 KB, will be released · 3 left out")).toBeTruthy();
+    expect(screen.getByText("4 files, 2 KB, will be released · 3 left out")).toBeTruthy();
     expect(screen.getByText("includes/")).toBeTruthy();
     expect(screen.getByText(".agent/")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Save .distignore and continue" }));
@@ -76,7 +76,7 @@ describe("Release file check", () => {
     const rules = await screen.findByLabelText("Rules (.distignore)");
     await user.type(rules, "/includes");
     await waitFor(() => {
-      expect(screen.getByText("1 file(s), 1 KB, will be released · 2 left out")).toBeTruthy();
+      expect(screen.getByText("1 file, 1 KB, will be released · 2 left out")).toBeTruthy();
     });
     const call = tauriMock.calls.find((c) => c.command === "preview_release_files");
     expect(call?.args?.distignore).toBe(".*\n/docs\n/includes");

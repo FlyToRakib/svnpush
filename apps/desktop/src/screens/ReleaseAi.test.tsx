@@ -83,7 +83,7 @@ describe("Release AI", () => {
       }),
     );
     expect(await screen.findByText("Waiting in the Revoye queue, position 3.")).toBeTruthy();
-    expect(screen.getByText(/0 of 2 device\(s\) online/)).toBeTruthy();
+    expect(screen.getByText(/0 of 2 devices online/)).toBeTruthy();
     expect(screen.getByText(/Start Revoye Desk/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Stop and write it myself" }));
     expect(decisions()).toEqual([{ kind: "Manual" }]);

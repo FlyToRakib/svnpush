@@ -229,8 +229,8 @@ describe("ProvidersScreen", () => {
     }));
     await user.type(screen.getByLabelText("API key"), "revoye_sk_live_abc");
     await user.tab();
-    expect(await screen.findByText("1 of 2 device(s) online · 3 of 7 agents free")).toBeTruthy();
-    expect(screen.getByRole("option", { name: "chatgpt — 2 agent(s) free" })).toBeTruthy();
+    expect(await screen.findByText("1 of 2 devices online · 3 of 7 agents free")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "chatgpt — 2 agents free" })).toBeTruthy();
     const target = tauriMock.calls.find((c) => c.command === "list_provider_models")?.args?.target;
     expect(target).toEqual({
       id: null,
@@ -286,7 +286,7 @@ describe("ProvidersScreen", () => {
     setup([record({ needs_attention: "The key was rejected." })]);
     const user = userEvent.setup();
     expect(await screen.findByText("Needs attention: The key was rejected.")).toBeTruthy();
-    expect(screen.getByText("3 request(s) this month")).toBeTruthy();
+    expect(screen.getByText("3 requests this month")).toBeTruthy();
     tauriMock.handle(
       "test_provider",
       () => "Connected. 1 of 1 device(s) online, 1 of 1 agents free.",
@@ -326,6 +326,6 @@ describe("ProvidersScreen", () => {
     expect(tauriMock.calls.find((c) => c.command === "save_provider_fallback")?.args).toEqual({
       order: ["prov_2", "prov_1"],
     });
-    expect(await screen.findByText("Fallback saved: 2 provider(s) in order.")).toBeTruthy();
+    expect(await screen.findByText("Fallback saved: 2 providers in order.")).toBeTruthy();
   });
 });

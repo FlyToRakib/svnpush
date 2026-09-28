@@ -11,6 +11,11 @@ export function formatBytes(bytes: number): string {
   return `${bytes.toString()} B`;
 }
 
+/** `1 file`, `2 files`: a count with the noun that fits it. */
+export function plural(count: number, one: string, many: string): string {
+  return `${String(count)} ${count === 1 ? one : many}`;
+}
+
 /** An ISO 8601 UTC time in the viewer's locale, date and time. */
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);
