@@ -278,6 +278,8 @@ fn v09_fails_without_an_abspath_guard() {
     assert_fails(&case, "V09");
     case.main_text = "<?php\ndefined(\"WPINC\") || die;\n".into();
     assert_eq!(case.status("V09").status, CheckStatus::Pass);
+    case.main_text = "<?php\nif ( ! function_exists( 'add_action' ) ) {\n\texit;\n}\n".into();
+    assert_eq!(case.status("V09").status, CheckStatus::Pass);
 }
 
 #[test]
@@ -307,6 +309,9 @@ fn v11_fails_on_files_that_hold_secrets() {
         "deploy.key",
         "wp-config.php",
         "keys/id_rsa",
+        "keys/id_ed25519",
+        "cert.p12",
+        "cert.pfx",
     ] {
         let mut case = Case::passing();
         case.files.push((secret.into(), 10));
@@ -316,6 +321,22 @@ fn v11_fails_on_files_that_hold_secrets() {
     let mut case = Case::passing();
     case.files.push(("includes/class-keyring.php".into(), 10));
     case.files.push(("assets/environment.js".into(), 10));
+    assert_eq!(case.status("V11").status, CheckStatus::Pass);
+}
+
+#[test]
+fn v11_allows_env_templates_and_public_ca_bundles() {
+    let mut case = Case::passing();
+    for public in [
+        ".env.example",
+        "config/.env.dist",
+        ".env.sample",
+        "vendor/composer/ca-bundle/res/cacert.pem",
+        "certs/ca-bundle.crt.pem",
+        "certs/CA-Certificates.pem",
+    ] {
+        case.files.push((public.into(), 10));
+    }
     assert_eq!(case.status("V11").status, CheckStatus::Pass);
 }
 

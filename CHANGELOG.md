@@ -4,6 +4,8 @@ All notable changes to SVNpush are listed here, newest first.
 
 ## Unreleased
 
+- Environment templates (.env.example, .env.dist, .env.sample) and public certificate bundles such as Composer's cacert.pem no longer stop a release as secret files.
+- The direct-access check (V09) also accepts `if ( ! function_exists( 'add_action' ) )` as a guard.
 - Filling an empty Version header written on one line, such as `/* Version: */`, now puts the version inside the comment instead of after it, which broke the PHP file.
 - Readme check: Tested up to 7.0 is accepted while WordPress 6.9 is current, and values such as "WordPress 6.8", "6.0 or higher" or "6.8-RC1" are read as WordPress.org reads them.
 - readme.txt is read the way WordPress.org reads it: Markdown-style `#`/`##` headings, blank lines inside the header block, `Tested:` and `Requires:` short forms and repeated headers (the last one counts) all work, and a new changelog entry never adds a second Changelog section.

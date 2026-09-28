@@ -234,10 +234,9 @@ fn v08(input: &VerifyInput<'_>) -> CheckResult {
 fn v09(input: &VerifyInput<'_>) -> CheckResult {
     let c = check("V09", "Main plugin file blocks direct access");
     let compact: String = input.main_file_text.chars().filter(|ch| !ch.is_whitespace()).collect();
-    let guarded = ["ABSPATH", "WPINC"].iter().any(|constant| {
-        compact.contains(&format!("defined('{constant}')"))
-            || compact.contains(&format!("defined(\"{constant}\")"))
-    });
+    let guarded = ["defined('ABSPATH')", "defined('WPINC')", "function_exists('add_action')"]
+        .iter()
+        .any(|call| compact.contains(call) || compact.contains(&call.replace('\'', "\"")));
     if guarded {
         c.pass("The file checks ABSPATH before running.")
     } else {
@@ -282,13 +281,19 @@ fn has_extension(rel: &str, extensions: &[&str]) -> bool {
 
 /// A file that holds credentials: environment files, private keys, the
 /// WordPress configuration. It must never reach a public repository.
+/// Environment templates (`.env.example`, `.env.dist`, `.env.sample`) and
+/// public CA bundles such as Composer's `cacert.pem` are not secrets.
 pub fn looks_like_secret(rel: &str) -> bool {
     let name = file_name(rel).to_ascii_lowercase();
-    name.starts_with(".env")
+    let env_template = [".example", ".dist", ".sample"].iter().any(|ext| name.ends_with(ext));
+    let ca_bundle = name == "cacert.pem"
+        || (name.ends_with(".pem")
+            && (name.starts_with("ca-bundle") || name.starts_with("ca-certificates")));
+    (name.starts_with(".env") && !env_template)
         || name == "wp-config.php"
         || name.starts_with("id_rsa")
         || name.starts_with("id_ed25519")
-        || has_extension(&name, &[".pem", ".key", ".p12", ".pfx"])
+        || (has_extension(&name, &[".pem", ".key", ".p12", ".pfx"]) && !ca_bundle)
 }
 
 fn v11(input: &VerifyInput<'_>) -> CheckResult {
