@@ -14,8 +14,10 @@ static SECRET_SHAPES: LazyLock<Option<Regex>> = LazyLock::new(|| {
         r"|sk-ant-[A-Za-z0-9_-]{8,}",
         r"|sk-or-v1-[A-Za-z0-9]{8,}",
         r"|sk-[A-Za-z0-9_-]{16,}",
+        r"|pplx-[A-Za-z0-9]{16,}",
         r"|AIza[0-9A-Za-z_-]{20,}",
-        r"|(?:x-api-key|x-goog-api-key|authorization)\s*[:=]\s*\S+)"
+        // A header line or its JSON form: `x-api-key: v`, `"x-api-key": "v"`.
+        r#"|(?:x-api-key|x-goog-api-key|authorization)"?\s*[:=]\s*"?(?:bearer\s+)?[^\s",]+"?)"#
     ))
     .ok()
 });
@@ -88,6 +90,21 @@ mod tests {
         assert!(!out.contains("AIzaSy"));
         assert!(out.ends_with(" ok"));
         assert_eq!(redact_secrets("svn commit trunk -m Release"), "svn commit trunk -m Release");
+    }
+
+    #[test]
+    fn redacts_perplexity_keys_and_json_headers() {
+        for text in [
+            "key pplx-AbC123dEf456GhI789 end",
+            r#"{"x-api-key": "k3y-value-1", "x": 1}"#,
+            r#"{"authorization": "Bearer k3y-value-1"}"#,
+            "authorization: Bearer k3y-value-1",
+            "x-goog-api-key=k3y-value-1",
+        ] {
+            let out = redact_secrets(text);
+            assert!(!out.contains("pplx-AbC") && !out.contains("k3y-value-1"), "{out}");
+        }
+        assert_eq!(redact_secrets(r#"{"x": 1}"#), r#"{"x": 1}"#);
     }
 
     #[test]

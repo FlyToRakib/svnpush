@@ -1,5 +1,5 @@
 //! The only place an AI request is sent (plan §9.4): timeouts, the poll
-//! loop, cancellation, and one wait on a poll rate limit.
+//! loop, cancellation, and a few waits on transient poll failures.
 
 use std::time::{Duration, Instant};
 
@@ -10,13 +10,21 @@ use crate::error::Coded;
 
 use super::provider::{
     Adapter, ErrorCode, Fleet, GenerateRequest, GenerateResult, HttpRequest, Method, ModelList,
-    ParseOutcome, ProviderError,
+    ParseOutcome, ProviderError, is_loopback_url,
 };
 
 /// Submit, list, status, poll and cancel calls.
 pub const QUICK_TIMEOUT: Duration = Duration::from_secs(30);
 /// A synchronous model answer can take minutes.
 pub const GENERATE_TIMEOUT: Duration = Duration::from_secs(180);
+/// A model on this machine can be much slower than a hosted one.
+pub const LOCAL_GENERATE_TIMEOUT: Duration = Duration::from_secs(600);
+/// Largest response body read; anything bigger is not an answer.
+pub const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+/// Consecutive transient poll failures tolerated before the job is abandoned.
+const MAX_POLL_FAILURES: u32 = 3;
+/// Longest single wait between polls after a failure.
+const MAX_POLL_BACKOFF: Duration = Duration::from_secs(60);
 
 /// A job still running, reported while polling.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +73,8 @@ pub struct AiClient {
 
 struct Response {
     status: u16,
-    json: Value,
+    /// `None` when the body is not JSON.
+    json: Option<Value>,
     retry_after: Option<u32>,
 }
 
@@ -75,6 +84,8 @@ impl AiClient {
         let http = reqwest::Client::builder()
             .user_agent(concat!("SVNpush/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(15))
+            // A redirect would resend the key headers to another host, or over plain HTTP.
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| {
                 ProviderError::new(
@@ -142,10 +153,8 @@ impl AiClient {
             .get("retry-after")
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.trim().parse::<u32>().ok());
-        let text = response.text().await.map_err(|_| {
-            ProviderError::new(ErrorCode::Network, kind, "The AI provider's answer was cut off.")
-        })?;
-        let json = serde_json::from_str(&text).unwrap_or(Value::Null);
+        let body = read_body(response, kind).await?;
+        let json = serde_json::from_slice(&body).ok();
         if !(200..300).contains(&status) {
             tracing::warn!(
                 provider = kind,
@@ -159,9 +168,18 @@ impl AiClient {
 
     fn check(adapter: &dyn Adapter, response: Response) -> Result<Value, ProviderError> {
         if (200..300).contains(&response.status) {
-            return Ok(response.json);
+            // An empty or HTML body is not an empty answer: nothing was generated.
+            return response.json.ok_or_else(|| {
+                ProviderError::new(
+                    ErrorCode::Server,
+                    adapter.meta().kind,
+                    "The AI provider's answer was not JSON.",
+                )
+                .with_status(response.status)
+            });
         }
-        let mut error = adapter.parse_error(response.status, &response.json);
+        let json = response.json.unwrap_or(Value::Null);
+        let mut error = adapter.parse_error(response.status, &json);
         if error.retry_after.is_none() {
             error.retry_after = response.retry_after;
         }
@@ -184,7 +202,13 @@ impl AiClient {
     ) -> Result<GenerateResult, ClientError> {
         let kind = adapter.meta().kind;
         let http = adapter.build_request(request)?;
-        let timeout = if adapter.poll().is_some() { QUICK_TIMEOUT } else { GENERATE_TIMEOUT };
+        let timeout = if adapter.poll().is_some() {
+            QUICK_TIMEOUT
+        } else if adapter.meta().keyless || is_loopback_url(&http.url) {
+            LOCAL_GENERATE_TIMEOUT
+        } else {
+            GENERATE_TIMEOUT
+        };
         let response = tokio::select! {
             () = cancel.cancelled() => return Err(ClientError::Cancelled),
             r = self.send(&http, timeout, kind) => r?,
@@ -208,47 +232,59 @@ impl AiClient {
         on_pending(&Pending { job_id: job_id.clone(), status, queue_position });
 
         let started = Instant::now();
-        let mut waited_for_rate_limit = false;
+        let interval = Duration::from_millis(poll.interval_ms());
+        let mut failures = 0;
         loop {
-            let pause = Duration::from_millis(poll.interval_ms());
             tokio::select! {
                 () = cancel.cancelled() => {
                     self.cancel_job(adapter, api_key, &job_id).await;
                     return Err(ClientError::Cancelled);
                 }
-                () = tokio::time::sleep(pause) => {}
+                () = tokio::time::sleep(interval) => {}
             }
             if started.elapsed() > Duration::from_millis(poll.max_ms()) {
+                self.cancel_job(adapter, api_key, &job_id).await;
                 return Err(ProviderError::new(
                     ErrorCode::Server,
                     kind,
-                    "The job did not finish in time. It may still complete on the provider's side.",
+                    "The job did not finish in time, so it was cancelled.",
                 )
                 .into());
             }
             let poll_request = poll.build_request(api_key, &job_id);
-            let response = tokio::select! {
+            let sent = tokio::select! {
                 () = cancel.cancelled() => {
                     self.cancel_job(adapter, api_key, &job_id).await;
                     return Err(ClientError::Cancelled);
                 }
-                r = self.send(&poll_request, QUICK_TIMEOUT, kind) => r?,
+                r = self.send(&poll_request, QUICK_TIMEOUT, kind) => r,
             };
-            let json = match Self::check(adapter, response) {
-                Ok(json) => json,
-                Err(e) if e.code == ErrorCode::RateLimit && !waited_for_rate_limit => {
-                    waited_for_rate_limit = true;
-                    let seconds = u64::from(e.retry_after.unwrap_or(5));
+            let json = match sent.and_then(|response| Self::check(adapter, response)) {
+                Ok(json) => {
+                    failures = 0;
+                    json
+                }
+                // A dropped connection or a busy server mid-job is worth riding out.
+                Err(e) if is_transient(&e) && failures < MAX_POLL_FAILURES => {
+                    failures += 1;
+                    let backoff = e
+                        .retry_after
+                        .map_or(interval * failures, |s| Duration::from_secs(u64::from(s)))
+                        .min(MAX_POLL_BACKOFF);
                     tokio::select! {
                         () = cancel.cancelled() => {
                             self.cancel_job(adapter, api_key, &job_id).await;
                             return Err(ClientError::Cancelled);
                         }
-                        () = tokio::time::sleep(Duration::from_secs(seconds)) => continue,
+                        () = tokio::time::sleep(backoff) => continue,
                     }
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    self.cancel_job(adapter, api_key, &job_id).await;
+                    return Err(e.into());
+                }
             };
+            // A failed, expired or cancelled job has already ended on the server.
             match poll.parse_response(&json)? {
                 ParseOutcome::Complete(result) => return Ok(result),
                 ParseOutcome::Pending { job_id: id, status, queue_position } => {
@@ -297,4 +333,31 @@ impl AiClient {
         let response = self.send(&fleet.build_request(api_key), QUICK_TIMEOUT, kind).await?;
         Ok(fleet.parse_response(&Self::check(adapter, response)?))
     }
+}
+
+/// Failures a later poll may not repeat.
+fn is_transient(error: &ProviderError) -> bool {
+    matches!(error.code, ErrorCode::Network | ErrorCode::Server | ErrorCode::RateLimit)
+}
+
+/// The body, refused when it is larger than [`MAX_RESPONSE_BYTES`].
+async fn read_body(
+    mut response: reqwest::Response,
+    kind: &'static str,
+) -> Result<Vec<u8>, ProviderError> {
+    let too_large =
+        || ProviderError::new(ErrorCode::Server, kind, "The AI provider's answer was too large.");
+    if response.content_length().is_some_and(|n| n > MAX_RESPONSE_BYTES as u64) {
+        return Err(too_large());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| {
+        ProviderError::new(ErrorCode::Network, kind, "The AI provider's answer was cut off.")
+    })? {
+        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }

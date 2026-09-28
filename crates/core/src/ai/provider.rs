@@ -1,6 +1,8 @@
 //! The provider contract (plan §9.1): every adapter is a pure request builder
 //! and response parser. Only `ai::client` sends requests.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
@@ -62,10 +64,13 @@ pub struct WorkId<'a> {
     pub version: &'a str,
     /// Task name: `draft_release`, `summarise_file`, `explain_failures`.
     pub task: &'a str,
+    /// One explicit Generate: the run id and a counter, so a regenerate, or a
+    /// generate after a stop or a failure, is new work rather than the old job.
+    pub operation: &'a str,
 }
 
 /// A normalised generation request.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct GenerateRequest<'a> {
     /// The record's base URL, when it overrides the default.
     pub base_url: Option<&'a str>,
@@ -87,6 +92,22 @@ pub struct GenerateRequest<'a> {
     pub work: Option<WorkId<'a>>,
 }
 
+impl fmt::Debug for GenerateRequest<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GenerateRequest")
+            .field("base_url", &self.base_url)
+            .field("api_key", &self.api_key.map(|_| "[redacted]"))
+            .field("model", &self.model)
+            .field("system", &self.system)
+            .field("messages", &self.messages)
+            .field("max_tokens", &self.max_tokens)
+            .field("temperature", &self.temperature)
+            .field("json_schema", &self.json_schema)
+            .field("work", &self.work)
+            .finish()
+    }
+}
+
 /// HTTP method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
@@ -99,7 +120,7 @@ pub enum Method {
 }
 
 /// A request for the client to send.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct HttpRequest {
     /// Method.
     pub method: Method,
@@ -109,6 +130,20 @@ pub struct HttpRequest {
     pub headers: Vec<(String, String)>,
     /// JSON body.
     pub body: Option<Value>,
+}
+
+/// Header values are left out: any of them may hold the key.
+impl fmt::Debug for HttpRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let headers: Vec<(&str, &str)> =
+            self.headers.iter().map(|(name, _)| (name.as_str(), "[redacted]")).collect();
+        f.debug_struct("HttpRequest")
+            .field("method", &self.method)
+            .field("url", &self.url)
+            .field("headers", &headers)
+            .field("body", &self.body)
+            .finish()
+    }
 }
 
 impl HttpRequest {
@@ -292,6 +327,24 @@ pub fn trim_base(url: &str) -> String {
     url.trim_end_matches('/').to_owned()
 }
 
+/// The host a URL sends to, lowercased; `None` when it does not parse.
+pub fn url_host(url: &str) -> Option<String> {
+    reqwest::Url::parse(url.trim()).ok()?.host_str().map(str::to_ascii_lowercase)
+}
+
+/// Whether `url` points at this machine: `localhost`, `127.0.0.1` or `[::1]`.
+pub fn is_loopback_url(url: &str) -> bool {
+    match url_host(url) {
+        Some(host) if host == "localhost" => true,
+        Some(host) => host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback()),
+        None => false,
+    }
+}
+
 /// Models an account can use.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -414,6 +467,41 @@ mod tests {
             error_from_status(500, String::new(), "x").message,
             "Provider request failed (500)"
         );
+    }
+
+    #[test]
+    fn debug_never_prints_the_key() {
+        let request = GenerateRequest {
+            base_url: None,
+            api_key: Some("sk-secret-value"),
+            model: "m",
+            system: None,
+            messages: &[],
+            max_tokens: None,
+            temperature: None,
+            json_schema: None,
+            work: None,
+        };
+        let http = HttpRequest::get(
+            "https://a/v1".into(),
+            vec![("authorization".into(), "Bearer sk-secret-value".into())],
+        );
+        for printed in [format!("{request:?}"), format!("{http:?}")] {
+            assert!(!printed.contains("sk-secret-value"), "{printed}");
+            assert!(printed.contains("[redacted]"), "{printed}");
+        }
+    }
+
+    #[test]
+    fn loopback_urls() {
+        for local in ["http://localhost:11434/v1", "http://127.0.0.1:8080", "http://[::1]:1234/v1"]
+        {
+            assert!(is_loopback_url(local), "{local}");
+        }
+        for remote in ["http://example.com/v1", "https://10.0.0.2", "http://localhost.evil.com", ""]
+        {
+            assert!(!is_loopback_url(remote), "{remote}");
+        }
     }
 
     #[test]
