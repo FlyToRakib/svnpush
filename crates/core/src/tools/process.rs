@@ -6,6 +6,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
+use tokio::process::{ChildStderr, ChildStdin, ChildStdout};
 use tokio_util::sync::CancellationToken;
 
 use crate::report::{LogLine, LogStream, Reporter};
@@ -57,10 +58,6 @@ pub enum ProcessError {
     #[error("cancelled")]
     Cancelled,
 }
-
-/// Windows: do not flash a console window for each child process.
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// How long output is still read after a process exits. A daemon it started
 /// can hold the pipes open forever, and its output is not worth a hung release.
@@ -118,58 +115,73 @@ fn utf8_ctype(lc_ctype: Option<&str>, lang: Option<&str>) -> Option<&'static str
     }
 }
 
-/// Windows PowerShell: lists the process tree under `{pid}` (a child is
-/// created after its parent, so a reused process id is not taken for one),
-/// then stops it root first. `taskkill /T` stops children first, and a
-/// shell whose child died runs its next command (`build & copy`) before it
-/// is stopped itself.
-#[cfg(windows)]
-const STOP_TREE: &str = "$all = Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate; \
-$tree = @($all | Where-Object ProcessId -eq {pid}); \
-if ($tree.Count -eq 0) { exit 1 }; \
-for ($i = 0; $i -lt $tree.Count; $i++) { $p = $tree[$i]; \
-$tree += @($all | Where-Object { $_.ParentProcessId -eq $p.ProcessId -and $_.CreationDate -ge $p.CreationDate }) }; \
-foreach ($p in $tree) { Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue }; \
-exit 0";
-
-/// Kills the process and everything it started: the process tree on
-/// Windows (root first, see `STOP_TREE`, or `taskkill /T` when PowerShell
-/// cannot run), the process group on Unix (every child is a group leader,
-/// and one signal stops the group at once). A shell's grandchildren, such as
-/// `npm` and `node`, die with it.
-async fn kill_tree(pid: Option<u32>) {
-    let Some(pid) = pid else { return };
+/// A started process and everything it starts. On Windows it runs in a Job
+/// Object (created suspended, assigned, then resumed, so no grandchild
+/// escapes it); on Unix it leads its own process group.
+struct Spawned {
     #[cfg(windows)]
-    let mut command = {
-        let system = std::env::var_os("SystemRoot")
-            .map_or_else(PathBuf::new, |root| PathBuf::from(root).join("System32"));
-        let powershell = system.join(r"WindowsPowerShell\v1.0\powershell.exe");
-        let script = STOP_TREE.replace("{pid}", &pid.to_string());
-        let stopped = tokio::process::Command::new(powershell)
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .creation_flags(CREATE_NO_WINDOW)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .await
-            .is_ok_and(|s| s.success());
-        if stopped {
-            return;
-        }
-        let mut command = tokio::process::Command::new(system.join("taskkill.exe"));
-        command.args(["/PID", &pid.to_string(), "/T", "/F"]).creation_flags(CREATE_NO_WINDOW);
-        command
-    };
+    child: Box<dyn process_wrap::tokio::ChildWrapper>,
     #[cfg(not(windows))]
-    let mut command = {
-        // `/bin/kill` on macOS (FreeBSD's, in shell_cmds) skips a `--` after
-        // the signal, and util-linux/procps need it before a negative pid.
-        let mut command = tokio::process::Command::new("kill");
-        command.args(["-KILL", "--", &format!("-{pid}")]);
-        command
-    };
-    let _ = command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status().await;
+    child: tokio::process::Child,
+}
+
+impl Spawned {
+    #[cfg(windows)]
+    fn spawn(command: tokio::process::Command) -> std::io::Result<Self> {
+        use process_wrap::tokio::{CommandWrap, CreationFlags, JobObject, KillOnDrop};
+        use windows::Win32::System::Threading::CREATE_NO_WINDOW;
+        let mut wrapped = CommandWrap::from(command);
+        // KillOnDrop makes the job kill-on-close: whatever is left of the
+        // tree when the process is dropped is stopped too.
+        wrapped.wrap(CreationFlags(CREATE_NO_WINDOW)).wrap(JobObject).wrap(KillOnDrop);
+        Ok(Self { child: wrapped.spawn()? })
+    }
+
+    #[cfg(not(windows))]
+    fn spawn(mut command: tokio::process::Command) -> std::io::Result<Self> {
+        command.process_group(0);
+        Ok(Self { child: command.spawn()? })
+    }
+
+    #[cfg(windows)]
+    fn pipes(&mut self) -> (Option<ChildStdin>, Option<ChildStdout>, Option<ChildStderr>) {
+        (self.child.stdin().take(), self.child.stdout().take(), self.child.stderr().take())
+    }
+
+    #[cfg(not(windows))]
+    fn pipes(&mut self) -> (Option<ChildStdin>, Option<ChildStdout>, Option<ChildStderr>) {
+        (self.child.stdin.take(), self.child.stdout.take(), self.child.stderr.take())
+    }
+
+    /// Waits for the process itself, not for anything it left running: a
+    /// daemon started by a build step must not hold up the release.
+    async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        #[cfg(windows)]
+        return self.child.inner_mut().wait().await;
+        #[cfg(not(windows))]
+        return self.child.wait().await;
+    }
+
+    /// Kills the process and everything it started, all at once, so a shell
+    /// cannot run its next command (`build & copy`) after its child dies:
+    /// the whole job on Windows, the whole process group on Unix.
+    async fn kill_tree(&mut self) {
+        #[cfg(windows)]
+        let _ = self.child.start_kill();
+        #[cfg(not(windows))]
+        if let Some(pid) = self.child.id() {
+            // `/bin/kill` on macOS (FreeBSD's, in shell_cmds) skips a `--` after
+            // the signal, and util-linux/procps need it before a negative pid.
+            let _ = tokio::process::Command::new("kill")
+                .args(["-KILL", "--", &format!("-{pid}")])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await;
+        }
+        let _ = self.wait().await;
+    }
 }
 
 /// Runs a process to completion, streaming its output to `reporter`.
@@ -248,8 +260,6 @@ async fn execute(
     if let Some(cwd) = spec.cwd {
         command.current_dir(cwd);
     }
-    #[cfg(windows)]
-    command.creation_flags(CREATE_NO_WINDOW);
     #[cfg(unix)]
     {
         let ctype = std::env::var("LC_CTYPE").ok();
@@ -257,15 +267,13 @@ async fn execute(
         if let Some(value) = utf8_ctype(ctype.as_deref(), lang.as_deref()) {
             command.env("LC_CTYPE", value);
         }
-        command.process_group(0);
     }
 
-    let mut child = command
-        .spawn()
+    let mut child = Spawned::spawn(command)
         .map_err(|source| ProcessError::Spawn { program: program.clone(), source })?;
-    let pid = child.id();
+    let (stdin, stdout, stderr) = child.pipes();
 
-    if let (Some(secret), Some(mut stdin)) = (spec.stdin, child.stdin.take()) {
+    if let (Some(secret), Some(mut stdin)) = (spec.stdin, stdin) {
         stdin
             .write_all(secret.expose().as_bytes())
             .await
@@ -273,8 +281,6 @@ async fn execute(
         drop(stdin);
     }
 
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
     let io = |source| ProcessError::Io { program: program.clone(), source };
     let (mut out_text, mut err_text) = (String::new(), String::new());
 
@@ -308,8 +314,7 @@ async fn execute(
             }
         };
         let Some(status) = exited else {
-            kill_tree(pid).await;
-            let _ = child.kill().await;
+            child.kill_tree().await;
             return Err(ProcessError::Cancelled);
         };
         let status = status.map_err(io)?;
@@ -402,8 +407,8 @@ mod tests {
     async fn cancel_kills_the_shell_and_its_children() {
         let dir = tempfile::tempdir().unwrap();
         // The shell (or its child) would write the marker after five seconds
-        // unless killed. On Windows the shell must die before its child, or
-        // it runs the command after `&`.
+        // unless killed. The shell must die with its child, or it runs the
+        // command after `&`.
         let line = if cfg!(windows) {
             "ping -n 6 127.0.0.1 >nul & echo done> marker.txt"
         } else {
@@ -418,7 +423,8 @@ mod tests {
         let started = std::time::Instant::now();
         let err = run_shell(line, dir.path(), &Recorder::default(), &cancel).await.unwrap_err();
         assert!(matches!(err, ProcessError::Cancelled));
-        assert!(started.elapsed() < Duration::from_secs(4), "{:?}", started.elapsed());
+        // Cancel is prompt: the job or group is stopped at once.
+        assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
         tokio::time::sleep(Duration::from_secs(6)).await;
         assert!(!dir.path().join("marker.txt").exists(), "the grandchild was killed");
     }

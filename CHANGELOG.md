@@ -16,7 +16,7 @@ All notable changes to SVNpush are listed here, newest first.
 - Dry runs, cancelled releases and Discard no longer fail to clean up the working copy when the plugin has no assets/ folder on WordPress.org yet.
 - An unfinished release is still offered for Resume when another release's record on disk is damaged.
 - Resume after an interrupted or unconfirmed trunk commit tags with the message you confirmed, not the default one.
-- On Windows, cancelling a pre-build command no longer lets the shell run the rest of the command line (such as the part after &).
+- On Windows, Cancel stops a pre-build command and everything it started at once, and no longer lets the shell run the rest of the command line (such as the part after &).
 - A readme that puts the real name under "=== Plugin Name ===" now has its headers read, and the readme check still reports the placeholder, as WordPress.org's validator does. A line of spaces inside the header block ends it, as on WordPress.org.
 - The draft refuses changelog lines that would start a new readme section (== or ##), and upgrade notice lines starting with = or #.
 - Writing a changelog entry that has sub-headings (such as "#### Added") no longer leaves the old text behind, and the draft is pre-filled with the whole entry. Entries titled "= Version 1.2.0 =" are recognised.

@@ -14,6 +14,7 @@ blake3 = "1.8"
 ignore = "0.4"
 jsonschema = { version = "0.56", default-features = false }
 keyring = "4.2"
+process-wrap = { version = "10.0", default-features = false, features = ["tokio1", "job-object", "kill-on-drop", "creation-flags"] }
 proptest = "1.11"
 regex = "1.13"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "http2", "system-proxy"] }

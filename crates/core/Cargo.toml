@@ -34,6 +34,11 @@ ulid.workspace = true
 walkdir.workspace = true
 zip.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+# Job Objects for stopping a process tree on cancel (tools::process).
+process-wrap.workspace = true
+windows = { version = "0.62", default-features = false, features = ["Win32_System_Threading"] }
+
 [dev-dependencies]
 proptest.workspace = true
 tempfile.workspace = true
