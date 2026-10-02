@@ -133,11 +133,14 @@ mod tests {
         let text = std::fs::read_to_string(&main).unwrap();
         let version = built.version.clone();
         std::fs::write(&main, text.replace(&version, "../../..")).unwrap();
+        // Its own app data, so the check does not depend on how soon the
+        // first build's lock is released (seen late once on a macOS runner).
+        let paths = AppPaths::new(&dir.path().join("appdata2"));
         let err = build_package(&project, &paths, &NullReporter, &CancellationToken::new())
             .await
             .unwrap_err();
         assert_eq!(err.error.code, "BUILD_BAD_VERSION");
-        assert!(dir.path().join("appdata").is_dir());
+        assert!(dir.path().join("appdata").is_dir() && dir.path().join("appdata2").is_dir());
         let listing = package::list(&plugin, &Exclusions::load(&plugin, &[]).unwrap()).unwrap();
         let bad = package::build(&listing, &paths.builds(), "minimal", "..").unwrap_err();
         assert_eq!(crate::error::Coded::code(&bad), "PACKAGE_BAD_FOLDER_NAME");
