@@ -1,5 +1,9 @@
 # SVNpush
 
+[![Latest release](https://img.shields.io/github/v/release/FlyToRakib/svnpush)](https://github.com/FlyToRakib/svnpush/releases/latest)
+[![test](https://github.com/FlyToRakib/svnpush/actions/workflows/test.yml/badge.svg)](https://github.com/FlyToRakib/svnpush/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A desktop app that takes a WordPress plugin from a local folder to a
 published WordPress.org release in one click, safely. AI drafts the version
 and changelog, deterministic checks decide whether the release may proceed,
@@ -52,16 +56,37 @@ and nothing is committed until you click Publish.
 
 ## Install
 
-Download the installer for your platform from the
-[latest release](https://github.com/FlyToRakib/svnpush/releases/latest):
-`.exe` or `.msi` for Windows, `.dmg` for macOS, `.AppImage` or `.deb` for
-Linux. The app checks for signed updates from **Settings → Check for
-updates**.
+Download the file for your system from the
+[latest release](https://github.com/FlyToRakib/svnpush/releases/latest)
+(under **Assets**):
 
-The 1.0 installers are not code-signed:
+| System | File | How to install |
+|---|---|---|
+| Windows 10 or 11 (64-bit) | `SVNpush_<version>_x64-setup.exe` | Run it. The `.msi` is the same app for managed installs. |
+| macOS (Apple silicon and Intel) | `SVNpush_<version>_universal.dmg` | Open it and drag SVNpush to Applications. |
+| Ubuntu, Debian | `SVNpush_<version>_amd64.deb` | `sudo apt install ./SVNpush_<version>_amd64.deb` (installs Subversion too) |
+| Fedora, RHEL, openSUSE | `SVNpush-<version>-1.x86_64.rpm` | `sudo dnf install ./SVNpush-<version>-1.x86_64.rpm` (installs Subversion too) |
+| Other Linux | `SVNpush_<version>_amd64.AppImage` | `chmod +x` it and run it. Install Subversion yourself. |
 
-- **Windows:** SmartScreen shows a warning. Choose *More info → Run anyway*.
-- **macOS:** Control-click the app and choose *Open* the first time.
+Once installed, SVNpush updates itself: **Settings → Check for updates**
+downloads and verifies a signed update.
+
+### The first launch
+
+SVNpush is free and open source, and its installers are not code-signed
+with a paid certificate, so your system warns the first time:
+
+- **Windows:** SmartScreen says "Windows protected your PC". Choose
+  **More info → Run anyway**.
+- **macOS:** the first open is blocked. Open **System Settings → Privacy &
+  Security**, scroll to the message about SVNpush and choose **Open Anyway**
+  (on macOS 14 and older you can also Control-click the app and choose
+  **Open**). If macOS says the app "is damaged", run
+  `xattr -dr com.apple.quarantine /Applications/SVNpush.app` once in
+  Terminal.
+
+Each release lists the SHA-256 checksum of every file, so you can check a
+download before you run it.
 
 ## Your first release
 
@@ -122,8 +147,9 @@ needs:
 | `banner-772x250.png`, `banner-1544x500.png` | 772×250, 1544×500 |
 | `screenshot-1.png`, `screenshot-2.png` … | any; one per `== Screenshots ==` caption |
 
-Names are lowercase, and PNG or JPG work for all of them (GIF also for
-icons). Wrong names or sizes are reported as warning W12.
+PNG, JPG and GIF work for all of them, in any letter case, and `-rtl` or a
+locale (`banner-772x250-de_DE.png`) can be added. Wrong names or sizes are
+reported as warning W12.
 
 ## Which files are released
 
@@ -171,7 +197,8 @@ standard also used by WP-CLI and the 10up deploy action.
 - [docs/RELEASE.md](docs/RELEASE.md): releasing SVNpush itself
 - [docs/PLAN.md](docs/PLAN.md): the specification, and
   [docs/DECISIONS.md](docs/DECISIONS.md): choices made while building it
-- [CHANGELOG.md](CHANGELOG.md)
+- [CHANGELOG.md](CHANGELOG.md): what changed in each release
+- [SECURITY.md](SECURITY.md): how to report a vulnerability privately
 
 ## Development
 
@@ -180,7 +207,8 @@ npm ci
 npm run dev
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full check set.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full check set. Bug reports
+and ideas are welcome in [Issues](https://github.com/FlyToRakib/svnpush/issues).
 
 ## License
 

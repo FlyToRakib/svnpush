@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in SVNpush does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do not include passwords, API keys or private plugin code.
+        For a security problem, use the Security tab instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include the error code and message if one was shown.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the project
+        2. Click Dry run
+        3. ...
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: In SVNpush, open Settings and click Copy diagnostics, then paste here. Secrets are removed from it.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: SVNpush version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true

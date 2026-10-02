@@ -1,131 +1,74 @@
 # Changelog
 
-All notable changes to SVNpush are listed here, newest first.
+All notable changes to SVNpush are listed here, newest first. The format
+follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
+versions follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
-- Project settings keep the spaces you type, so a pre-build command such as npm run build can be typed. "Settings saved." disappears when you change a project's SVN URL.
-- Counts read "1 file" and "2 files" instead of "file(s)".
-- A project that another copy of SVNpush is releasing now says so, instead of "Releasing in another window".
-- Opening or closing an add or edit form or the AI provider picker, and starting or ending a release, keeps keyboard focus in place instead of losing it.
-- With reduced motion turned on in your system, the page no longer scrolls with an animation when a release starts.
-- Long file paths in the SVN preview wrap, and the preview stays open while Publish asks you to confirm it.
-- If a screen fails to draw, it shows the error and a Reload button instead of a blank window.
-- A mistyped or moved SVN URL is reported as a wrong URL, instead of telling you to ask for commit access.
-- A release where a folder became a file of the same name (or the reverse) no longer stops at Preview with a copy error.
-- Dry runs, cancelled releases and Discard no longer fail to clean up the working copy when the plugin has no assets/ folder on WordPress.org yet.
-- An unfinished release is still offered for Resume when another release's record on disk is damaged.
-- Resume after an interrupted or unconfirmed trunk commit tags with the message you confirmed, not the default one.
-- On Windows, Cancel stops a pre-build command and everything it started at once, and no longer lets the shell run the rest of the command line (such as the part after &).
-- A readme that puts the real name under "=== Plugin Name ===" now has its headers read, and the readme check still reports the placeholder, as WordPress.org's validator does. A line of spaces inside the header block ends it, as on WordPress.org.
-- The draft refuses changelog lines that would start a new readme section (== or ##), and upgrade notice lines starting with = or #.
-- Writing a changelog entry that has sub-headings (such as "#### Added") no longer leaves the old text behind, and the draft is pre-filled with the whole entry. Entries titled "= Version 1.2.0 =" are recognised.
-- Readme headers written in bold Markdown ("**Stable tag:** 1.2.0") are read and updated correctly.
-- A short description with a Markdown link no longer fails the 150-character check when WordPress.org shows it whole.
-- The readme check counts extra sections toward the Description's word limit, as WordPress.org does, and "== Screenshot ==" is recognised when matching screenshots with plugin images.
-- The file check previews a .distignore saved with a byte order mark the same way the build reads it.
-- The main file and version locations must be inside the plugin folder; a shared .svnpush.json can no longer point Write at files elsewhere.
-- Logs no longer hide plugin names that contain "sk-", such as desk-, task- or kiosk- plugins.
-- OpenAI accounts that run out of credit are reported as a billing problem and marked as needing attention, instead of being told to wait and retry.
-- The AI draft includes changes to files whose names contain accented or other non-ASCII letters.
-- A draft whose first answer is badly formed can be retried near Revoye's size limit, instead of failing as a bad request.
-- The AI is told that diffs, commit messages and file text from your repository are data, not instructions.
-- Local models in LM Studio work: SVNpush asks for JSON in a format LM Studio and Ollama both accept.
-- Stopping an AI draft right as it is sent to Revoye cancels the Revoye job, so it no longer runs in your AI account unseen.
-- Falling back from one Revoye provider to a Revoye provider pinned to another AI no longer fails with "idempotency key reused".
-- Renaming a secret file such as .env to a sample name no longer sends its old values to the AI.
-- Accepting the AI privacy notice no longer resets your settings when the settings file cannot be read.
-- If SVNpush cannot open its data folder or AI client at startup, it says why in a message box instead of closing silently.
-- Saving or removing two Vault accounts at once no longer loses one of the changes, and a full SVN URL pasted as the host is saved as its host, so your projects find the account.
-- Settings, projects, providers and accounts are flushed to disk before they replace the old file, so a crash or power cut cannot leave an empty file.
-- Saving a provider while a release uses AI no longer loses that request's count or a "needs attention" mark.
-- When a project's .svnpush.json sets a different SVN URL, the Projects list shows its unfinished release (with Resume) and whether it is locked, and old snapshots are cleaned up.
-- A file whose name starts with a dash (-logo.png) no longer stops a release when it is an image or when it is removed.
-- On Windows, removing a released file whose name has characters outside your system language now stops the preview with a clear message and the exact command to delete it on WordPress.org, instead of a Subversion error about a file named ??.
-- Resume no longer takes over a tag of the same version that the interrupted release did not create; it says the tag already exists.
-- Publishing no longer mistakes an older commit for this release's, or misses this release's commit when someone committed after it. If SVNpush cannot read the plugin's current revision, it stops before committing, and after an unclear commit error it keeps your files and offers Resume instead of rolling back.
-- Working copies and built packages are kept in the local app data folder, so a roaming Windows profile no longer syncs them. They are recreated on the next release.
-- Build package refuses a plugin header version that is not a valid version, instead of using it as a folder name.
-- Closing the window while a release runs now asks first, because closing stops the release halfway. Install update waits until no release is running.
-- Opening SVNpush a second time brings the open window to the front instead of starting a second copy that could overwrite your projects, accounts and providers.
-- Reset working copy and Discard are refused while a release of that plugin is running, and two quick clicks on Release can no longer start two releases.
-- A release running in this window no longer shows as unfinished or locked in the Projects list.
-- Testing an SVN account makes one small request instead of listing every plugin on WordPress.org.
-- If SVNpush cannot start, it says why in a message box instead of closing silently.
-- The Projects list, the file check, Build package and the Vault no longer freeze the app while they read the disk or the keychain.
-- The window background follows the system theme from the first moment, with no white flash in dark mode.
-- If SVNpush stopped while publishing, before WordPress.org confirmed the commit, the project page says so and offers Resume: check and finish.
-- A pre-build command in a project's .svnpush.json is shown in Project settings with Use this command; it never runs until you save it. Folder settings that point outside the plugin folder are refused.
-- Perplexity works again: its Sonar API was retired on 2026-09-27, so SVNpush now uses Perplexity's Router API with perplexity/kimi-k3, including for providers saved with a sonar model.
-- DeepSeek works again: its old model names were retired on 2026-07-24, so SVNpush now uses deepseek-flash, including for providers saved with deepseek-chat or deepseek-reasoner.
-- Providers: a base URL that sends an API key must use https://; plain http:// works only for localhost. Changing a provider's type or host asks for its key again, so a stored key never goes to a new address.
-- AI fallback only uses providers whose data notice you have accepted.
-- Regenerate, or Generate after Stop or a failure, now asks Revoye for a new answer instead of returning the previous job.
-- A Revoye job that SVNpush gives up on is cancelled on Revoye, and a brief network or server hiccup while waiting no longer ends the draft.
-- Local models get up to 10 minutes to answer, and thinking models have more room before their answer is cut off.
-- SSH keys (id_rsa, id_ed25519) and .p12/.pfx certificates are never sent to an AI provider.
-- A release that fails straight away (for example with no Subversion) now shows the failure instead of staying on "Starting".
-- If you edit the release notes while the AI is drafting, its draft no longer replaces your text. You can choose "Use the AI draft" instead.
-- The plugin page opens once after a publish, not again every time you come back to the Release screen.
-- Release, Dry run, Update assets and Resume show "Starting…" and ignore a second click, and they wait while Build package runs. The previous log stays until the new release has started.
-- Discarding an unfinished release asks first, and Cancel is hidden while SVNpush is publishing.
-- Install and restart asks first, and waits until no release is running.
-- The log follows new output only while you are at the end of it, and long releases no longer slow the page down.
-- The commit messages are filled in when the SVN preview arrives, and ticked AI fixes are cleared when a new explanation arrives.
-- Double-clicking Save no longer adds a provider twice; models loaded for a provider you switched away from are ignored.
-- Errors that were silently ignored (removing a project, saving the fallback order, installing Subversion, copying to the clipboard, loading plugin images) are now shown.
-- Projects, Vault, Settings and plugin images show that they are loading, and long file paths wrap instead of widening the page.
-- Plugin images: names are checked with WordPress.org's own rules, so GIF banners and screenshots, .jpeg files, uppercase names, -rtl screenshots and locales such as -de_DE_formal are accepted. A .webp screenshot is no longer counted, because WordPress.org ignores it.
-- Plugin images: the size of a JPEG saved with large metadata (for example from Photoshop) is now read correctly.
-- Environment templates (.env.example, .env.dist, .env.sample) and public certificate bundles such as Composer's cacert.pem no longer stop a release as secret files.
-- The direct-access check (V09) also accepts `if ( ! function_exists( 'add_action' ) )` as a guard.
-- Filling an empty Version header written on one line, such as `/* Version: */`, now puts the version inside the comment instead of after it, which broke the PHP file.
-- Readme check: Tested up to 7.0 is accepted while WordPress 6.9 is current, and values such as "WordPress 6.8", "6.0 or higher" or "6.8-RC1" are read as WordPress.org reads them.
-- readme.txt is read the way WordPress.org reads it: Markdown-style `#`/`##` headings, blank lines inside the header block, `Tested:` and `Requires:` short forms and repeated headers (the last one counts) all work, and a new changelog entry never adds a second Changelog section.
-- Rewriting an existing changelog entry keeps the blank line under its title.
-- Files that end lines with a lone carriage return (old Mac style) are now read line by line, as WordPress reads them, and edits keep that line ending.
-- Pre-release versions are now ordered the way WordPress.org and PHP order them: 1.0-beta10 is newer than 1.0-beta9, and 1.0-RC1 is newer than 1.0-beta2.
-- Changed files with non-ASCII names are listed correctly in the change set and the AI draft.
-- A .svnpush.json in the plugin repository can no longer set the pre-build command or point the package or assets folder outside the plugin; the command you set in Project settings is the one that runs.
-- Publishing is safe against interruptions: if a commit or tag reaches WordPress.org but SVNpush stops or sees an error, Resume finds it on the server and finishes the release instead of rolling back or failing with "tag already exists". Cancel no longer interrupts a commit already on its way.
-- Cancelling a release no longer overwrites changes you made to your plugin files while it ran.
-- The optional git tag after publishing is created only when the release commit succeeded.
-- Files with @ in their name (logo@2x.png) or with characters outside your Windows language now release correctly, and commit messages keep every character.
-- Renaming a folder only in case (Includes to includes) now renames it on WordPress.org too.
-- After an interrupted preview, the next release no longer misses files the preview had copied.
-- Files set to native line endings on the server no longer show as changed on every release.
-- Cancelling a pre-build command now also stops the programs it started (npm, node), a build that leaves a background process running no longer hangs the release, and quotes in the command work on Windows.
-- File names with non-ASCII characters work when SVNpush is started from the macOS Finder or a Linux desktop.
-- Plugin images: the project page lists your icon, banner and screenshots with their pixel sizes, says exactly which names and sizes WordPress.org needs, and can create the .wordpress-org folder. Wrong names or sizes are reported before you release (warning W12). Help has the same size guide.
-- Readme check: SVNpush checks readme.txt with the same rules as the WordPress.org readme validator, on every release and any time from Check readme.txt on the project page. Validator errors stop the release; warnings are shown. There's a link to the official validator for the few checks that need WordPress.org's data.
-- Build package: build exactly what a release would publish (folder and zip) without publishing, to inspect it or test it on a WordPress site.
-- New Help tab: a setup checklist (Subversion, SVN account, AI provider, your plugin), a short guide to how a release works, which files are released, and common problems. It opens by itself the first time you start SVNpush.
-- Install Subversion in one click from Help, through winget on Windows or Homebrew on macOS. The Linux packages install it automatically. If a release can't find Subversion, it offers Open Help.
-- Before a release, SVNpush shows which files will go to WordPress.org and which are left out. If your plugin has no .distignore, it proposes one for you to edit and save. It also asks on the first release and when new files or folders appear.
-- Hidden files and folders, docs/, bin/ and more developer files are now left out by default. A build/ or dist/ folder your plugin loads is kept.
-- Files that hold secrets (.env, private keys, wp-config.php) can never be released.
-- Plugins that live in a subfolder of a larger git repository now list their changes correctly.
-- Update assets: sync and commit only your banners, icons and screenshots, with the same preview and confirmation and no version change.
-- The AI data notice now appears inline in the step instead of a dialog, and takes keyboard focus.
-- Input borders are easier to see, and screen readers announce each change of release phase.
-- Side-by-side fields in Settings and Project settings line up.
-- AI drafts in the release flow: the change set goes to your chosen provider, which suggests the version, changelog entry, upgrade notice and summary for you to edit and approve.
-- Change the AI provider for one release from the Draft step; see Revoye's queue position and fleet while you wait, and stop the request at any time.
-- A one-time notice before a provider first receives your project data.
-- When a blocking check fails, the AI explains it and suggests readme fixes you can review as a diff and apply with one click before checking again.
-- Project settings: choose the AI provider (default, a specific one, or off) and patterns for files the AI never sees. Files that look like secrets are always kept out.
-- Every modal dialog now has its own title for screen readers.
-- The theme toggles in the title bar and in Settings always agree.
-- Providers screen: add Revoye (recommended), Gemini, Claude, OpenAI, OpenRouter, DeepSeek, Qwen, Perplexity, any OpenAI-compatible endpoint or a local model; test a provider, load your account's models, see Revoye's fleet, set the default, and opt into an ordered fallback.
-- Vault screen: SVN accounts with passwords kept in your operating system keychain.
-- Settings screen: theme, svn and git paths with Doctor, the WordPress version lookup toggle, Copy diagnostics, and update check.
-- Warning W02 now compares Tested up to with the current WordPress version.
-- Release flow: the seven-step checklist from detection to a verified tag, with a manual draft form.
-- Dry run: preview the SVN changes without committing; your files are restored afterwards.
-- Every blocking check and warning is shown with its fix; a failed blocking check stops the release.
-- Cancel at any step; changes made before publishing are rolled back.
-- Resume a release interrupted after the trunk commit by creating only the tag.
-- Projects list with the current version and the last release.
-- Project settings: package root, main file, extra version locations, required paths, pre-build command, assets folder and post-publish options.
-- Application shell with Projects, Release, Providers, Vault and Settings navigation.
-- System, Light and Dark theme toggle that remembers your choice.
+## 0.1.0 — 2026-10-02
+
+The first public release. SVNpush takes a WordPress plugin from a local
+folder to a published, verified WordPress.org release.
+
+### Releasing
+
+- A seven-step release checklist: Detect, Changes and draft, Write, Verify,
+  Build, Preview SVN, Publish. Each step shows exactly what it did.
+- Every version source is updated together and shown as a diff: the plugin
+  header, the readme Stable tag, the changelog, the upgrade notice, and any
+  extra locations you configure (a constant, `package.json`).
+- Seventeen blocking checks (V01–V17) and twelve warnings (W01–W12), each
+  with its fix. A failed blocking check stops the release.
+- Before the first release, or when new top-level files appear, SVNpush shows
+  which files go to WordPress.org and which are left out, and proposes a
+  `.distignore` when the plugin has none. Secret files (`.env`, private keys,
+  `wp-config.php`) can never be released.
+- Preview SVN lists every file to add, change or delete before you confirm
+  Publish. Publishing commits trunk, creates the tag on the server and checks
+  that the tag is live.
+- Cancel at any step before the trunk commit, and your files are restored.
+  A release interrupted after the trunk commit is finished with Resume.
+- Dry run rehearses everything up to the SVN preview and restores your files.
+- Update assets publishes only your icon, banners and screenshots, with no
+  version change.
+- Build package builds exactly what a release would publish, as a folder and
+  a zip, without publishing.
+- The readme check uses the WordPress.org readme validator's rules, offline,
+  on every release and at any time from the project page.
+- The plugin images card checks the names and pixel sizes WordPress.org
+  expects.
+
+### AI drafts (optional)
+
+- Your chosen provider suggests the version, changelog entry, upgrade notice
+  and summary from what changed. You edit and approve everything; a release
+  never depends on AI.
+- When a check fails, the AI can explain why and suggest readme fixes, which
+  are applied only after you review the diff.
+- Providers: Revoye, Gemini, Claude, OpenAI, OpenRouter, DeepSeek, Qwen,
+  Perplexity, any OpenAI-compatible endpoint, and local models such as
+  Ollama or LM Studio. Automatic fallback between providers is optional.
+- A notice shows what will be sent before a provider first receives your
+  project data. Only changes are sent, never the whole plugin, and files
+  that look like secrets or match your exclude patterns are never sent.
+
+### App
+
+- The SVN password and API keys are stored in your operating system
+  keychain, never in a file or a log.
+- A setup checklist in Help, and one-click Subversion install through winget
+  on Windows or Homebrew on macOS. The Linux packages install it
+  automatically.
+- Project settings, also shareable with a team as `.svnpush.json`: package
+  root, main file, extra version locations, required paths, pre-build
+  command, assets folder, SVN account, AI provider and exclude patterns.
+- Light, dark and system themes; keyboard and screen reader support.
+- Signed in-app updates from Settings → Check for updates.
+
+### Known limitations
+
+- The installers are not code-signed, so Windows SmartScreen and macOS
+  Gatekeeper warn on first install. See the README for how to open the app.
+- On macOS, quitting with Cmd+Q or from the Dock during a release does not
+  ask first, unlike closing the window.

@@ -42,7 +42,7 @@ signed with the new one. After rotating:
 
 ## Code signing
 
-Plan §19.1 recommends shipping 1.0 unsigned and signing from 1.1. Without
+SVNpush ships unsigned (plan §19.1 suggested signing later). Without
 signing, the installers work but the operating systems warn:
 
 - **Windows**: SmartScreen shows "Windows protected your PC". Users choose
